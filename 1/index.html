@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" type="text/css" href="../styles.css" />
+    <title>CS 180 Project 1</title>
+    <div class="topnav">
+        <a href="../index.html"> Home </a>
+        <a class="active" href="./index.html"> Project 1 </a>
+        <a href="../2/index.html"> Project 2 </a>
+        <a href="../3/index.html"> Project 3 </a>
+        <a href="../4/index.html"> Project 4 </a>
+        <a href="../5/index.html"> Project 5 </a>
+    </div>
+</head>
+<body>
+    <h2> Images of the Russian Empire:
+        Colorizing the Prokudin-Gorskii Photo Collection </h2>
+
+    <h2> Background</h2>
+    In the early 20th century, between the years of 1909 and 1915, Russian photographer Sergey Prokudin-Gorsky got the special permission of the Emperor Nicholas II to travel throughout the Russian empire. While technology to display color images would not appear until much later, Prokudin-Gorsky strongly believed that color photography was the future, and that representing color with RBG color channels would work well. So, he went throughout Russia and took thousands of images, using a special apparatus that captured 3 different images, each with a different color filter (red, green, blue) such that the resulting separate images could eventually be combined and displayed as color images in the future. Since he had the blessing of Emperor Nicholas II, he was able to go to places that were often restricted to the public, allowing a very interesting and unique picture of Russia from over a hundred years ago. The challenge of this project is to take the per-channel digitized images from the Library of Congress and determine how to automatically align the channels to reconstruct the color images. 
+
+    <h2> Approach </h2>
+
+    The digitized archives have two different sized images. For the smaller images, simply brute-force trying a range of offsets according to a certain alignment metric works well, but larger images require a more clever pyramid algorithm. We will first discuss our methodology on smaller images, and then explain how we extend the approach to larger images. 
+
+    <h3> Part 1: Single-Scale Approach for Small images </h3>
+    
+    We start with digitized per-channel images, where the channels are stacked vertically as black and white images, in the order of blue, green, and red. Here is an example from the smaller <b> cathedral</b> image: 
+
+    <img src="../media/cathedral_raw.jpg" alt="Cathedral"  class="center">
+    If we naively just put this channels into an RGB color image, the image does not look very good or natural, since these images were not taken from the exact same position, leading to chromatic fringing and other visual artifacts. Below is the same <b> cathedral</b> image above, but assembled into a color image with no alignment:
+    <img src="../media/cathedral_no_alignment.jpg" alt="Cathedral"  class="center">
+    
+    To align these small images, we simply do a brute force search over all possible displacements of -15 to 15 pixels in both directions. We pick the best displacement for each channel with respect to a reference channel according to a chosen metric. 
+
+    In our implementation, we always align the red and green channels to the blue channel, and our chosen metric of choice is <b>Normalized Cross Correlation (NCC)</b>, which is defined as shown below:
+
+    <img src="../media/ncc_better.png" alt="Cathedral"  class="center">
+
+    We treat each image as a vector, normalize each vector by its norm, and then calculate the dot product. We want to maximize this metric, since it corresponds with the level of alignment. This is likely better than other simple metrics, such as minimizing the Euclidian norm of the difference between different channels. The reason is because the Euclidian norm will have a loss if the overall intensity is different between color channels, whereas NCC is a measurement more of the alignment of the different channels. There will still be a positive signal if the intensities are not the same, but just a stronger one if the intensities align as much as possible. 
+    
+    After alignment, we see that the image now does not have chromatic fringing, and looks close to a normal color image. The edges do not look great, but this is to be expected since to keep the shapes the same we are rolling part of the image from the top and right to the bottom and left. Future work could add automatic cropping. The same <b> cathedral </b> image after alignment is shown below:
+
+    <img src="../media/out/cathedral.jpg" alt="Cathedral"  class="center">
+
+    <h3> Part 2: Image Pyramid For Larger Images </h3>
+
+    For the larger images, this approach will not work, as it will be cost-prohibitively slow. The larger images have a size of around 10 times larger in each direction. If we wanted to use the same brute-force approach but scale up the search radius accordingly, it would require quadratically more positions to check. Additionally, each calculation of our metric would take about 100 times longer as well. Thus, the total runtime would be about 10,000 times larger. The small image takes about a second, so the large image would take around 3 hours! Furthermore, it might be somewhat noisy of a metric to compare all of these different alignments to each other. 
+    
+    Instead, we use a technique called an image pyramid. The big idea is that we do the same brute-force alignment with the same -15 to 15 pixel small search radius, but apply this to several copies of the image at different downsampling scales. This allows us to first find the coarsest shift, and then finetune this shift repeatedly at the lower (more detail rich) levels. Below is a helpful explanatory graphic created by Wikipedia user Cmglee:
+    
+    <img src="../media/Image_pyramid.svg" alt="Cathedral"  class="center">
+
+    In more detail, alignment is done highest level (most downsampled), giving some displacement vector (x, y). This gives us the coarsest level of alignment. Then, we apply this alignment at the level immediately below (which requires shifting by (2x, 2y) pixels because we are at higher resolution). Then, we return the combined alignment of the previous layer multiplied by 2 and the alignment from the current layer. This process repeats until we are back at the full image. Once we get to an image that is less than 400 pixels in each dimension (around the size of the smaller images), we stop downsampling and start to perform alignment. 
+
+    This leads to successful alignment on larger images, like the image shown below: 
+
+    <img src="../media/out/emir.jpg" alt="Cathedral"  class="center">
+
+    <h3> Bells and Whistles + Enhancements</h3>
+
+    To successfully align images, we need to ignore the edges of the image from the computation of the alignment metric. This makes sense, since they will never match since the original images were not aligned, thus we need to not consider them in the calculation. In my implementation, I do not include 7.5% of the pixel length of the shorter image dimension. This assures that the same section of the image is ignored at each level of the pyramid. This is very important, initially I had a fixed cropping region of 30px for computing the alignment metric, which led to poor performance in some images. It was also very important to allow negative shifts in alignment, I was stuck on <b> monastery </b> for a long time because I forgot to allow negative shifts. 
+
+    <br> 
+    <br> 
+
+    I also used histogram-equalized versions of the image to perform image alignment. This did not seem to have a noticeable improvement on most images, though in theory seems more principled, since it should be able to avoid some of the issues around overall intensity being different in different channels, since histogram equalization changes the overall intensity to achieve a uniform distribution across pixel intensities across each channel. 
+
+    <h3> Results </h3>
+    
+    All of the aligned images are displayed below, first the small images that don't require the image pyramid, and then the larger images which use the image pyramid. We also include the (x, y) displacement vectors for the red and green channels with respect to the blue channel. 
+    <h4> Small Images </h4>
+
+    <figure>
+        ​
+           <img src="../media/out/cathedral.jpg" width="600px" alt="Cathedral" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Cathedral </b></div>
+               <div class="image_displacement"><b>R</b>: [12, 3], <b>G</b>: [5, 2]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/monastery.jpg" width="600px" alt="Monastery" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Monastery </b></div>
+               <div class="image_displacement"><b>R</b>: [3, 2], <b>G</b>: [-3, 2]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/tobolsk.jpg" width="600px" alt="Tobolsk" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Tobolsk </b></div>
+               <div class="image_displacement"><b>R</b>: [6, 3], <b>G</b>: [3, 3]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <h4> Higher Resolution Larger Images </h4>
+
+    <figure>
+        ​
+           <img src="../media/out/church.jpg" width="600px"  alt="Church" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Church </b></div>
+               <div class="image_displacement"><b>R</b>: [57, -4], <b>G</b>: [24, 4]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/emir.jpg" width="600px" alt="Emir" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Emir </b></div>
+               <div class="image_displacement"><b>R</b>: [105, 42], <b>G</b>: [49, 24]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/harvesters.jpg" width="600px" alt="Harvesters" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Harvesters </b></div>
+               <div class="image_displacement"><b>R</b>: [124, 13], <b>G</b>: [60, 16]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/icon.jpg" width="600px" alt="Icon" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Icon </b></div>
+               <div class="image_displacement"><b>R</b>: [89, 23], <b>G</b>: [40, 17]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/lady.jpg" width="600px" alt="Lady" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Lady </b></div>
+               <div class="image_displacement"><b>R</b>: [117, 11], <b>G</b>: [55, 8]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/melons.jpg" width="600px" alt="Melons" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Melons </b></div>
+               <div class="image_displacement"><b>R</b>: [178, 13], <b>G</b>: [82, 10]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/onion_church.jpg" width="600px" alt="Onion Church" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Onion Church </b></div>
+               <div class="image_displacement"><b>R</b>: [108, 36], <b>G</b>: [51, 26]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/sculpture.jpg" width="600px" alt="Sculpture" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Sculpture </b></div>
+               <div class="image_displacement"><b>R</b>: [140, -27], <b>G</b>: [33, -11]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/self_portrait.jpg" width="600px" alt="Self Portrait" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Self Portrait </b></div>
+               <div class="image_displacement"><b>R</b>: [176, 36], <b>G</b>: [79, 29]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/three_generations.jpg" width="600px" alt="Three Generations" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Three Generations </b></div>
+               <div class="image_displacement"><b>R</b>: [111, 11], <b>G</b>: [53, 13]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/train.jpg" alt="Train" width="600px" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Train </b></div>
+               <div class="image_displacement"><b>R</b>: [87, 32], <b>G</b>: [43, 6]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <h4> Additional Results on Other Images </h4>
+    
+    <figure>
+        ​
+           <img src="../media/out/fortress.jpg" width="600px" alt="Fortress" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Stone Gate and Uzvarian Fortress </b></div>
+               <div class="image_displacement"><b>R</b>: [98, 4], <b>G</b>: [35, 3]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/adobe_building.jpg" width="600px" alt="Adobe Building" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Adobe Building in a Grassy Field </b></div>
+               <div class="image_displacement"><b>R</b>: [68, 9], <b>G</b>: [22, 16]</div>
+           </figcaption>
+        ​
+    </figure>
+
+    <figure>
+        ​
+           <img src="../media/out/castle.jpg" alt="Castle" width="600px" />
+        ​
+           <figcaption>
+               <div class="image_title"><b>Swallow's Nest (Lastochkino gni︠e︡zdo) </b></div>
+               <div class="image_displacement"><b>R</b>: [75, -9], <b>G</b>: [-3, -2]</div>
+           </figcaption>
+        ​
+    </figure>
+
+
+    <h4> Analysis </h4>
+    We note that alignment results are generally quite good, however there is more noticeable chromatic fringing on pictures with human subjects, especially around the frame of the human subject. This is likely because the individual moved during the taking of the picture, which makes a perfect alignment much harder and likely not a pure translation. One such example of this is the following section from <b>harvesters</b>: 
+
+    <img src="../media/moving_harvester.png" width="300px"  alt="Moving Harvester" class="center"> 
+        ​
+
+
+
+</body>
+</html>
