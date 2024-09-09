@@ -3,23 +3,26 @@ body {
     margin: 20px;
 }
 .topnav {
-    background-color: #333;
+    background-color: #cac8c8;
     overflow: hidden;
+    border-radius: 16px;
 }
 .topnav a {
     float: left;
-    color: #f2f2f2;
+    color: #000000;
     text-align: center;
     padding: 14px 16px;
     text-decoration: none;
-    font-size: 17px
+    font-size: 17px;
+    border-radius: 16px;
+    width: 12.82113%; /* hardcoded to make stuff evenly spaced but on one line, probably a better way to do this */
 }
 .topnav a:hover {
     background-color: #ddd;
     color: black;
 }
 .topnav a.active {
-    background-color: #04AA6D;
+    background-color: #f97233;
     color: white
 }
 /* Centering from https://www.w3schools.com/howto/howto_css_image_center.asp */
