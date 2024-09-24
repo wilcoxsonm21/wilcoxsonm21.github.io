@@ -13,6 +13,570 @@
     </div>
 </head>
 <body>
-    <h1>Project 2 will go here!</h1>
+    <h1>Introduction </h1>
+    In this project, we explore how filters and frequencies can change images. We look at blurring and sharpening filters, and show how the way the human eye processes frequencies allows us to create hybrid images by adding a high frequency image to a low frequency to create an image that looks like something completely up close compared to how it looks far away. We also see how we can do blending at several different frequency levels to create a smooth blending between two different images that looks much more natural. 
+    <h1> Part 1: Fun With Filters  </h1>
+    <h2> Part 1.1: Finite Difference Operator </h2>
+    One way of approximating a derivative of an image in discrete time is to use a Finite Difference Operator, which is a matrix that calculates the difference in one axis of the image, approximating the partial derivative with respect to that dimension. 
+    <br> <br>
+    The finite difference operator has the following formulation: 
+    <img src="../media/finite_difference_operator.png" alt="Finite Difference matrix"  class="center">
+    We apply these filters to the cameraman image shown below. Note that we rescale the -1 to 1 difference into 0 to 1 in order to display negative derivative values properly. To calculate the gradient magnitude, we elementwise take the square root of the sum of the pixel values for dx and dy. To compute the binary edge image, we use a threshold of 0.2 on the gradient magnitude/absolute value of partial difference. 
+    <figure>
+        ​
+        <img src="../media/project_2/cameraman.jpg" alt="Camerman"  class="center">
+
+        ​
+           <figcaption>
+               <div class="center"><b>Cameraman Original Image </b></div>
+           </figcaption>
+        ​
+    </figure>
+   <table border="0" width="100%">
+    <col style="width:12.5%">
+	<col style="width:43.75%">
+	<col style="width: 43.75%">
+    <tr> 
+        <th> </th>
+        <th> Raw </th>
+        <th> Binarized </th>
+    </tr>
+    <tr> 
+        <th class="header_col" > Dx  </th>
+        <th> <img src="../media/project_2/cameraman_dx.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/cameraman_dx_binary.jpg" class="center tableimage" > </th>
+    </tr>
+    <tr> 
+        <th class="header_col"> Dy </th>
+        <th> <img src="../media/project_2/cameraman_dy.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/cameraman_dy_binary.jpg" class="center tableimage"> </th>
+    </tr>
+    <tr> 
+        <th class="header_col"> Magnitude </th>
+        <th> <img src="../media/project_2/cameraman_grad_magnitude.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/cameraman_grad_magnitude_binary.jpg" class="center tableimage"> </th>
+    </tr>
+    </table>
+</table>
+
+<h2> Part 1.2: Derivative of Gaussian </h2>
+We note that this difference operation is quite noisy. While we tried our best to pick the correct binary threshold, we see quite a bit of noise in the edge detection, especially in the bottom of the image. To fix this, we can apply some smoothing of the image, so that only actual edges lead to a large finite difference. We first apply a Gaussian blur using a filter of sigma 1 and kernel size 10. Then, we apply the same finite difference operations discussed above, except we use a lower threshold of 0.1 since the smoothing reduces the overall magnitude of differences. This creates the following results: 
+<figure>
+    ​
+    <img src="../media/project_2/blurred_cameraman.jpg" alt="Camerman"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b>Cameraman Blurred </b></div>
+       </figcaption>
+    ​
+</figure>
+</figure>
+<table border="0" width="100%">
+ <col style="width:12.5%">
+ <col style="width:43.75%">
+ <col style="width: 43.75%">
+ <tr> 
+     <th> </th>
+     <th> Raw </th>
+     <th> Binarized </th>
+ </tr>
+ <tr> 
+     <th class="header_col" > Dx  </th>
+     <th> <img src="../media/project_2/blurred_cameraman_dx.jpg" class="center tableimage"> </th>
+     <th> <img src="../media/project_2/blurred_cameraman_dx_binary.jpg" class="center tableimage" > </th>
+ </tr>
+ <tr> 
+     <th class="header_col"> Dy </th>
+     <th> <img src="../media/project_2/blurred_cameraman_dy.jpg" class="center tableimage"> </th>
+     <th> <img src="../media/project_2/blurred_cameraman_dy_binary.jpg" class="center tableimage"> </th>
+ </tr>
+ <tr> 
+     <th class="header_col"> Magnitude </th>
+     <th> <img src="../media/project_2/blurred_cameraman_grad_magnitude.jpg" class="center tableimage"> </th>
+     <th> <img src="../media/project_2/blurred_cameraman_grad_magnitude_binary.jpg" class="center tableimage"> </th>
+ </tr>
+ </table>
+</table>
+<br>
+When comparing the two sets of images, we see that the finite difference plots have much thicker lines, which makes sense, as the effective averaging of the blur spreads the edge over a larger region. We also see that the binarized image of the edge filter has a lot stronger, clearer lines with less noise. The noise that we saw in the gradient magnitude binary image in the bottom of the image is almost completely gone. For sake of easier comparison, the binary gradient magnitude images are reproduced with and without gaussian filtering. 
+<table border="0" width="100%">
+    <col style="width:12.5%">
+    <col style="width:43.75%">
+    <col style="width: 43.75%">
+    <tr> 
+        <th> </th>
+        <th> Finite Difference  </th>
+        <th> Finite Difference w/ Gaussian Filtering  </th>
+    </tr>
+    <tr> 
+        <th class="header_col" > Binarized Gradient Magnitude  </th>
+        <th> <img src="../media/project_2/cameraman_grad_magnitude_binary.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/blurred_cameraman_grad_magnitude_binary.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+
+<br> <br> 
+We also change the order of the convolution and first convolve the difference and gaussian blur filters, and then convolve the image with this. Since convolution is commutative, the images are the same apart from floating point error. We note it is important to use full convolution, otherwise convolution is clearly not commutative (even the size changes based on order of operands). Below compares the (identical) Dx and Dy calculated through the two difference ways: 
+<table border="0" width="100%">
+    <col style="width:12.5%">
+    <col style="width:43.75%">
+    <col style="width: 43.75%">
+    <tr> 
+        <th> </th>
+        <th> Finite Difference on Blurred  </th>
+        <th> Derivative of Gaussian Filter  </th>
+    </tr>
+    <tr> 
+        <th class="header_col" > Dx  </th>
+        <th> <img src="../media/project_2/full_dx.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/dog_dx.jpg" class="center tableimage" > </th>
+    </tr>
+    <tr> 
+        <th class="header_col"> Dy </th>
+        <th> <img src="../media/project_2/full_dy.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/dog_dy.jpg" class="center tableimage"> </th>
+    </tr>
+    </table>
+   </table>
+   <br> 
+   We see that they are the same, as expected. 
+   
+   <h1> Part 2: Fun With Frequencies </h1>
+   <h2> Part 2.1: Image Sharpening</h2>
+   <h3> Approach </h3>
+   To perform sharpening, we want to add more high frequencies. To keep the high frequencies, we want so subtract the blurred image from the original image, and add a multiple of this difference to the original image. We can express this as one convolution. Here is the derivation: 
+   <br>
+   <img src="../media/sharpen_deriv.png" alt="Sharpen Filter Derivation"  class="center">
+   Thus, we calculate the sharpen filter as the sum of a delta and alpha times delta minus our Gaussian. To make sure delta is well defined, we use an odd kernel size, which is the odd number closest to 6 times the provided sigma value. We also adjust the size of our images accordingly to be around 1000 in the largest direction, otherwise the process is a bit slow. It is very important to clip the pixel values to avoid weird overflow and underflow errors.  
+   <h3> Results </h3>
+   We first look at the results of the image Taj Mahal. This image was sharpened with alpha = 4 and sigma = 1. 
+   The sharpened details is shown below, and then the image before and after sharpening, along with a few other sharpened images. 
+   <figure>
+    ​
+    <img src="../media/project_2/taj_sharpening_details.jpg" alt="Camerman"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b> Taj Mahal Sharpening Details</b> </b></div>
+       </figcaption>
+    ​
+</figure>
+</figure>
+<table border="0" width="100%">
+    <col style="width:15%">
+    <col style="width:42.5%">
+    <col style="width: 42.5%">
+    <tr> 
+        <th> </th>
+        <th> Original Image  </th>
+        <th> After Sharpening </th>
+    </tr>
+    <tr> 
+        <th> Taj Mahal <br>
+            [alpha = 4, <br>sigma = 1]
+        </th>
+        <th> <img src="../media/project_2/original_taj.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/sharpened_taj.jpg" class="center tableimage" > </th>
+    </tr>
+    <tr> 
+        <th> Bear (My Dog) <br>  [alpha = 2, <br>sigma = 3]</th>
+        <th> <img src="../media/project_2/original_bear.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/sharpened_bear.jpg" class="center tableimage" > </th>
+    </tr>
+    <tr> 
+        <th> Banqiao, New Taipei   <br> (板桥区，新北市)  <br>  [alpha = 2, <br>sigma = 5]</th>
+        <th> <img src="../media/project_2/original_新北板桥.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/sharpened_新北板桥.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   <br> 
+   We see that the details isolated is the high frequency aspects of the image, which includes all of the edges. Thus, it makes sense that we see a sharpened image when we add these edges to the original image. 
+   <br> <br> 
+   We see that the picture of Bear also seems a bit sharper, as well as the street picture in Banqiao, though the blur is at a low enough frequency that it is difficult to fix this issue by adding high frequencies that are missing in large parts of the image.  The bricks in the picture of Bear are more clearly separated, as are the leaves in the Banqiao picture. 
+   <br> <br> 
+   We also taken an image that is sharp, blur it, and then resharpen it. Below is the original image, blurred image, and sharpened image:
+   <figure>
+    ​
+    <img src="../media/project_2/台北101_resized.jpg" alt="taipei 101"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b> Taipei 101 Original Sharp Image </b> </b></div>
+       </figcaption>
+    ​
+</figure>
+<table border="0" width="100%">
+    <col style="width:15%">
+    <col style="width:42.5%">
+    <col style="width: 42.5%">
+    <tr> 
+        <th> </th>
+        <th> Original (Blurred) Image  </th>
+        <th> After Sharpening </th>
+    </tr>
+    <tr> 
+        <th> Taipei 101 <br>
+            [alpha = 3, <br>sigma = 3]
+        </th>
+        <th> <img src="../media/project_2/original_台北101_blurred.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/sharpened_台北101_blurred.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   <br> 
+   We see that as expected, once the high frequencies are removed by blurring, adding more of the existing high frequencies cannot reproduce the original image. The edges have more constrast than the blurred image, so they look a bit more clear, however because of the blurring they are thicker and still not sharp. I think this shows that sharpening can only help with very slight/minor blurring that does not erase most of the high frequencies. 
+   <br> <br> 
+   All of the additional photos in this section were taken by me. 
+
+   <h2> Part 2.2: Hybrid Images </h2>
+   <h3> Approach </h3>
+   We use the same low pass procedure from above, and the high pass portion of the sharpening procedure (delta - g). We apply low pass filter to one aligned image, high pass filter to the other, and then average the results. We find that adding works a little bit better, because the image tends to get darker when doing averaging since the high frequency part is zero in many areas of the image. To tune the sigma values for each filter, we try to increase sigma for the high pass until we can see the high frequency image. We tune the sigmas through a fair amount of trial and error. If the high pass image isn't visible, increase sigma. If the low pass isn't visible, reduce it's sigma value. After some amount of trial and error, we generally found suitable sigma values. The kernel size is the closest odd number to 6 times sigma.  
+   <h3> Results </h3>
+   <h4> Derek + Nutmeg </h4>
+   First, we show the results for the picture of Derek and nutmeg, where both sigma values were 15:
+
+<table border="0" width="100%">
+    <col style="width:50%">
+    <col style="width: 50%">
+    <tr> 
+        <th> Derek (Low)  </th>
+        <th> Nutmeg (High) </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/project_2/derek_aligned.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/nutmeg_cataligned.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   
+   <figure>
+    ​
+    <img src="../media/project_2/derek_and_nutmeg_image.jpg" alt="taipei 101"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b> Derek + Nutmeg Hybrid Image </b> </b></div>
+       </figcaption>
+    ​
+</figure>
+We see that this image combination works quite well, since the proportions of the features of the cat and Derek line up reasonably well, the lighting is similar, and both pictures are completely head on so a translation/rotation based alignment is sufficient. 
+<br> <br>
+<h4> The Duality of Happiness and Sadness (Favorite) </h4>
+ We also use some stock images found <a href="https://www.bigstockphoto.com/zh/image-409238380/stock-photo-woman-emotions-range-from-extremely-sad-to-extremely-happy-sad-and-happy-woman-face-young-lady-exp/"> online</a> taken by Creative Cat Studio of a woman with various facial expressions. I thought this would work well since the image is otherwise almost completely the same. Both sigma values are 12 for this image. 
+
+ <table border="0" width="100%">
+    <col style="width:50%">
+    <col style="width: 50%">
+    <tr> 
+        <th> Happy (Low)  </th>
+        <th> Sad (High) </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/project_2/happy_person_aligned.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/sad_person_cataligned.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   
+   <figure>
+    ​
+    <img src="../media/project_2/happy_person_and_sad_person_image.jpg" alt="taipei 101"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b> Happiness + Sadness Hybrid Image </b> </b></div>
+       </figcaption>
+    ​
+</figure>
+
+<br>
+We can plot the log magnitude of the fourier transform of both images before and after filtering, as well as the resulting image to get intuition as to what is happening. 
+
+<table border="0" width="100%">
+    <col style="width:15%">
+    <col style="width:42.5%">
+    <col style="width: 42.5%">
+    <tr> 
+        <th> </th>
+        <th> Original Image FFT  </th>
+        <th> FFT After Filtering </th>
+    </tr>
+    <tr> 
+        <th> Low Frequency (Happy)
+        </th>
+        <th> <img src="../media/project_2/image1_log.png" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/image1_filtered_log.png" class="center tableimage" > </th>
+    </tr>
+    <tr> 
+        <th> High Frequency (Sad) </th>
+        <th> <img src="../media/project_2/image2_log.png" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/image2_filtered_log.png" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   
+   <figure>
+    ​
+    <img src="../media/project_2/hybrid_filtered_log.png" alt="taipei 101"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b> Hybrid Image Plot </b> </b></div>
+       </figcaption>
+    ​
+</figure>
+We see that for the happy image, most high frequencies are heavily attenuated, as desired, since the color becomes quite dark if the absolute value of fx or fy is high. Similarly, for the high frequency part, after filtering, we see that the bright region expands to cover higher frequencies. This makes sense, since the high pass filter reduces magnitude of low frequencies, but does not add high frequencies. This means that the area that originally was not the whitest color is now the whitest color (it is now the maximum intensity since lower frequencies that used to be close to maximum magnitude have been attenuated).  We see that the hybrid image mixes both of these. 
+
+<h4> Pug and Cat </h4>
+I used some Adobe stock images of a pug and cat to create the following hybrid image. The sigma for low filter is 5, sigma for high filter is 8. 
+
+<table border="0" width="100%">
+    <col style="width:50%">
+    <col style="width: 50%">
+    <tr> 
+        <th> Cat (Low)  </th>
+        <th> Pug (High) </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/project_2/cat_aligned.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/pug_cataligned.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   
+   <figure>
+    ​
+    <img src="../media/project_2/cat_and_pug_image.jpg" alt="taipei 101"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b> Happiness + Sadness Hybrid Image </b> </b></div>
+       </figcaption>
+    ​
+</figure>
+This seems to work reasonably well, but not quite as clear as the first, since the images are quite different which is a bit distracting. 
+
+<h4> Flower (Failure) </h4>
+I also tried to do a flower, where the low frequency was a healthy flower and the high frequency was a dying flower. Unfortunately, since the healthy flower has a white background around it, you don't really every stop seeing the dying flower. There is also some sizing issues. This shows that you need similar sized images with similar lighting and a background for high frequency to disappear into. Low pass sigma is 3, high pass is 8. 
+
+<table border="0" width="100%">
+    <col style="width:50%">
+    <col style="width: 50%">
+    <tr> 
+        <th> Blooming Flower (Low)  </th>
+        <th> Dying Flower (High) </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/project_2/blooming_flower_aligned.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/dying_flower_cataligned.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   
+   <figure>
+    ​
+    <img src="../media/project_2/blooming_flower_and_dying_flower_image.jpg" alt="taipei 101"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b> Blooming and Dying Flower Hybrid Image </b> </b></div>
+       </figcaption>
+    ​
+</figure>
+
+<h4> Car Windshield (Failure) </h4>
+I also tried to do a car windshield, where the low frequency was an intact windshield and a high frequency was a broken windshield. Again, these pictures were very difficult to align since the angle was not quite the same. Also, its still hard for the cracks to disappear with distance. 
+
+<table border="0" width="100%">
+    <col style="width:50%">
+    <col style="width: 50%">
+    <tr> 
+        <th> Intact Windshield (Low)  </th>
+        <th> Broken Windshield (High) </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/project_2/fixed_glass_aligned.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/broken_glass_cataligned.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   
+   <figure>
+    ​
+    <img src="../media/project_2/fixed_glass_and_broken_glass_image.jpg" alt="taipei 101"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b> Intact and Broken Windshield Hybrid Image </b> </b></div>
+       </figcaption>
+    ​
+</figure>
+
+<h2> Part 2.3: Laplacian and Gaussian Stacks </h2>
+<h3> Approach </h3>
+To compute the Gaussian stack, we repeatedly apply a Gaussian filter with a specified sigma to create a Gaussian stack of a specified level. We use one with 8 levels. We then compute the Lagrangian stack as the difference between level i + 1 and level i for i in the range of [0, 6]. For the last level of the Laplacian stack, we use the last level of the Gaussian stack. That way, they have the same number of levels and the sum of the Laplacian stack is the original image. This means the Laplacian stack just partitions the frequencies of the original image. For these visualizations of the apple and orange, we use a sigma of 1, and kernel size is calculated same as above. For ease of visualization, we normalize each image so the lowest value is 0, and highest value is 1. 
+<h3> Results </h3>
+Below we show the Laplacian stack at levels 0, 2, 4, 6 for the apple and orange. 
+<table border="0" width="100%">
+    <col style="width:10%">
+    <col style="width:45%">
+    <col style="width: 45%">
+    <tr> 
+        <th> </th>
+        <th> Orange  </th>
+        <th> Apple </th>
+    </tr>
+    <tr> 
+        <th> Level 0 </th>
+        <th> <img src="../media/project_2/orange_laplacian_0.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/apple_laplacian_0.jpg" class="center tableimage" > </th>
+    </tr>
+    <tr> 
+        <th> Level 2 </th>
+        <th> <img src="../media/project_2/orange_laplacian_2.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/apple_laplacian_2.jpg" class="center tableimage" > </th>
+    </tr>
+    <tr> 
+        <th> Level 4 </th>
+        <th> <img src="../media/project_2/orange_laplacian_4.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/apple_laplacian_4.jpg" class="center tableimage" > </th>
+    </tr>
+    <tr> 
+        <th> Level 6 </th>
+        <th> <img src="../media/project_2/orange_laplacian_6.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/project_2/apple_laplacian_6.jpg" class="center tableimage" > </th>
+    </tr>
+    </table>
+   </table>
+   <br> 
+   We note that at each later level, the features are coarser, which makes sense since they are lower frequency. Ours don't get quite as course as the original paper since our sigma value is likely higher, however in practice for performing merging this seems to be a good parameter, and also has faster performance due to the small filter size. 
+   <h2> Part 2.4: Multiresolution Blending</h2>
+   <h3> Approach </h3>
+   We first take the stacks from above (all with a sigma of 1 and 8 levels). The only parameter that I changed between images is the amount of blurring at each level for the Gaussian stack for the mask. Then, we multiply the first image Laplacian times the mask Gaussian elementwise for the first image, and the Laplacian stack for the second image times one minus the Gaussian stack. Then, we add these stacks and sum over all levels. 
+   <h3> Results </h3>
+   <h4> Dog With Human Smile (Favorite) </h4>
+   We first show the result of fusing a dog image with a human mouth, both from Adobe Stock. To create the irregular mask and align the images, I used Photoshop and then exported layers separately. We used a sigma of 5 for the mask Gaussian stack blur. Below are the individual aligned images: 
+   <table border="0" width="100%">
+    <col style="width:33.3%">
+    <col style="width: 33.3%">
+    <col style="width: 33.3%">
+    <tr> 
+        <th> Dog  </th>
+        <th> Smiling Person </th>
+        <th> Mask   </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/data/dog_with_tie.jpg" class="center tableimage";> </th>
+        <th> <img src="../media/data/smiling_person.jpg" class="center tableimage"> </th>
+        <th> <img src="../media/data/mask.jpg" class="center tableimage"> </th>
+    </tr>
+    </table>
+   </table>
+Now, below, we show the intermediate Laplacian levels and the blended combination of each level. Each level is normalized, but it can still be a bit hard to see because most the image has nothing and is thus the same color. 
+   <table border="0" width="100%">
+    <col style="width:10%">
+    <col style="width:30%">
+    <col style="width: 30%">
+    <col style="width: 30%">
+    <tr> 
+        <th> </th>
+        <th> Dog  </th>
+        <th> Smiling Person </th>
+        <th> Blended At Level  </th>
+    </tr>
+    <tr> 
+        <th> Level 0 </th>
+        <th> <img src="../media/project_2/dog_with_tie_progress_0.jpg" class="center tableimagesmall"> </th>
+        <th> <img src="../media/project_2/smiling_person_progress_0.jpg" class="center tableimagesmall"> </th>
+        <th> <img src="../media/project_2/dog_with_tie_smiling_person_blend_progress_0.jpg" class="center tableimagesmall" > </th>
+    </tr>
+    <tr> 
+        <th> Level 2 </th>
+        <th> <img src="../media/project_2/dog_with_tie_progress_2.jpg" class="center tableimagesmall"> </th>
+        <th> <img src="../media/project_2/smiling_person_progress_2.jpg" class="center tableimagesmall"> </th>
+        <th> <img src="../media/project_2/dog_with_tie_smiling_person_blend_progress_2.jpg" class="center tableimagesmall" > </th>
+    </tr>
+    <tr> 
+        <th> Level 4 </th>
+        <th> <img src="../media/project_2/dog_with_tie_progress_4.jpg" class="center tableimagesmall"> </th>
+        <th> <img src="../media/project_2/smiling_person_progress_4.jpg" class="center tableimagesmall"> </th>
+        <th> <img src="../media/project_2/dog_with_tie_smiling_person_blend_progress_4.jpg" class="center tableimagesmall" > </th>
+    </tr>
+    <tr> 
+        <th> Level 6 </th>
+        <th> <img src="../media/project_2/dog_with_tie_progress_6.jpg" class="center tableimagesmall"> </th>
+        <th> <img src="../media/project_2/smiling_person_progress_6.jpg" class="center tableimagesmall"> </th>
+        <th> <img src="../media/project_2/dog_with_tie_smiling_person_blend_progress_6.jpg" class="center tableimagesmall" > </th>
+    </tr>
+    </table>
+   </table>
+
+   Now, we show the final image, and observe that the multiresolution blending leads to a much smoother, better result than the Photoshop mockup that does not do any blending: 
+   <table border="0" width="100%">
+    <col style="width:50%">
+    <col style="width: 50%">
+    <tr> 
+        <th> Photoshop (No Blending) </th>
+        <th> Multiresolution Blending </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/photoshop_mockup_dog_smile_blend.jpg" class="center" style="width: 300px;"> </th>
+        <th> <img src="../media/project_2/hybrid_dog_with_tie_smiling_person.jpg" class="center tableimage" style="width: 300px;"> </th>
+    </tr>
+    </table>
+   </table>
+   <h4> Samsung Galaxy S24 Ultra + iPhone 15 Pro Max </h4>
+   I also made a multiresolution blend of a Samsung Galaxy S24 Ultra and iPhone 15 Pro Max. Images were sourced from <a href="https://www.visible.com/shop/smartphones/samsung-galaxy-s24-ultra?sku=SMS928U1ZKVX"> here </a> and <a href="https://www.etsy.com/listing/1479192290/iphone-15-pro-max-white-titanium"> here </a> used a sigma of 11 for my mask Gaussian stack, and a horizontal 50-50 mask. The images are shown below, as well as the final result:
+   <table border="0" width="100%">
+    <col style="width:50%">
+    <col style="width: 50%">
+    <tr> 
+        <th> S24 Ultra </th>
+        <th> iPhone 15 Pro Max    </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/data/samsung.jpg" class="center tableimage";> </th>
+        <th> <img src="../media/data/iphone.jpg" class="center tableimage"> </th>
+    </tr>
+    </table>
+   </table>
+   <figure>
+    ​
+    <img src="../media/project_2/hybrid_samsung_iphone.jpg" alt="Camerman"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b>S24 Ultra and iPhone 15 Pro Max Fused Image  </b></div>
+       </figcaption>
+    ​
+</figure>
+<h4> Orapple</h4>
+Finally, we reproduce the orange-apple merge from the original 1983 paper by Burt and Adelson. We use a vertical 50-50 split mask, and the same sigma value of 11. Below are the original images and fused image:
+<table border="0" width="100%">
+    <col style="width:50%">
+    <col style="width: 50%">
+    <tr> 
+        <th> Apple </th>
+        <th> Orange   </th>
+    </tr>
+    <tr> 
+        <th> <img src="../media/data/apple.jpg" class="center tableimage";> </th>
+        <th> <img src="../media/data/orange.jpg" class="center tableimage"> </th>
+    </tr>
+    </table>
+   </table>
+   <figure>
+    ​
+    <img src="../media/project_2/hybrid_orange_apple.jpg" alt="Camerman"  class="center">
+
+    ​
+       <figcaption>
+           <div class="center"><b>Apple and Orange Fused Image  </b></div>
+       </figcaption>
+    ​
+
 </body>
 </html>

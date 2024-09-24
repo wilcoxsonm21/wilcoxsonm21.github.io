@@ -47,3 +47,15 @@ body {
     border-radius: 8px;
     box-shadow : 0 19px 38px rgba(0, 0, 0, 0.30), 0 15px 12px rgba(0, 0, 0, 0.22);
 }
+
+table {
+    border: 0px solid black;
+    table-layout: fixed;
+    width: 600px;
+  }
+
+.tableimage {
+    width: 400px;
+    height: 400px;
+}
+  
