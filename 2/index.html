@@ -21,7 +21,7 @@
     <br> <br>
     The finite difference operator has the following formulation: 
     <img src="../media/finite_difference_operator.png" alt="Finite Difference matrix"  class="center">
-    We apply these filters to the cameraman image shown below. Note that we rescale the -1 to 1 possible difference range into 0 to 1 in order to display negative derivative values properly. To calculate the gradient magnitude, we element-wise take the square root of the sum of the pixel values for dx and dy. To compute the binary edge image, we use a threshold of 0.2 on the gradient magnitude/absolute value of partial difference. 
+    We apply these filters to the cameraman image shown below. Note that we rescale the -1 to 1 possible difference range into 0 to 1 in order to display negative derivative values properly. To calculate the gradient magnitude, we element-wise take the square root of the sum of the square of pixel values for dx and dy. To compute the binary edge image, we use a threshold of 0.2 on the gradient magnitude/absolute value of partial difference. 
    <table border="0" width="100%">
     <col style="width:12.5%">
 	<col style="width:43.75%">
@@ -259,8 +259,7 @@ We also change the order of the convolution and first convolve the difference an
    We use the same low pass procedure from above, and the high pass portion of the sharpening procedure (delta - g). We apply low pass filter to one aligned image, high pass filter to the other, and then sum the results. We find that adding works a little bit better, because the image tends to get darker when doing averaging since the high frequency part is zero in many areas of the image. To tune the sigma values for each filter, we try to increase sigma for the high pass until we can see the high frequency image. We tune the sigmas through a fair amount of trial and error. If the high pass image isn't visible, increase sigma. If the low pass isn't visible, reduce it's sigma value. After some amount of trial and error, we generally found suitable sigma values. The kernel size is the closest odd number to 6 times sigma. This method for constructing hybrid images leads to the perception of two images since when the viewer is close, they see the high frequency components and thus the high frequency image, but when they move far away they can only percieve the low frequency filtered image.  
    <h3> Results </h3>
    <h4> Derek + Nutmeg </h4>
-   First, we show the results for the picture of Derek and nutmeg, where both sigma values were 15:
-
+   First, we show the results for the picture of Derek and nutmeg, where the low pass sigma was 15 and high pass sigma was 8. 
 <table border="0" width="100%">
     <col style="width:50%">
     <col style="width: 50%">
@@ -292,7 +291,7 @@ We also change the order of the convolution and first convolve the difference an
 We see that this image combination works quite well, since the proportions of the features of the cat and Derek line up reasonably well, the lighting is similar, and both pictures are completely head on so a translation/rotation based alignment is sufficient. 
 <br> <br>
 <h4> The Duality of Happiness and Sadness (Favorite) </h4>
- We also use some stock images found <a href="https://www.bigstockphoto.com/zh/image-409238380/stock-photo-woman-emotions-range-from-extremely-sad-to-extremely-happy-sad-and-happy-woman-face-young-lady-exp/"> online</a> taken by Creative Cat Studio of a woman with various facial expressions. I thought this would work well since the image is otherwise almost completely the same. Both sigma values are 12 for this image. 
+ We also use some stock images found <a href="https://www.bigstockphoto.com/zh/image-409238380/stock-photo-woman-emotions-range-from-extremely-sad-to-extremely-happy-sad-and-happy-woman-face-young-lady-exp/"> online</a> taken by Creative Cat Studio of a woman with various facial expressions. I thought this would work well since the image is otherwise almost completely the same. The low pass sigma is 8 and the high pass sigma is 16. 
 
  <table border="0" width="100%">
     <col style="width:50%">
@@ -436,7 +435,7 @@ I also tried to do a flower, where the low frequency was a healthy flower and th
 
 
 <h4> Car Windshield (Failure) </h4>
-I also tried to do a car windshield, where the low frequency was an intact windshield and a high frequency was a broken windshield. Again, these pictures were very difficult to align since the angle was not quite the same. Also, its still hard for the cracks to disappear with distance. 
+I also tried to do a car windshield, where the low frequency was an intact windshield and a high frequency was a broken windshield. Again, these pictures were very difficult to align since the angle was not quite the same. Also, its still hard for the cracks to disappear with distance. We used low pass filter sigma of 4 and high pass sigma of 16. 
 
 <table border="0" width="100%">
     <col style="width:50%">
