@@ -55,7 +55,11 @@ table {
   }
 
 .tableimage {
-    width: 400px;
-    height: 400px;
+    width: 240px;
+
 }
   
+
+.tableimagesmall {
+    width: 160px;
+}
