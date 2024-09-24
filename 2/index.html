@@ -21,7 +21,7 @@
     <br> <br>
     The finite difference operator has the following formulation: 
     <img src="../media/finite_difference_operator.png" alt="Finite Difference matrix"  class="center">
-    We apply these filters to the cameraman image shown below. Note that we rescale the -1 to 1 difference into 0 to 1 in order to display negative derivative values properly. To calculate the gradient magnitude, we elementwise take the square root of the sum of the pixel values for dx and dy. To compute the binary edge image, we use a threshold of 0.2 on the gradient magnitude/absolute value of partial difference. 
+    We apply these filters to the cameraman image shown below. Note that we rescale the -1 to 1 possible difference range into 0 to 1 in order to display negative derivative values properly. To calculate the gradient magnitude, we element-wise take the square root of the sum of the pixel values for dx and dy. To compute the binary edge image, we use a threshold of 0.2 on the gradient magnitude/absolute value of partial difference. 
    <table border="0" width="100%">
     <col style="width:12.5%">
 	<col style="width:43.75%">
@@ -203,18 +203,18 @@ We also change the order of the convolution and first convolve the difference an
         <th> <img src="../media/project_2/sharpened_bear.jpg" class="center tableimage" > </th>
     </tr>
     <tr> 
-        <th> Banqiao, New Taipei   <br> (板桥区，新北市)  <br>  [alpha = 2, <br>sigma = 5]</th>
+        <th> Banqiao District, New Taipei   <br> (板桥区，新北市)  <br>  [alpha = 2, <br>sigma = 5]</th>
         <th> <img src="../media/project_2/original_新北板桥.jpg" class="center tableimage"> </th>
         <th> <img src="../media/project_2/sharpened_新北板桥.jpg" class="center tableimage" > </th>
     </tr>
     </table>
    </table>
    <br> 
-   We see that the details isolated is the high frequency aspects of the image, which includes all of the edges. Thus, it makes sense that we see a sharpened image when we add these edges to the original image. 
+   We see that the details isolated is the high frequency aspects of the image, which includes all of the edges. Thus, it makes sense that when we add the high frequency components to the original image, the edges become more visible, leading to the perception of a sharper image.   
    <br> <br> 
    We see that the picture of Bear also seems a bit sharper, as well as the street picture in Banqiao, though the blur is at a low enough frequency that it is difficult to fix this issue by adding high frequencies that are missing in large parts of the image.  The bricks in the picture of Bear are more clearly separated, as are the leaves in the Banqiao picture. 
    <br> <br> 
-   We also taken an image that is sharp, blur it, and then resharpen it. Below is the original image, blurred image, and sharpened image:
+   We can also take an image that is sharp, blur it, and then resharpen it. Below is the original image, blurred image, and sharpened image:
 
 <table border="0" width="100%">
     <col style="width:15%">
@@ -250,13 +250,13 @@ We also change the order of the convolution and first convolve the difference an
     </table>
    </table>
    <br> 
-   We see that as expected, once the high frequencies are removed by blurring, adding more of the existing high frequencies cannot reproduce the original image. The edges have more constrast than the blurred image, so they look a bit more clear, however because of the blurring they are thicker and still not sharp. I think this shows that sharpening can only help with very slight/minor blurring that does not erase most of the high frequencies. 
+   We see that as expected, once the high frequencies are removed by blurring, adding more of the existing high frequencies cannot reproduce the original image. The edges have more contrast than the blurred image, so they look a bit more clear, however because of the blurring they are thicker and still not sharp. I think this shows that sharpening can only help with very slight/minor blurring that does not erase most of the high frequencies. 
    <br> <br> 
    All of the additional photos in this section were taken by me. 
 
    <h2> Part 2.2: Hybrid Images </h2>
    <h3> Approach </h3>
-   We use the same low pass procedure from above, and the high pass portion of the sharpening procedure (delta - g). We apply low pass filter to one aligned image, high pass filter to the other, and then average the results. We find that adding works a little bit better, because the image tends to get darker when doing averaging since the high frequency part is zero in many areas of the image. To tune the sigma values for each filter, we try to increase sigma for the high pass until we can see the high frequency image. We tune the sigmas through a fair amount of trial and error. If the high pass image isn't visible, increase sigma. If the low pass isn't visible, reduce it's sigma value. After some amount of trial and error, we generally found suitable sigma values. The kernel size is the closest odd number to 6 times sigma.  
+   We use the same low pass procedure from above, and the high pass portion of the sharpening procedure (delta - g). We apply low pass filter to one aligned image, high pass filter to the other, and then sum the results. We find that adding works a little bit better, because the image tends to get darker when doing averaging since the high frequency part is zero in many areas of the image. To tune the sigma values for each filter, we try to increase sigma for the high pass until we can see the high frequency image. We tune the sigmas through a fair amount of trial and error. If the high pass image isn't visible, increase sigma. If the low pass isn't visible, reduce it's sigma value. After some amount of trial and error, we generally found suitable sigma values. The kernel size is the closest odd number to 6 times sigma. This method for constructing hybrid images leads to the perception of two images since when the viewer is close, they see the high frequency components and thus the high frequency image, but when they move far away they can only percieve the low frequency filtered image.  
    <h3> Results </h3>
    <h4> Derek + Nutmeg </h4>
    First, we show the results for the picture of Derek and nutmeg, where both sigma values were 15:
@@ -507,10 +507,10 @@ Below we show the Laplacian stack at levels 0, 2, 4, 6 for the apple and orange.
    We note that at each later level, the features are coarser, which makes sense since they are lower frequency. Ours don't get quite as course as the original paper since our sigma value is likely higher, however in practice for performing merging this seems to be a good parameter, and also has faster performance due to the small filter size. 
    <h2> Part 2.4: Multiresolution Blending</h2>
    <h3> Approach </h3>
-   We first take the stacks from above (all with a sigma of 1 and 8 levels). The only parameter that I changed between images is the amount of blurring at each level for the Gaussian stack for the mask. Then, we multiply the first image Laplacian times the mask Gaussian elementwise for the first image, and the Laplacian stack for the second image times one minus the Gaussian stack. Then, we add these stacks and sum over all levels. 
+   We first take the stacks from above (all with a sigma of 1 and 8 levels). We also create a blending mask and create a Gaussian stack for this mask with the same number of levels as the image stacks. Then, we multiply the first image Laplacian times the mask Gaussian stack element-wise for the first image, and the Laplacian stack for the second image times one minus the Gaussian stack. Then, we add these stacks and sum over all levels. The only parameter that I changed between images is the amount of blurring at each level for the Gaussian stack for the mask. 
    <h3> Results </h3>
    <h4> Dog With Human Smile (Favorite) </h4>
-   We first show the result of fusing a dog image with a human mouth, both from Adobe Stock. To create the irregular mask and align the images, I used Photoshop and then exported layers separately. We used a sigma of 5 for the mask Gaussian stack blur. Below are the individual aligned images: 
+   We first show the result of fusing a dog image with a human mouth image. Both images are from Adobe Stock. To create the irregular mask and align the images, I used Photoshop and then exported layers separately. We used a sigma of 5 for the mask Gaussian stack blur. Below are the individual aligned images: 
    <table border="0" width="100%">
     <col style="width:33.3%">
     <col style="width: 33.3%">
@@ -566,7 +566,7 @@ Now, below, we show the intermediate Laplacian levels and the blended combinatio
     </table>
    </table>
 
-   Now, we show the final image, and observe that the multiresolution blending leads to a much smoother, better result than the Photoshop mockup that does not do any blending: 
+   Now, we show the final image, and observe that the multi-resolution blending leads to a much smoother, better result than the Photoshop mockup that does not do any blending: 
    <table border="0" width="100%">
     <col style="width:50%">
     <col style="width: 50%">
