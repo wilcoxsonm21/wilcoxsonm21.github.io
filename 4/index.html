@@ -45,7 +45,7 @@
         </tr>  
         <tr> 
             <th> Magazine Source Image  </th>
-            <th> Rectified Template (US Letter Aspect Ratio)  </th>
+            <th> Magazine Rectified Template (US Letter Aspect Ratio)  </th>
         </tr>
 
         <tr>
@@ -216,7 +216,7 @@
 
        We see that this merge also does not have a clear seam. 
 
-       I also tried doing a mosaic of three images together. These were shot on a DSLR, where it was hard to maintain the same center of projection, so I tried a planar mosaic. I merged images two at a time, image 1 and image 2, then the combined with image 3. The correspondences are between images i and i + 1 for i in [0, 1]. Thus, for merging image 2 and image 3, the points in image 2 need to be adjusted to the location of image 2 in the combined image. We note that this is just image 2 times the H_21 homography matrix, plus the offset of image 2 from the top left corner of the new canvas. This can easily be generalized for arbitrary numbers of images by continuing to merge pairwise, since the matrix H_n1 will have been calculated at the previous step when merging image n to the canvas on the image 1 image plane. Below are the three images and final merged image: 
+       I also tried doing a mosaic of three images together. These were shot on a DSLR, where it was hard to maintain the same center of projection, so I tried a planar mosaic. I merged images two at a time, image 1 and image 2, then the combined with image 3. The correspondences are between images i and i + 1 for i in [0, 1]. Thus, for merging image 2 and image 3, the points in image 2 need to be adjusted to the location of image 2 in the combined image. We note that this is just the H_21 homography matrix times the image 2 correspondences, plus the offset of image 2 from the top left corner of the new canvas. This can easily be generalized for arbitrary numbers of images by continuing to merge pairwise, since the matrix H_n1 will have been calculated at the previous step when merging image n to the canvas on the image 1 image plane. Below are the three images and final merged image: 
 
        <table border="0" width="100%">
         <col style="width: 33.333%">
@@ -228,15 +228,15 @@
             <th> <img src="../media/IMG_9605.jpg" class="center" style="width: 200px;">  </th>
         </tr>  
         <tr> 
-            <th> Berkeley Image 1  </th>
-            <th> Berkeley Image 2 </th>
-            <th> Berkeley Image 3 </th>
+            <th> Berkeley Law Image 1  </th>
+            <th> Berkeley Law Image 2 </th>
+            <th> Berkeley Law Image 3 </th>
         </tr>
         <tr> 
             <th colspan="3"> <img src="../media/startNum=9603_i=1_im1startNum=9603_i=1_im2combined.jpg" class="center" style="width: 300px;"> </th>
         </tr>  
         <tr> 
-            <th colspan="3"> I-House Steps Panorama  </th>
+            <th colspan="3"> Berkeley Law Panorama  </th>
         </tr>
         </table>
        </table>
