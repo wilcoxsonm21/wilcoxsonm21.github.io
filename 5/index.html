@@ -13,6 +13,504 @@
     </div>
 </head>
 <body>
-    <h1>Project 5 will go here!</h1>
+    <h1> Diffusion Models!</h1>
+    <h2> Part A: The Power of Diffusion Models! </h2>
+    <h3> Introduction </h3>
+    Recently, diffusion models have been demonstrated to achieve better image generation than GANs, while also having a much more stable training regime that avoids the instability and mode collapse associated with adversarial learning. Diffusion models accomplish this by learns to gradually denoise an image, a process that can be learned through simple supervised learning predicting the noise of an image gradually being made more noisy, and then using DDPM sampling to "play the tape in reverse" to create images from noise. In this part, we will use a pretrained diffusion model DeepFloyd IF, and explore how to use this model to implement DDPM sampling, image to image transformations, and more. 
+    <h4> Part 0: Setup </h4>
+
+    To first use the model, we needed to download the model from HuggingFace. After setting up the model, we generate some outputs from the model, varying the number of inference steps. The outputs are shown below: 
+
+    <table border="0" style="border-collapse: collapse; text-align: center;">
+        <tr>
+            <th>Prompt</th>
+            <th>10 Inference Steps</th>
+            <th>20 Inference Steps</th>
+        </tr>
+        <tr>
+            <td>an oil painting of a snowy mountain village</td>
+            <td><img src="../media/5a_out/out/part_0_0_steps=5.jpg" alt="10 Inference Steps" width="100"></td>
+            <td><img src="../media/5a_out/out/part_0_0_steps=20.jpg" alt="20 Inference Steps" width="100"></td>
+        </tr>
+        <tr>
+            <td>a man wearing a hat</td>
+            <td><img src="../media/5a_out/out/part_0_1_steps=5.jpg" alt="10 Inference Steps" width="100"></td>
+            <td><img src="../media/5a_out/out/part_0_1_steps=20.jpg" alt="20 Inference Steps" width="100"></td>
+        </tr>
+        <tr>
+            <td>a rocket ship</td>
+            <td><img src="../media/5a_out/out/part_0_2_steps=5.jpg" alt="10 Inference Steps" width="100"></td>
+            <td><img src="../media/5a_out/out/part_0_2_steps=20.jpg" alt="20 Inference Steps" width="100"></td>
+        </tr>
+    </table>
+
+    We can see that the outputs generated with 20 inference steps are much clearer and better, which shows how more sampling steps can increase output quality. The outputs seem to match the text prompts quite well. My random seed is 180.  
+
+    <h4> Part 1: Sampling Loops </h4>
+
+    <h5> 1.1: Forward Process </h5>
+
+    In this part, we implement the forward process of adding Gaussian noise to an input image to sample from the distribution at any timestep conditioned on the original input. This is equivalent to scaling the input by the square root of alpha_hat at timestep t, and adding Gaussian noise scaled by the square root of 1 - alpha_hat at timestep t. We visualize the result at t=0, 250, 500, and 750 below: 
+
+    <table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+        <tr>
+            <th style="width: 25%;">t = 0</th>
+            <th style="width: 25%;">t = 250</th>
+            <th style="width: 25%;">t = 500</th>
+            <th style="width: 25%;">t = 750</th>
+        </tr>
+        <tr>
+            <td><img src="../media/5a_out/out/original_image.jpg" alt="t = 0" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_250_noise.jpg" alt="t = 250" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_500_noise.jpg" alt="t = 500" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_750_noise.jpg" alt="t = 750" style="width: 100%;"></td>
+        </tr>
+    </table>
+
+    <h5> Part 1.2: Classical Denoising </h5>
+
+    We can attempt to remove the noise by doing classical denoising; applying a Gaussian blur to remove the noise. This does not work well because we cannot recover the high frequency information that has been lost. The results of this are shown below. 
+    <table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+        <tr>
+            <th style="width: 25%;"></th>
+            <th style="width: 25%;">t = 250</th>
+            <th style="width: 25%;">t = 500</th>
+            <th style="width: 25%;">t = 750</th>
+        </tr>
+        <tr>
+            <td>Noisy Image</td>
+            <td><img src="../media/5a_out/out/image_250_noise.jpg" alt="t = 250" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_500_noise.jpg" alt="t = 500" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_750_noise.jpg" alt="t = 750" style="width: 100%;"></td>
+        </tr>
+        <tr>
+            <td>Denoised Image</td>
+            <td><img src="../media/5a_out/out/image_250_gaussian.jpg" alt="t = 250 Denoised" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_500_gaussian.jpg" alt="t = 500 Denoised" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_750_gaussian.jpg" alt="t = 750 Denoised" style="width: 100%;"></td>
+        </tr>
+    </table>
+
+    <h5> Part 1.3: One-Step Denoising </h5>
+
+    We can also use the learned diffusion model to try to remove all of the noise in a single step. The original image is the same as above. We show the results of this single-step denoising and the original image. We note that while it is much better than classical methods, it still struggles to fully reproduce the original image. 
+    <table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+        <tr>
+            <th style="width: 25%;"> Original Image</th>
+            <th style="width: 25%;"> </th>
+            <th style="width: 25%;"> </th>
+            <th style="width: 25%;"> </th>
+        </tr>
+        <tr>
+            <td><img src="../media/5a_out/out/original_image.jpg" alt="t = 0" style="width: 100%;"></td>
+            <th style="width: 100%;"> </th>
+            <th style="width: 100%;"> </th>
+            <th style="width: 100%;"> </th>
+        </tr>
+    </table>
+    <table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+        <tr>
+            <th style="width: 25%;"></th>
+            <th style="width: 25%;">t = 250</th>
+            <th style="width: 25%;">t = 500</th>
+            <th style="width: 25%;">t = 750</th>
+        </tr>
+        <tr>
+            <td>Noisy Image</td>
+            <td><img src="../media/5a_out/out/image_250_noise.jpg" alt="t = 250" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_500_noise.jpg" alt="t = 500" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/image_750_noise.jpg" alt="t = 750" style="width: 100%;"></td>
+        </tr>
+        <tr>
+            <td>Denoised Image</td>
+            <td><img src="../media/5a_out/out/1.3_one_step_denoise_clean_250.jpg" alt="t = 250 Denoised" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/1.3_one_step_denoise_clean_500.jpg" alt="t = 500 Denoised" style="width: 100%;"></td>
+            <td><img src="../media/5a_out/out/1.3_one_step_denoise_clean_750.jpg" alt="t = 750 Denoised" style="width: 100%;"></td>
+        </tr>
+    </table>
+<h5> Part 1.4: Iterative Denoising</h5>
+We note that it gets worse as there is more noise to remove, which makes sense, as it is quite difficult to accurately project back to the image all at once. We use DDPM to implement iterative denoising, and visualize the results below. We see that it performs much better. We give the input a noisy image that corresponds to t=690, and perform iterative denoising from there. We compare it to the one-step denoising and Gaussian blur denoising. 
+
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 20%;">Noisy Campanile at t = 90</th>
+        <th style="width: 20%;">Noisy Campanile at t = 240</th>
+        <th style="width: 20%;">Noisy Campanile at t = 390</th>
+        <th style="width: 20%;">Noisy Campanile at t = 540</th>
+        <th style="width: 20%;">Noisy Campanile at t = 690</th>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/1.4_iterative_30.jpg" alt="t = 90" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.4_iterative_25.jpg" alt="t = 240" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.4_iterative_20.jpg" alt="t = 390" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.4_iterative_15.jpg" alt="t = 540" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.4_iterative_10.jpg" alt="t = 690" style="width: 100%;"></td>
+    </tr>
+</table>
+
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 25%;">Original</th>
+        <th style="width: 25%;">Iteratively Denoised Campanile</th>
+        <th style="width: 25%;">One-Step Denoised Campanile</th>
+        <th style="width: 25%;">Gaussian Blurred Campanile</th>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/original_image.jpg" alt="Original Image" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.4_clean.jpg" alt="Iteratively Denoised" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.4_one_step.jpg" alt="One-Step Denoised" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.4_gaussian.jpg" alt="Gaussian Blurred" style="width: 100%;"></td>
+    </tr>
+</table>
+
+<h5> Part 1.5: Diffusion Model Sampling </h5>
+
+We can use this same procedure to sample unconditional images from the model by providing pure noise as the original input. We visualize five generated images below: 
+
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 20%;">Sample 1</th>
+        <th style="width: 20%;">Sample 2</th>
+        <th style="width: 20%;">Sample 3</th>
+        <th style="width: 20%;">Sample 4</th>
+        <th style="width: 20%;">Sample 5</th>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/1.5_image_0.jpg" alt="Sample 1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.5_image_1.jpg" alt="Sample 2" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.5_image_2.jpg" alt="Sample 3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.5_image_3.jpg" alt="Sample 4" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.5_image_4.jpg" alt="Sample 5" style="width: 100%;"></td>
+    </tr>
+</table>
+
+<h5>Part 1.6 Classifier-Free Guidance</h5> 
+We see that these outputs are not very good, so we can try to use classifier-free guidance, where a model is trained on both paired conditional generation and unconditional generation. Then, at sampling time, we extrapolate the noise predicted for the conditional generation away from the unconditional generation. We use a CFG scale parameter of 7, and the prompt "a high quality photo" for conditional generation. We visualize five samples from this process below: 
+
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 20%;">Sample 1</th>
+        <th style="width: 20%;">Sample 2</th>
+        <th style="width: 20%;">Sample 3</th>
+        <th style="width: 20%;">Sample 4</th>
+        <th style="width: 20%;">Sample 5</th>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/1.6_output_0.jpg" alt="Sample 1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.6_output_1.jpg" alt="Sample 2" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.6_output_2.jpg" alt="Sample 3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.6_output_3.jpg" alt="Sample 4" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.6_output_4.jpg" alt="Sample 5" style="width: 100%;"></td>
+    </tr>
+</table>
+
+<h5> Part 1.7 Image-to-image Translation </h5>
+We see that we can get edits of images by giving the model a noised version of that image, and seeing how it projects the image back onto the manifold. We do this for three images, and observe that the image gradually looks more and more like the original image. The two images other than the Campanile were taken by me. 
+
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 14%;">SDEdit with i_start=1</th>
+        <th style="width: 14%;">SDEdit with i_start=3</th>
+        <th style="width: 14%;">SDEdit with i_start=5</th>
+        <th style="width: 14%;">SDEdit with i_start=7</th>
+        <th style="width: 14%;">SDEdit with i_start=10</th>
+        <th style="width: 14%;">SDEdit with i_start=20</th>
+        <th style="width: 14%;">Original Image</th>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/sd_edit_image_test_im_1.jpg" alt="campanille i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_test_im_3.jpg" alt="campanille i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_test_im_5.jpg" alt="campanille i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_test_im_7.jpg" alt="campanille i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_test_im_10.jpg" alt="campanille i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_test_im_20.jpg" alt="campanille i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/original_image.jpg" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/sd_edit_image_bear_1.jpg" alt="bear i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_bear_3.jpg" alt="bear i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_bear_5.jpg" alt="bear i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_bear_7.jpg" alt="bear i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_bear_10.jpg" alt="bear i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_bear_20.jpg" alt="bear i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/bear.jpg" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/sd_edit_image_trees_1.jpg" alt="trees i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_trees_3.jpg" alt="trees i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_trees_5.jpg" alt="trees i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_trees_7.jpg" alt="trees i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_trees_10.jpg" alt="trees i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/sd_edit_image_trees_20.jpg" alt="trees i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/trees.jpg" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+</table>
+
+<h5> Part 1.7.1 Editing Hand Drawn Images and Web Images</h6>
+We can apply the same method to images that are sketches, and see the model interpolate details and make things look more photorealistic. The two sketches were done by me, the cartoon dog is from Adobe Stock. 
+
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 14%;">SDEdit with i_start=1</th>
+        <th style="width: 14%;">SDEdit with i_start=3</th>
+        <th style="width: 14%;">SDEdit with i_start=5</th>
+        <th style="width: 14%;">SDEdit with i_start=7</th>
+        <th style="width: 14%;">SDEdit with i_start=10</th>
+        <th style="width: 14%;">SDEdit with i_start=20</th>
+        <th style="width: 14%;">Original Image</th>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/web_image_diffusion_1.jpg" alt="campanille i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/web_image_diffusion_3.jpg" alt="campanille i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/web_image_diffusion_5.jpg" alt="campanille i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/web_image_diffusion_7.jpg" alt="campanille i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/web_image_diffusion_10.jpg" alt="campanille i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/web_image_diffusion_20.jpg" alt="campanille i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/cartoon_dog.jpg" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/drawing_0_step_1.jpg" alt="bear i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_0_step_3.jpg" alt="bear i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_0_step_5.jpg" alt="bear i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_0_step_7.jpg" alt="bear i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_0_step_10.jpg" alt="bear i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_0_step_20.jpg" alt="bear i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/myImage.png" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/drawing_1_step_1.jpg" alt="trees i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_1_step_3.jpg" alt="trees i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_1_step_5.jpg" alt="trees i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_1_step_7.jpg" alt="trees i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_1_step_10.jpg" alt="trees i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/drawing_1_step_20.jpg" alt="trees i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/myImage_2.png" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+</table>
+
+<h5> 1.7.2 Inpainting </h5>
+We can also use the same procedure as above, but instead mask part of the image and have the model interpolate what was there before. We force the image to match the noised version of the original image at each step for parts of the image that are masked. In can take multiple attempts, since this is not specifically what the model was trained to do. We visualize the results of this on three images: the Campanile, a photo of a Shiba Inu (Adobe Stock), and a MacBook Pro (Adobe Stock). We see that the model correctly interpolates a reasonable top of the Campanile, as well as adds eyes back to the Shiba Inu. In removes the logo from the MacBook Pro in most runs, though there was one run (unfortunately not saved) where it did start to reconstruct something resembling an Apple logo. 
+
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 33%;">Original Image</th>
+        <th style="width: 33%;">Mask</th>
+        <th style="width: 33%;">Reconstructed Image</th>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/1.7.2_test_image_campanille.jpg" alt="campanille original" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.7.2_mask_campanille.jpg" alt="campanille mask" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.7.2_clean_campanille.jpg" alt="campanille reconstructed" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/1.7.2_test_image_shiba_inu.jpg" alt="shiba inu original" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.7.2_mask_shiba_inu.jpg" alt="shiba inu mask" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.7.2_clean_shiba_inu.jpg" alt="shiba inu reconstructed" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td><img src="../media/5a_out/out/1.7.2_test_image_None.jpg" alt="None original" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.7.2_mask_None.jpg" alt="None mask" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.7.2_clean_None.jpg" alt="None reconstructed" style="width: 100%;"></td>
+    </tr>
+</table>
+
+<h5> Part 1.7.3 Text Conditional Image-to-image Translation </h5>
+
+We note that we can also do image-to-image translation with a prompt for guidance. We do the same images as in 1.7.0, but add the prompts as show in the table below: 
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 12%;">Prompt</th>
+        <th style="width: 12%;">SDEdit with i_start=1</th>
+        <th style="width: 12%;">SDEdit with i_start=3</th>
+        <th style="width: 12%;">SDEdit with i_start=5</th>
+        <th style="width: 12%;">SDEdit with i_start=7</th>
+        <th style="width: 12%;">SDEdit with i_start=10</th>
+        <th style="width: 12%;">SDEdit with i_start=20</th>
+        <th style="width: 12%;">Original Image</th>
+    </tr>
+    <tr>
+        <td>a rocket ship</td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_campanille_1.jpg" alt="campanille i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_campanille_3.jpg" alt="campanille i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_campanille_5.jpg" alt="campanille i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_campanille_7.jpg" alt="campanille i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_campanille_10.jpg" alt="campanille i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_campanille_20.jpg" alt="campanille i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/original_image.jpg" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td>a photo of a dog</td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_dog_1.jpg" alt="dog i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_dog_3.jpg" alt="dog i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_dog_5.jpg" alt="dog i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_dog_7.jpg" alt="dog i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_dog_10.jpg" alt="dog i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_dog_20.jpg" alt="dog i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/bear.jpg" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td>a photo of the amalfi coast</td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_trees_1.jpg" alt="trees i_start=1" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_trees_3.jpg" alt="trees i_start=3" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_trees_5.jpg" alt="trees i_start=5" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_trees_7.jpg" alt="trees i_start=7" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_trees_10.jpg" alt="trees i_start=10" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/text_conditioned_1.7.3_trees_20.jpg" alt="trees i_start=20" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/trees.jpg" alt="Original Image" style="width: 100%;"></td>
+    </tr>
+</table>
+
+<h5> Part 1.8: Visual Anagrams </h5>
+We note that we can also create visual anagrams by elegantly combining the noise estimates for two different prompts. We feed two prompts, one for what the image should look like right-side up and the other for what it should look like upside down. Then, at each step, we get the predicted noise from the model for the image right-side up under guidance of right-side up prompt, and the predicted noise for the image upside down for the upside down prompt. Then, we average the right side up noise estimate with the vertically flipped noise estimate for the upside down prompt. Empirically, I found that placing more weight on the prompt with less signal led to better results. The weight listed below is the weight for the right-side up prompt. Below, I visualize the results for three visual anagrams. 
+
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 20%;">Prompt</th>
+        <th style="width: 20%;">Flipped Prompt</th>
+        <th style="width: 20%;">Weight</th>
+        <th style="width: 20%;">Image</th>
+        <th style="width: 20%;">Flipped Image</th>
+    </tr>
+    <tr>
+        <td>an oil painting of people around a campfire</td>
+        <td>an oil painting of an old man</td>
+        <td>0.75</td>
+        <td><img src="../media/5a_out/out/1.9_oil_painting_campfire.jpg" alt="oil painting campfire" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.9_oil_painting_campfire.jpg" alt="flipped oil painting campfire" style="width: 100%; transform: scaleY(-1);"></td>
+    </tr>
+    <tr>
+        <td>a photo of a hipster barista</td>
+        <td>an oil painting of a snowy mountain village</td>
+        <td>0.65</td>
+        <td><img src="../media/5a_out/out/1.9_barista_mountain.jpg" alt="hipster barista" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.9_barista_mountain.jpg" alt="flipped hipster barista" style="width: 100%; transform: scaleY(-1);"></td>
+    </tr>
+    <tr>
+        <td>a lithograph of waterfalls</td>
+        <td>a lithograph of a skull</td>
+        <td>0.75</td>
+        <td><img src="../media/5a_out/out/1.9_waterfall_skull.jpg" alt="waterfalls lithograph" style="width: 100%;"></td>
+        <td><img src="../media/5a_out/out/1.9_waterfall_skull.jpg" alt="flipped waterfalls lithograph" style="width: 100%; transform: scaleY(-1);"></td>
+    </tr>
+</table>
+
+<h5> Part 1.9: Hybrid Images </h5>
+We can apply a very similar technique to get hybrid images, which look like one thing close up and another thing far away. This is the same as in project 2, where we want the low frequency components of one image and the high frequency components of another. We can achieve this by getting the predicted noise for each image, and then adding a low-pass filtered version of the low-pass image noise prediction to the high-pass filtered version of the high-pass image noise prediction. We visualize the results for three hybrid images below.
+<table border="0" cellspacing="0" style="text-align: center; table-layout: fixed; width: 100%;">
+    <tr>
+        <th style="width: 20%;">Low Freq. Prompt</th>
+        <th style="width: 20%;">High Freq. Prompt</th>
+        <th style="width: 20%;">Image</th>
+    </tr>
+    <tr>
+        <td>a lithograph of a skull</td>
+        <td>a lithograph of waterfalls</td>
+        <td><img src="../media/5a_out/out/1.10_waterfall_skull.jpg" alt="waterfall and skull lithograph" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td>a lithograph of a cat</td>
+        <td>a lithograph of a dog</td>
+        <td><img src="../media/5a_out/out/1.10_dog_cat.jpg" alt="dog and cat lithograph" style="width: 100%;"></td>
+    </tr>
+    <tr>
+        <td>a lithograph of a man</td>
+        <td>a lithograph of a skull</td>
+        <td><img src="../media/5a_out/out/1.10_skull_man.jpg" alt="skull and man lithograph" style="width: 100%;"></td>
+    </tr>
+
+</table>
+We note that for the last two, the output is largely the body of the low frequency prompt and the head of the high frequency prompt. This makes sense, since from far away it is difficult to make out the details of the face, so you assume the whole thing is likely the identity of the body (in this case, cat for the second and man for the third). But as you get closer, you see the details in the face, which reveals the high frequency prompt.
+<h2> Part B: Diffusion Models from Scratch! </h2>
+<h3> Introduction </h3>
+Now, we can try to train a small diffusion model from scratch to generate digits based on the MNIST digit dataset. This involves creating a model, training the model, and implementing the sampling loop. We additionally use classifier-free guidance to generate specific digits. 
+<h2> Part 1: Training a Single-Step Denoising U-Net</h2>
+<h3> 1.1 Implementing the U-Net </h3>
+For our model architecture, we use a UNet, which assures that the information and different levels is appropriately propagated to later layers by having skip connections. The image is repeatedly downsampled to learn a good representation, and then upsampled, concatenating with the corresponding downsampled image, to assure that no information is loss.  
+
+<figure style="text-align: center;">
+    <img src="../media/5a_out/out/architecture.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+    <figcaption>UNet Model Architecture (from project spec)</figcaption>
+</figure>
+<h3> 1.2 Using the UNet to Train a Denoiser </h3>
+
+<h4> 1.2.1 Training </h4>
+    We use the UNet to learn a model to predict the noise added to the image during the forward process. We train the model to minimize the L2 loss with the true noise. To generate training samples, we sample original images, and add noise to them. In the figure below, we visualize what different datapoints from MNIST look like after adding different amounts of noise: 
+    
+    
+    <figure style="text-align: center;">
+        <img src="../media/5b/visualize_noise.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+        <figcaption>Varying levels of noise on MNIST digits</figcaption>
+    </figure>
+
+    We can train the UNet using MSE loss to predict the noise added to the image. Since we are doing one step prediction, we will fix the noise quantity to have sigma = 0.5. We train for 5 epochs, batch size 256, learning rate 1e-4 using Adam, and a hidden dimension D of 128. We show the training loss below (averaging every 5 batches):
+
+    <figure style="text-align: center;">
+        <img src="../media/5b/training_loss_one_step.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+        <figcaption>Training Loss Curve</figcaption>
+    </figure>
+
+    We now test the model by visualizing results after the 1st and 5th epoch: 
+
+    <figure style="text-align: center;">
+        <img src="../media/5b/one_step_eval_0.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+        <figcaption> Results on digits from the test set after 1 epoch of training</figcaption>
+    </figure>
+    <figure style="text-align: center;">
+        <img src="../media/5b/one_step_eval_4.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+        <figcaption> Results on digits from the test set after 5 epoch of training</figcaption>
+    </figure>
+    <h4> 1.2.2 Out-of-distribution Testing </h4>
+    We can also test how well the model generalizes to reconstructing images with more or less noise than it was trained on. We see that it generalizes well to less noise, but struggles when there is more noise. This suggests that using an iterative approach may work better for reconstructing images from pure noise. 
+
+    <figure style="text-align: center;">
+        <img src="../media/5b/evaluate_ood.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+        <figcaption> Results on digits from the test set with varying noise levels.</figcaption>
+    </figure>
+    <h2> Part 2: Training a Diffusion Model</h2>
+    <h3> 2.1 Adding Time Conditioning to U-Net </h3>
+    In order to perform DDPM sampling like we did in Part A, we need to train a UNet that predicts noise that is conditioned on the time (since the noise schedule changes over time). It has also been shown that conditioning on time makes the process more stable. To do this, we add two fully connected blocks to encode the time, and concatenate the time embedding to the input to each upsampling block of the UNet. The diagram below shows the details of the architecture:
+    <figure style="text-align: center;">
+        <img src="../media/5b/time_conditioned_arch_unet.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+        <figcaption>Time-Conditioned UNet Model Architecture (from project spec)</figcaption>
+    </figure>
+<h3> 2.2: Training the UNet </h3>
+We train our UNet, selecting a random timestep for each element of the batch, computing the noisy image using the forward process, and then regressing the output of the network to the true noise. We train for 20 epochs, with batch size of 128, hidden dimension of 64, learning rate of 1e-3 with Adam optimizer, and exponential decay learning rate schedule with gamma = 0.01^(1/20). We show the training loss below (averaging every 5 batches):
+
+<figure style="text-align: center;">
+    <img src="../media/5b/training_loss_time_cond.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+    <figcaption>Time-Conditioned UNet training loss curve</figcaption>
+</figure>
+<h3> 2.3: Sampling from the UNet </h3>
+We implement DDPM sampling, and show the examples of sampled images from the model after 5 and 20 epochs of training. 
+
+<figure style="text-align: center;">
+    <img src="../media/5b/time_conditioned_epoch_4.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+    <figcaption> Sampling results 5 epochs of training</figcaption>
+</figure>
+<figure style="text-align: center;">
+    <img src="../media/5b/time_conditioned_epoch_19.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+    <figcaption> Sampling results after 20 epochs of training</figcaption>
+</figure>
+We see that while the quality is reasonable, some digits don't look that accurate, and it is not possible to sample specific digits. To fix this, we will implement classifier-free guidance. 
+
+<h3> 2.4: Adding Class-Conditioning to UNet</h3>
+To add class conditioning, we encode the digit as a one-hot vector, and pass it into a similar fully connected block as the time in the previous section. We add the class embedding to the input of the UNet at each upsampling block, like we did for the time embedding. We drop the label with probability 0.1 to make sure the model learns unconditional generation as well. Then, as we did in part A, we implement classifier-free guidance sampling from the network. The training loss is shown below:
+<figure style="text-align: center;">
+    <img src="../media/5b/training_loss_class_cond.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+    <figcaption>Class-Conditioned UNet training loss curve</figcaption>
+</figure>
+<h3> 2.5 Sampling from the Class-Conditioned UNet</h3>
+We  show the results of sampling with classifier-free guidance after 5 and 20 epochs of training below, using a guidance scale of 5:
+
+<figure style="text-align: center;">
+    <img src="../media/5b/classifier_guidance_epoch_4.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+    <figcaption> Sampling results 5 epochs of training</figcaption>
+</figure>
+<figure style="text-align: center;">
+    <img src="../media/5b/classifier_guidance_epoch_19.png" alt="UNet Model Architecture" style="width: 100%; max-width: 800px;">
+    <figcaption> Sampling results after 20 epochs of training</figcaption>
+</figure>
+
+
 </body>
 </html>
