@@ -13,7 +13,7 @@
     </div>
 </head>
 <body>
-    <h1> Diffusion Models!</h1>
+    <h1> Fun With Diffusion Models! </h1>
     <h2> Part A: The Power of Diffusion Models! </h2>
     <h3> Introduction </h3>
     Recently, diffusion models have been demonstrated to achieve better image generation than GANs, while also having a much more stable training regime that avoids the instability and mode collapse associated with adversarial learning. Diffusion models accomplish this by learns to gradually denoise an image, a process that can be learned through simple supervised learning predicting the noise of an image gradually being made more noisy, and then using DDPM sampling to "play the tape in reverse" to create images from noise. In this part, we will use a pretrained diffusion model DeepFloyd IF, and explore how to use this model to implement DDPM sampling, image to image transformations, and more. 
