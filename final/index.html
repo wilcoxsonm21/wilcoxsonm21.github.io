@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" type="text/css" href="../styles.css">
+    <title>CS 180 Project Portfolio</title>
+    <div class="topnav">
+        <a href="../"> Home </a>
+        <a href="../1/"> Project 1 </a>
+        <a href="../2/"> Project 2 </a>
+        <a href="../3/"> Project 3 </a>
+        <a href="../4/"> Project 4 </a>
+        <a href="../5/"> Project 5 </a>
+        <a class="active" href="."> Final Project </a>
+    </div>
+</head>
+<body>
+    <h1> Final Project: Neural Radiance Field! </h1>
+    <h2> Introduction</h2>
+    In this project, we implement a neural radiance field, which is a method for using a neural network to synthesize novel views of a 3D object using pictures from several calibrated cameras. We will first do a PyTorch exercise of fitting a network to a 2D image, and then implement a neural radiance field. We will also experiment with changing the background color for the 3D render. 
+
+    <h2> Part 1: Fit a Neural Field to a 2D Image </h2>
+    In this section, we want to train a neural network to fit two a 2D image. The input of the network is the pixel coordinates, normalized between 0 and 1. The output is the RGB pixel value at that coordinate. To add inductive bias that makes it easier for the network to understand the meaning of the position indices, we use sinusoidial positional encoding, where we apply sinusoidal functions of different frequencies to our input and concatenate these to the input. 
+    <br>
+    For the architecture, we do a simple MLP, where we first embed the input in the positional encoding, and then pass it through a number of fully connected layers with hidden dimension of 256 and ReLU activations. Finally, we have one last linear layer to a dimension of 3 and a sigmoid activation to get outputs in the range of 0 to 1. Below is the diagram of the architecture for 3 hidden layers: 
+    <figure>
+        <img src="../media/final/pt1_architecture.png" alt="Sample Image" style="width: 100%; ">
+        <figcaption>Neural Network Architecture</figcaption>
+    </figure>
+
+    We tune our hyperparameters on the given image (left), and then run our model using the same hyperparameters on an image of my dog, Bear (right). Here are the two original images for reconstruction: 
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">
+        <figure>
+            <img src="../media/final/part1_final/stock_image.jpg" alt="Given Image" style="width: 100%;" />
+            <figcaption>Given Image</figcaption>
+        </figure>
+        <figure>
+            <img src="../media/final/part1_final/bear.jpg" alt="Bear (My Dog)" style="width: 100%;" />
+            <figcaption>Bear (My Dog)</figcaption>
+        </figure>
+    </div>
+
+    Next, we visualize the image reconstruction for different hyperparameter choices at different training iterations. We train for 1000 iterations total, batch size of 10,000 pixels, and a positional encoding dimension of 10. We use Adam as our optimizer. We try 2, 3, and 4 hidden layers of width 256, and learning rates of 0.01, 0.001, and 0.0001. Below we visualize the training progress on the provided image for the different hyperparameter configurations at different training steps: 
+
+    <br> 
+
+    <div style="display: grid; grid-template-columns: 1fr repeat(5, 1fr); gap: 10px; text-align: center;">
+        <!-- Header row for iteration -->
+        <div></div>
+        <div>Iteration 0</div>
+        <div>Iteration 100</div>
+        <div>Iteration 200</div>
+        <div>Iteration 500</div>
+        <div>Iteration 1000</div>
+    
+        <!-- num_layers = 2 -->
+        <div>num_layers=2, lr=0.01</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.01_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.01_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.01_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.01_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.01_num_layers=2.jpg" alt="img" style="width: 100%;" />
+    
+        <div>num_layers=2, lr=0.001</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+    
+        <div>num_layers=2, lr=0.0001</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.0001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.0001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.0001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.0001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.0001_num_layers=2.jpg" alt="img" style="width: 100%;" />
+    
+        <!-- num_layers = 3 -->
+        <div>num_layers=3, lr=0.01</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+    
+        <div>num_layers=3, lr=0.001</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+    
+        <div>num_layers=3, lr=0.0001</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.0001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.0001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.0001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.0001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.0001_num_layers=3.jpg" alt="img" style="width: 100%;" />
+    
+        <!-- num_layers = 4 -->
+        <div>num_layers=4, lr=0.01</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.01_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.01_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.01_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.01_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.01_num_layers=4.jpg" alt="img" style="width: 100%;" />
+    
+        <div>num_layers=4, lr=0.001</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+    
+        <div>num_layers=4, lr=0.0001</div>
+        <img src="../media/final/part1_final/out_stock/iteration=0_lr=0.0001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=99_lr=0.0001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=199_lr=0.0001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=499_lr=0.0001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_stock/iteration=999_lr=0.0001_num_layers=4.jpg" alt="img" style="width: 100%;" />
+    </div>
+
+    <br> 
+
+    We can see that a larger learning rate is much better, and that more layers seems to help a bit too. This becomes more clear looking at the training loss curves, pictured below:
+
+    <figure>
+        <img src="../media/final/part1_final/all_hyperpameters_part_1.png" alt="Sample Image" style="width: 100%; ">
+        <figcaption>Hyperparameter Sweep on Given Image</figcaption>
+    </figure>
+
+    In the above graph, we see that a learning rate of 0.01 is the most important hyperparameter. More layers seems slightly better, but also increases the computational cost. From this sweep, we select 3 layers and a learning rate of 0.01. This gives the following training curve with these hyperparameters: 
+
+    <figure>
+        <img src="../media/final/part1_final/chosen_hyperparemters_stock.png" alt="Sample Image" style="width: 100%; ">
+        <figcaption>Training Loss for Given Image </figcaption>
+    </figure>
+
+    Finally, we can apply these hyperparameters to another image, one of my dog, Bear. This gives the following training progress and training curve: 
+    <br>
+    <br>
+
+    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; text-align: center;">
+        <!-- Header row for iteration -->
+        <div>Iteration 1</div>
+        <div>Iteration 100</div>
+        <div>Iteration 200</div>
+        <div>Iteration 500</div>
+        <div>Iteration 1000</div>
+    
+        <!-- num_layers = 2 -->
+        <img src="../media/final/part1_final/out_bear/iteration=0_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_bear/iteration=99_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_bear/iteration=199_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_bear/iteration=499_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+        <img src="../media/final/part1_final/out_bear/iteration=599_lr=0.01_num_layers=3.jpg" alt="img" style="width: 100%;" />
+    </div>
+
+    <figure>
+        <img src="../media/final/part1_final/chosen_hyperparemters_bear.png" alt="Sample Image" style="width: 100%; ">
+        <figcaption>Training Loss for Image of Bear </figcaption>
+    </figure>
+
+    <h2> Part 2: Fit a Neural Radiance Field from Multi-view Images </h2>
+
+    We will render a view of a Lego bulldozer. 
+
+    <h3> Part 2.1: Create Rays from Cameras </h3>
+
+    We first need to implement a function to change coordinates from camera frame to the world frame. We have the transformation matrix, so implementation-wise, we just need to convert to homogeneous coordinates, perform the multiplication with torch.bmm to make it batched, and then return the answer in non-homogenuous coordinates. 
+
+    Then, we need to implement the transformation from pixel to camera coordinates, which just involves multiplying by the inverse camera intrinsics matrix and some scaling factor s. We also convert the pixels to homogenuous coordinates. 
+    
+    With these transformations implemented, we need to convert a pixel to the ray that goes through that pixel. The origin of the ray is just the translation vector in the camera to world matrix we have access to from camera calibration. For the direction, we can convert the pixel to world coordinates by chaining the above two function transformations, and then normalizing the direction of that coordinate from the ray origin to make it unit norm. 
+    
+    <h3> Part 2.2: Sampling </h3>
+
+    We sample N//M rays from each of the M images, where N is the batch size. In each image, we pick a pixel at random, and sample the ray corresponding to that pixel. We add 0.5 to our pixel coordinates because it is convention that the ray goes through the center of the pixel. 
+
+    Now that we have rays, we need to sample points on the ray. We sample uniformly for num_samples from a distance of 2.0 to 6.0 from the origin of the ray. For this project, we use 64 samples. To avoid overfitting, we need to add a uniform perturbation so the network learns to predict values throughout the whole space. To assure that there are no gaps, I set the width of the perturbation, t_width, equal to (far - near)/num_samples = 0.0625. 
+
+    <h3> Part 2.3: Putting the Dataloading All Together </h3>
+
+    To verify that everything in the above parts has been implemented correctly, we can visualize rays sampled through this process. We show the visualization of 100 rays sampled from both 1 camera and all cameras below: 
+
+    <figure>
+        <img src="../media/final/part1_final/one_camera_render.png" alt="Sample Image" style="width: 100%; ">
+        <figcaption> Visualization of Rays Sampled From First Camera </figcaption>
+    </figure>
+    <figure>
+        <img src="../media/final/part1_final/multi_camera_render.png" alt="Sample Image" style="width: 100%; ">
+        <figcaption> Visualization of Rays Sampled from All Cameras </figcaption>
+    </figure>
+
+    Everything looks good, as all rays are going through the camera frustum, and if we look at the single camera visualization, all rays are going through a single image plane. 
+
+    <h3> Part 2.4: Neural Radiance Field </h3>
+
+    We use a similar network architecture as the 2D case, except now our network needs to take in a 3D coordinate in world space and the direction of view. It will now output an RGB value and a density to support volumetric rendering later. Since this is a harder task, we add additional layers. We do positional encoding for both inputs, and use an L = 10 for the world coordinates and L = 4 for the direction. By using a ReLU activation for the density, we assure that the density is valid. We still have a sigmoid activation for the RGB. A complete diagram of the network architecture is shown below: 
+    
+    <figure>
+        <img src="../media/final/part1_final/nerf_complete_architecture.png" alt="Sample Image" style="width: 100%; ">
+        <figcaption>NERF Neural Network Architecture</figcaption>
+    </figure>
+
+    <h3> Part 2.5: Volume Rendering </h3>
+
+    To use these density and RGB estimates to get pixels, we need to use volumetric rendering. The volumetric rendering equation is shown below: 
+    
+    <figure>
+        <img src="../media/final/rendering_continuous.png" alt="Sample Image" style="width: 100%; ">
+    </figure>
+
+    We use a discrete approximation: 
+
+    <figure>
+        <img src="../media/final/rendering_discrete.png" alt="Sample Image" style="width: 100%; ">
+    </figure>
+
+    In this equation, T_i is the probability of the ray not terminating before sample i, and 1 - exp(-sigma_i*delta_i) is the probability it terminates at sample i. We can implement this in PyTorch, and it is differentiable. Delta_i is supposed to be the difference in the time between adjacent samples. In my implementation, I use the actual delta between the noisy sampling times, so the augmentation doesn't change the correctness of the answer. Based on my understanding of the description in the original NERF paper, this seems to match their implementation. 
+    <br> <br> 
+    We train for 10000 iterations, a batch size of 10000, and learning rate of 5e-3. We visualize the training process below: 
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: center;">
+        <!-- Header -->
+        <div><strong>Train Image</strong></div>
+        <div><strong>Validation Image</strong></div>
+
+        <!-- Row for iter=1 -->
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/train_False_1.jpg" alt="Train Image 100" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption> Iteration 0</figcaption>
+        </figure>
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/valid_False_1.jpg" alt="Validation Image 100" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 0</figcaption>
+        </figure>
+
+        <!-- Row for iter=100 -->
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/train_False_100.jpg" alt="Train Image 100" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 100</figcaption>
+        </figure>
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/valid_False_100.jpg" alt="Validation Image 100" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 100</figcaption>
+        </figure>
+    
+        <!-- Row for iter=500 -->
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/train_False_500.jpg" alt="Train Image 500" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 500</figcaption>
+        </figure>
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/valid_False_500.jpg" alt="Validation Image 500" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 500</figcaption>
+        </figure>
+    
+        <!-- Row for iter=1000 -->
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/train_False_1000.jpg" alt="Train Image 1000" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 1000</figcaption>
+        </figure>
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/valid_False_1000.jpg" alt="Validation Image 1000" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 1000</figcaption>
+        </figure>
+    
+    
+        <!-- Row for iter=5000 -->
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/train_False_5000.jpg" alt="Train Image 5000" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 5000</figcaption>
+        </figure>
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/valid_False_5000.jpg" alt="Validation Image 5000" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 5000</figcaption>
+        </figure>
+    
+        <!-- Row for iter=10000 -->
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/train_False_10000.jpg" alt="Train Image 10000" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 10000</figcaption>
+        </figure>
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/nerf_final/valid_False_10000.jpg" alt="Validation Image 10000" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>Iteration 10000</figcaption>
+        </figure>
+    </div>
+
+    We can also visualize the PSNR on both the training set and validation set:
+
+    <figure>
+        <img src="../media/final/part1_final/training_curves_nerf_final.png" alt="Sample Image" style="width: 100%; ">
+        <figcaption>Training and Validation PSNR for NERF </figcaption>
+    </figure>
+
+    We see that there is no significant overfitting, and that our data augmentation is functioning well. 
+
+    <br> <br>
+    Now, we can render a variety of novel views in sequence to create a video going around the object. This just involves doing the render for several different camera positions and then playing them in sequence. We visualize the video below: 
+
+    <figure>
+        <img src="../media/final/part1_final//lego_None_False_10000.gif" alt="Sample Image" style="width: 100%; ">
+        <figcaption> Performance After 10000 Training Iterations </figcaption>
+    </figure>
+
+    <h3> Part 2.6: Bells and Whistles </h3>
+
+    For the Bells and Whistles, we chose changing the background color. This just requires adding one more point far from the origin in the volumetric rendering of the desired color with high density. That way, if there is nothing with density that is blocking it (an object), the color will be that background color. Making this change to the rendering equation helps produce the desired result, however there is a small problem. Some background pixels are black with nonzero density, and this gets worse as the network is trained longer. My hypothesis is that this is because both solutions are valid from the perspective of satisfying the training loss, and as we continue to train we "overfit" to the background color and predict the color with density instead of nothing with no density. This might because this is easier to learn, since it requires just predicting the background color black with high density at one point, rather than learning to have no density throughout the entire ray. Below, I visualize rendering videos with a blue background color for checkpoints at different steps in training: 
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center;">
+
+        <!-- Row for iter=1 -->
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/lego_blue_False_1000.gif" alt="Train Image 0" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption>1000 Iterations</figcaption>
+        </figure>
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/lego_blue_False_2000.gif" alt="Validation Image 100" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption> 2000 Iterations</figcaption>
+        </figure>
+        <figure style="margin: 0;">
+            <img src="../media/final/part1_final/lego_blue_False_10000.gif" alt="Validation Image 100" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <figcaption> 10000 Iterations</figcaption>
+        </figure>
+    </div>
+
+    To make this better, I tried adding regularization to give the model bias to predict zero density when possible by adding a small penalty proportional to the l2 norm of the density predictions. I used a coefficient of 1e-6, adding 1e-6 times the l2 norm of the density predictions for the batch. This helped reduce this problem, but it is not perfect, as some areas are now transparent that should not be. Additionally, some areas near the edge of the bulldozer still become colored black. If more compute was available, perhaps better tuning of this parameter could help. 
+    
+    <figure>
+        <img src="../media/final/part1_final/lego_blue_True_10000.gif"Sample Image" style="width: 100%; ">
+        <figcaption> Performance after 10000 Training Iterations, With Density Penalty </figcaption>
+    </figure>
+
+    I also tried augmentation during training of changing the background to a variety of different colors to avoid overfitting to the background color, and changing the rendering accordingly. Unfortunately, this only works if you can select all of the background, and I was unable to select the background region inside areas of the bulldozer, just those near the edges. Because of this, this approach actually caused the model to learn to predict solid black in those regions, since otherwise it was not possible to match the fixed ground truth value in those regions with the changing render background color. 
+    
+
+
+
+
+
+
+</body>
+</html>

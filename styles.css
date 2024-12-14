@@ -15,7 +15,7 @@ body {
     text-decoration: none;
     font-size: 17px;
     border-radius: 16px;
-    width: 12.82113%; /* hardcoded to make stuff evenly spaced but on one line, probably a better way to do this */
+    width: 10%; /* hardcoded to make stuff evenly spaced but on one line, probably a better way to do this */
 }
 .topnav a:hover {
     background-color: #ddd;
