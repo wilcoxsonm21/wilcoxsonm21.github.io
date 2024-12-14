@@ -301,7 +301,9 @@
     Now, we can render a variety of novel views in sequence to create a video going around the object. This just involves doing the render for several different camera positions and then playing them in sequence. We visualize the video below: 
 
     <figure>
-        <img src="../media/final/part1_final//lego_None_False_10000.gif" alt="Sample Image" style="width: 100%; ">
+        <video autoplay muted loop>
+            <source src="../media/final/part1_final/lego_None_False_10000.mp4" type="video/mp4">
+        </video>
         <figcaption> Performance After 10000 Training Iterations </figcaption>
     </figure>
 
@@ -313,15 +315,21 @@
 
         <!-- Row for iter=1 -->
         <figure style="margin: 0;">
-            <img src="../media/final/part1_final/lego_blue_False_1000.gif" alt="Train Image 0" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <video  autoplay muted loop>
+                <source src="../media/final/part1_final/lego_blue_False_1000.mp4" type="video/mp4">
+            </video>
             <figcaption>1000 Iterations</figcaption>
         </figure>
         <figure style="margin: 0;">
-            <img src="../media/final/part1_final/lego_blue_False_2000.gif" alt="Validation Image 100" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <video  autoplay muted loop>
+                <source src="../media/final/part1_final/lego_blue_False_2000.mp4" type="video/mp4">
+            </video>
             <figcaption> 2000 Iterations</figcaption>
         </figure>
         <figure style="margin: 0;">
-            <img src="../media/final/part1_final/lego_blue_False_10000.gif" alt="Validation Image 100" style="width: 100%; aspect-ratio: 1/1; object-fit: cover;" />
+            <video autoplay muted loop>
+                <source src="../media/final/part1_final/lego_blue_False_10000.mp4" type="video/mp4">
+            </video>
             <figcaption> 10000 Iterations</figcaption>
         </figure>
     </div>
@@ -329,7 +337,9 @@
     To make this better, I tried adding regularization to give the model bias to predict zero density when possible by adding a small penalty proportional to the l2 norm of the density predictions. I used a coefficient of 1e-6, adding 1e-6 times the l2 norm of the density predictions for the batch. This helped reduce this problem, but it is not perfect, as some areas are now transparent that should not be. Additionally, some areas near the edge of the bulldozer still become colored black. If more compute was available, perhaps better tuning of this parameter could help. 
     
     <figure>
-        <img src="../media/final/part1_final/lego_blue_True_10000.gif"Sample Image" style="width: 100%; ">
+        <video autoplay muted loop>
+            <source src="../media/final/part1_final/lego_blue_True_10000.mp4" type="video/mp4">
+        </video>
         <figcaption> Performance after 10000 Training Iterations, With Density Penalty </figcaption>
     </figure>
 
