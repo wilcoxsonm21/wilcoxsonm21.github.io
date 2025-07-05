@@ -343,3 +343,20 @@
   - **E**xploration: Reddish-Orange (#B8472F)
 - **Implementation**: Applied `<span style="color: [color]; font-weight: bold;">[Letter]</span>` to each first letter
 - **Result**: SUPE expansion now visually reinforces the acronym with consistent color branding 
+
+### 2025-01-27: Temporarily Removed Entire Navbar
+
+#### Navbar Updates:
+- **Entire Navbar**: Commented out the complete navbar section
+- **Content Preserved**: Navbar with home icon link to https://rail.eecs.berkeley.edu/ preserved in comments
+- **Implementation**: Wrapped the entire `<nav>` element in HTML comments with TODO note
+- **Purpose**: Navbar removed temporarily but preserved for future restoration
+- **Result**: Website now has no navigation bar, giving more space to content
+
+### 2025-01-27: Added Top Padding After Navbar Removal
+
+#### Layout Adjustment:
+- **Body Padding**: Added `padding-top: 1rem;` to the body element
+- **Purpose**: Provide breathing room at the top of the page after removing the navbar
+- **Implementation**: Added inline style to the `<body>` tag
+- **Result**: Content no longer sits at the very top edge of the browser window, improving visual appearance 
