@@ -83,19 +83,19 @@
           <h1 class="title is-1 publication-title"><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span>: Leveraging Skills from Unlabeled Prior Data for Efficient Online Exploration</h1>
           <div class="is-size-5 publication-authors">
             <span class="author-block">
-              <a href="https://wilcoxsonm21.github.io">Max Wilcoxson*</a><sup>1</sup>,</span>
+              <a href="https://wilcoxsonm21.github.io">Max Wilcoxson*</a>,</span>
             <span class="author-block">
-              <a href="https://colinqiyangli.github.io">Qiyang Li*</a><sup>1</sup>,</span>
+              <a href="https://colinqiyangli.github.io">Qiyang Li*</a>,</span>
             <span class="author-block">
-              <a href="https://kvfrans.com">Kevin Frans</a><sup>1</sup>,
+              <a href="https://kvfrans.com">Kevin Frans</a>,
             </span>
             <span class="author-block">
-              <a href="https://people.eecs.berkeley.edu/~svlevine/">Sergey Levine</a><sup>1</sup>
+              <a href="https://people.eecs.berkeley.edu/~svlevine/">Sergey Levine</a>
             </span>
           </div>
 
           <div class="is-size-5 publication-authors">
-            <span class="author-block"><sup>1</sup>UC Berkeley</span>
+            <span class="author-block">UC Berkeley</span>
           </div>
 
           <div class="column has-text-centered">
@@ -152,7 +152,7 @@
           <source src="static/images/traj_skills_anim.mp4" type="video/mp4">
           Your browser does not support the video tag.
         </video>
-        <h4 class="title is-5" style="margin-top: 1rem;">Trajectory Skills</h4>
+        <h4 class="title is-5" style="margin-top: 1rem;">Online RL with Pre-trained Skills</h4>
       </div>
       <div class="column is-one-third has-text-centered">
         <video width="100%" height="auto" autoplay loop muted playsinline>
@@ -229,7 +229,7 @@
             <img src="static/images/skill-figure-website.png" alt="Skill Extraction Process" style="width: 100%; height: auto;">
           </figure>
           <p>
-            To structure online exploration, we extract skills from the data to capture low-level, task-agnostic behaviors. We use VAE skill pretraining method, where the decoder serves as the skill policy, reconstructing dataset trajectory segments conditioned on the skill latent and current observation. This allows exploration to stay within the space of useful behaviors present in the prior data — ie. moving in different directions within a maze, rather than applying random forces to the agent.
+            To structure online exploration, we extract skills from the data to capture low-level, task-agnostic behaviors. We use pretrain skills using a VAE, where the decoder serves as the skill policy, reconstructing dataset trajectory segments conditioned on the skill latent and current observation. This allows exploration to stay within the space of useful behaviors present in the prior data — ie. moving in different directions within a maze, rather than applying random forces to the agent.
           </p>
         </div>
       </div>
@@ -295,7 +295,7 @@
 
         <div class="content has-text-justified">
           <p>
-            We evaluate our method across a suite of eight domains consisting of 42 sparse reward, long-horizon tasks. <strong>DBC + JSRL</strong> is a simple baseline that does not use optimistic labeling or skill pre-training. It performs reasonably well on easier tasks but struggles on more challenging domains. <strong>ExPLORe</strong> adds optimistic relabelling, and performs better on easier tasks, but still struggles on challenging tasks like <code>scene</code> and <code>humanoidmaze</code>. <strong>Trajectory Skills</strong> and <strong>HILP Skills</strong> are two baselines that pretrain skills but do not use offline labelling. <strong>Trajectory Skills</strong> uses the same VAE skill extraction method as <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong>, and <strong>HILP Skills</strong> learns skills which traverse a Hilbert space. Both methods perform better on more challenging tasks like <code>scene</code>, but struggle on <code>humanoidmaze</code>. Finally, <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> are variants of our method which do both skill pretraining and optimistic relabelling. <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> uses the same skill pretraining as <strong>Trajectory Skills</strong>, and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> uses the skill pretraining method of <strong>HILP Skills</strong>. We see that <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> performs the best on <code>scene</code> and <code>antsoccer</code>, and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> performs the best on all other environments. This highlights the importance of using offline data twice, both for skill-pretraining and as additional off-policy data during online learning.
+            We evaluate our method across a suite of eight domains consisting of 42 sparse reward, long-horizon tasks. <strong>DBC + JSRL</strong> is a simple baseline that does not use optimistic labeling or skill pre-training. It performs reasonably well on easier tasks but struggles on more challenging domains. <strong>ExPLORe</strong> <a href="https://arxiv.org/pdf/2311.05067">(Li et al., 2024)</a> adds optimistic relabelling, and performs better on easier tasks, but still struggles on challenging tasks like <code>scene</code> and <code>humanoidmaze</code>. <strong>Trajectory Skills</strong> and <strong>HILP Skills</strong> are two baselines that pretrain skills but do not use offline labelling. <strong>Trajectory Skills</strong> uses the same VAE skill extraction method <a href="https://arxiv.org/pdf/2010.13611">(Ajay et al., 2021)</a> as <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong>, and <strong>HILP Skills</strong> learns skills which traverse a Hilbert space <a href="https://arxiv.org/pdf/2402.15567">(Park et al., 2024)</a>. Both methods perform better on more challenging tasks like <code>scene</code>, but struggle on <code>humanoidmaze</code>. Finally, <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> are variants of our method which do both skill pretraining and optimistic relabelling. <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> uses the same skill pretraining as <strong>Trajectory Skills</strong>, and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> uses the skill pretraining method of <strong>HILP Skills</strong>. We see that <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> performs the best on <code>scene</code> and <code>antsoccer</code>, and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> performs the best on all other environments. This highlights the importance of using offline data twice, both for skill-pretraining and as additional off-policy data during online learning.
           </p>
         </div>
 

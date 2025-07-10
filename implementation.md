@@ -359,4 +359,26 @@
 - **Body Padding**: Added `padding-top: 1rem;` to the body element
 - **Purpose**: Provide breathing room at the top of the page after removing the navbar
 - **Implementation**: Added inline style to the `<body>` tag
-- **Result**: Content no longer sits at the very top edge of the browser window, improving visual appearance 
+- **Result**: Content no longer sits at the very top edge of the browser window, improving visual appearance
+
+### 2025-01-27: Cleaned Up Author Section and Video Animation Title
+
+#### Author List Updates:
+- **Removed Superscripts**: Removed all `<sup>1</sup>` superscripts from author names
+- **Simplified Institution**: Changed from `<sup>1</sup>UC Berkeley` to just `UC Berkeley`
+- **Reason**: All authors are from the same institution, making superscripts unnecessary
+- **Result**: Cleaner, simpler author presentation
+
+#### Video Animation Title:
+- **Changed Title**: Updated "Trajectory Skills" to "Online RL with Pre-trained Skills"
+- **Purpose**: More descriptive title that directly tells the audience what the method is
+- **Result**: Video animation section now has clearer, more informative titles for each method
+
+### 2025-01-27: Added Citations to Results Section
+
+#### Reference Links Added:
+- **ExPLORe Citation**: Added "(Li et al., 2024)" hyperlink to https://arxiv.org/pdf/2311.05067 after first ExPLORe mention
+- **HILP Skills Citation**: Added "(Park et al., 2024)" hyperlink to https://arxiv.org/pdf/2402.15567 after "skills which traverse a Hilbert space" description
+- **VAE Skills Citation**: Added "(Ajay et al., 2021)" hyperlink to https://arxiv.org/pdf/2010.13611 after "same VAE skill extraction method" description
+- **Implementation**: Used standard `<a href="[url]">[citation]</a>` format for all citations
+- **Result**: Results section now properly cites related work with direct links to papers 
