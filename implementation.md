@@ -1,5 +1,59 @@
 # Implementation Log
 
+## 2025-01-03 - Website Restructuring
+
+### Changes Made:
+1. **Created `/supe` directory** - Created a new subdirectory to house the SUPE research paper website
+2. **Moved SUPE research content** - Moved the original `index.html` (containing the full SUPE research paper website) to `supe/index.html`
+3. **Created new root landing page** - Created a new simple `index.html` at the root with:
+   - Clean, modern design with gradient background
+   - Personal welcome message: "Hi, this is Max Wilcoxson's personal website"
+   - Navigation links to SUPE research, GitHub, and Google Scholar
+   - Responsive design for mobile devices
+
+### File Structure After Changes:
+```
+/
+├── index.html (new simple landing page)
+├── supe/
+│   └── index.html (moved SUPE research paper website)
+├── static/ (unchanged)
+├── implementation.md (this file)
+└── README.md (unchanged)
+```
+
+### Website Navigation:
+- Root (`/`) - Personal landing page
+- `/supe` - SUPE research paper website
+
+## 2025-01-03 - Fixed SUPE Website Asset Paths
+
+### Issue:
+After moving the SUPE research paper website to `/supe/index.html`, all CSS, JavaScript, and image assets were broken because the relative paths were incorrect.
+
+### Changes Made:
+1. **CSS Files** - Updated all CSS links from `./static/css/` to `../static/css/`:
+   - `bulma.min.css`
+   - `bulma-carousel.min.css`
+   - `bulma-slider.min.css`
+   - `fontawesome.all.min.css`
+   - `index.css`
+
+2. **JavaScript Files** - Updated all JS links from `./static/js/` to `../static/js/`:
+   - `fontawesome.all.min.js`
+   - `bulma-carousel.min.js`
+   - `bulma-slider.min.js`
+   - `index.js`
+
+3. **Images and Videos** - Updated all media paths from `static/images/` to `../static/images/`:
+   - Video files: `explore_anim.mp4`, `traj_skills_anim.mp4`, `supe_anim.mp4`
+   - Method graphics: `supe_method_graphic.png`, `temp_uncorrelated_website.png`, `skill-figure-website.png`, `pessimistic_reward_website.png`
+   - Animation frames: All 5 optimistic exploration images
+   - Results charts: `supe-results-agg.png`, `antmaze-goal-time-new3.png`
+
+### Result:
+The SUPE research paper website at `/supe` now displays correctly with all styling, animations, and images working properly.
+
 ## 2025-01-27: Updated Website Template for SUPE Paper
 
 ### Changes Made:
@@ -229,156 +283,4 @@
 ### 2025-01-27: Results Title Spacing
 
 #### Layout Adjustment:
-- **Vertical Spacing**: Added `margin-bottom: 2rem` to the centered Results title div
-- **Purpose**: Increased vertical space between "Results" main title and "Sample Efficiency" subtitle for better visual separation
-
-### 2025-01-27: Consistent Main Heading Spacing
-
-#### Layout Consistency:
-- **Abstract Heading**: Added `margin-bottom: 2rem` to match other main headings
-- **Method Heading**: Added `margin-bottom: 2rem` to match other main headings
-- **Results Heading**: Already had `margin-bottom: 2rem` applied
-- **Purpose**: Ensured consistent vertical spacing below all main section headings (Abstract, Method, Results)
-
-### 2025-01-27: Fixed Hero Section Padding Issue
-
-#### Layout Fix:
-- **Hero Body**: Added custom padding `padding-top: 2rem; padding-bottom: 1rem` to the hero-body element
-- **Abstract Section**: Reverted to default section padding (removed custom padding-top)
-- **Issue**: The default Bulma `.hero-body` class padding was creating excessive vertical space while providing necessary horizontal alignment
-- **Solution**: Reduced hero-body vertical padding from default (~3rem) to 2rem top and 1rem bottom while preserving horizontal structure
-
-### 2025-01-27: Added Video Animations Section
-
-#### New Content Addition:
-- **Location**: Added animations section between hero section and abstract
-- **Structure**: Three-column layout with video animations
-- **Videos**: 
-  - `explore_anim.mp4` (titled "ExPLORe")
-  - `traj_skills_anim.mp4` (titled "Traj. Skills")  
-  - `supe_anim.mp4` (titled "SUPE")
-- **Video Properties**: 
-  - Autoplay, loop, muted, playsinline attributes for seamless playback
-  - Responsive width (100% of column)
-  - Fallback text for unsupported browsers
-- **Layout**: 
-  - Each video in `is-one-third` column with centered alignment
-  - Titles positioned below videos with 1rem top margin
-  - Section padding: 2rem top and bottom
-  - 1rem gap between columns for visual separation
-
-### 2025-01-27: Updated SUPE Styling and Video Title
-
-#### Text and Styling Updates:
-- **Video Title**: Changed "Traj. Skills" to "Trajectory Skills" for clarity
-- **SUPE Colorization**: Applied colorized styling to all instances of "SUPE" (excluding Results section)
-  - S: Purple (#8B4A8B)
-  - U: Blue (#4682B4) 
-  - P: Darker Blue (#2F5F8F)
-  - E: Reddish-Orange (#B8472F)
-- **Locations Updated**:
-  - Main page title in hero section
-  - Video animation title
-  - Abstract section (3 instances)
-  - Method conclusion paragraph
-- **Results Section**: Initially kept SUPE as plain bold text, then updated to apply colorization to SUPE while keeping "(HILP)" in black text
-
-### 2025-01-27: Applied SUPE Colorization to Results Section
-
-#### Final Styling Update:
-- **Results Section**: Applied colorized SUPE styling to all instances in the Results section text
-- **SUPE (HILP) Handling**: Colorized only the "SUPE" part while keeping "(HILP)" in black text
-- **Instances Updated**: 6 instances of SUPE in the Results section paragraph
-- **Consistency**: Now all SUPE instances across the entire website use the same colorized branding
-
-### 2025-01-27: Reduced Animation to Abstract Spacing
-
-#### Layout Adjustment:
-- **Animation Section**: Reduced bottom padding from 2rem to 1rem
-- **Purpose**: Decreased vertical space between the video animations and Abstract section
-- **Result**: Tighter, more cohesive layout flow from animations to content 
-
-### 2025-01-27: Updated Footer with Nerfies Credit
-
-#### Footer Content Replacement:
-- **Content Change**: Replaced the Creative Commons license text and source code borrowing instructions with a simple Nerfies credit
-- **New Footer**: Added centered text "The website design was adapted from Nerfies" with link to https://nerfies.github.io
-- **Styling**: Applied `is-size-10` class for smaller text and `external-link` class for consistent link styling
-- **Removed**: 
-  - Creative Commons license notice
-  - Source code borrowing instructions
-  - Analytics code removal reminder
-- **Result**: Clean, minimal footer with appropriate design attribution
-
-### 2025-01-27: Removed Favicon
-
-#### HTML Head Cleanup:
-- **Removed**: `<link rel="icon" href="./static/images/favicon.svg">` from the HTML head section
-- **Purpose**: Removed the favicon link as requested
-- **Result**: Website will no longer display the custom favicon.svg icon in browser tabs
-
-### 2025-01-27: Updated Abstract to Match Paper Formatting
-
-#### Content and Formatting Changes:
-- **Paragraph Structure**: Reverted to original three-paragraph structure (intentional design choice)
-- **Italics Added**: 
-  - "exploring" → `<em>exploring</em>`
-  - "pseudo-labels" → `<em>pseudo-labels</em>`
-- **Content Updates**:
-  - Changed "prior trajectory data" to "offline trajectory data"
-  - Updated "pseudo-relabels unlabeled trajectories using an optimistic reward model" to "pseudo-labels unlabeled trajectories with optimistic rewards and high-level action labels"
-  - Added "that encourage novelty-seeking behavior" to match paper text
-  - Updated final sentence to match paper: "In our experiments, SUPE consistently outperforms prior strategies across a suite of 42 long-horizon, sparse-reward tasks"
-- **SUPE Styling**: Maintained colorized SUPE styling throughout while updating content to match paper
-- **Result**: Abstract now matches the paper content and formatting while preserving the intentional three-paragraph structure and colorized SUPE branding 
-
-### 2025-01-27: Enhanced SUPE Expansion Styling
-
-#### Colorized First Letters:
-- **SUPE Expansion**: Updated "(Skills from Unlabeled Prior data for Exploration)" to have colorized first letters
-- **Color Mapping**:
-  - **S**kills: Purple (#8B4A8B)
-  - **U**nlabeled: Blue (#4682B4)
-  - **P**rior: Darker Blue (#2F5F8F)
-  - **E**xploration: Reddish-Orange (#B8472F)
-- **Implementation**: Applied `<span style="color: [color]; font-weight: bold;">[Letter]</span>` to each first letter
-- **Result**: SUPE expansion now visually reinforces the acronym with consistent color branding 
-
-### 2025-01-27: Temporarily Removed Entire Navbar
-
-#### Navbar Updates:
-- **Entire Navbar**: Commented out the complete navbar section
-- **Content Preserved**: Navbar with home icon link to https://rail.eecs.berkeley.edu/ preserved in comments
-- **Implementation**: Wrapped the entire `<nav>` element in HTML comments with TODO note
-- **Purpose**: Navbar removed temporarily but preserved for future restoration
-- **Result**: Website now has no navigation bar, giving more space to content
-
-### 2025-01-27: Added Top Padding After Navbar Removal
-
-#### Layout Adjustment:
-- **Body Padding**: Added `padding-top: 1rem;` to the body element
-- **Purpose**: Provide breathing room at the top of the page after removing the navbar
-- **Implementation**: Added inline style to the `<body>` tag
-- **Result**: Content no longer sits at the very top edge of the browser window, improving visual appearance
-
-### 2025-01-27: Cleaned Up Author Section and Video Animation Title
-
-#### Author List Updates:
-- **Removed Superscripts**: Removed all `<sup>1</sup>` superscripts from author names
-- **Simplified Institution**: Changed from `<sup>1</sup>UC Berkeley` to just `UC Berkeley`
-- **Reason**: All authors are from the same institution, making superscripts unnecessary
-- **Result**: Cleaner, simpler author presentation
-
-#### Video Animation Title:
-- **Changed Title**: Updated "Trajectory Skills" to "Online RL with Pre-trained Skills"
-- **Purpose**: More descriptive title that directly tells the audience what the method is
-- **Result**: Video animation section now has clearer, more informative titles for each method
-
-### 2025-01-27: Added Citations to Results Section
-
-#### Reference Links Added:
-- **ExPLORe Citation**: Added "(Li et al., 2024)" hyperlink to https://arxiv.org/pdf/2311.05067 after first ExPLORe mention
-- **HILP Skills Citation**: Added "(Park et al., 2024)" hyperlink to https://arxiv.org/pdf/2402.15567 after "skills which traverse a Hilbert space" description
-- **VAE Skills Citation**: Added "(Ajay et al., 2021)" hyperlink to https://arxiv.org/pdf/2010.13611 after "same VAE skill extraction method" description
-- **Implementation**: Used standard `<a href="[url]">[citation]</a>` format for all citations
-- **Result**: Results section now properly cites related work with direct links to papers 
+- **Vertical Spacing**: Added `margin-bottom: 2rem`

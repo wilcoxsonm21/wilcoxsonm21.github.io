@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="SUPE leverages skills from unlabeled prior data for efficient online exploration in reinforcement learning, demonstrating significant improvements across 42 long-horizon sparse-reward tasks.">
+  <meta name="keywords" content="SUPE, Reinforcement Learning, Exploration, Skills, Prior Data, Hierarchical RL, Offline RL">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SUPE: Leveraging Skills from Unlabeled Prior Data for Efficient Online Exploration</title>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+
+  <link rel="stylesheet" href="../static/css/bulma.min.css">
+  <link rel="stylesheet" href="../static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="../static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="../static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="../static/css/index.css">
+  
+  <style>
+    .optimistic-animation .animation-frame {
+      opacity: 0;
+    }
+    
+    .optimistic-animation .animation-frame.active {
+      opacity: 1;
+    }
+  </style>
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="../static/js/fontawesome.all.min.js"></script>
+  <script src="../static/js/bulma-carousel.min.js"></script>
+  <script src="../static/js/bulma-slider.min.js"></script>
+  <script src="../static/js/index.js"></script>
+  
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const frames = document.querySelectorAll('.optimistic-animation .animation-frame');
+      let currentFrame = 0;
+      
+      setInterval(function() {
+        // Hide current frame
+        frames[currentFrame].classList.remove('active');
+        
+        // Move to next frame
+        currentFrame = (currentFrame + 1) % frames.length;
+        
+        // Show next frame
+        frames[currentFrame].classList.add('active');
+      }, 500); // 0.5 seconds per frame
+    });
+  </script>
+</head>
+<body style="padding-top: 3rem;">
+
+<!-- TODO: Add navbar back later -->
+<!-- <nav class="navbar" role="navigation" aria-label="main navigation">
+  <div class="navbar-brand">
+    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </a>
+  </div>
+  <div class="navbar-menu">
+    <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
+      <a class="navbar-item" href="https://rail.eecs.berkeley.edu/">
+      <span class="icon">
+          <i class="fas fa-home"></i>
+      </span>
+      </a>
+    </div>
+  </div>
+</nav> -->
+
+<section class="hero">
+  <div class="hero-body" style="padding-top: 0rem; padding-bottom: 0rem;">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-1 publication-title"><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span>: Leveraging Skills from Unlabeled Prior Data for Efficient Online Exploration</h1>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">
+              <a href="https://wilcoxsonm21.github.io">Max Wilcoxson*</a>,</span>
+            <span class="author-block">
+              <a href="https://colinqiyangli.github.io">Qiyang Li*</a>,</span>
+            <span class="author-block">
+              <a href="https://kvfrans.com">Kevin Frans</a>,
+            </span>
+            <span class="author-block">
+              <a href="https://people.eecs.berkeley.edu/~svlevine/">Sergey Levine</a>
+            </span>
+          </div>
+
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">UC Berkeley</span>
+          </div>
+
+          <div class="column has-text-centered">
+            <div class="publication-links">
+              <!-- PDF Link. -->
+              <span class="link-block">
+                <a href="https://arxiv.org/pdf/2410.18076"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+              <span class="link-block">
+                <a href="https://arxiv.org/abs/2410.18076"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>
+              <!-- Code Link. -->
+              <span class="link-block">
+                <a href="https://github.com/rail-berkeley/supe"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                  </a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="padding-top: 2rem; padding-bottom: 1rem;">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered" style="gap: 1rem;">
+      <div class="column is-one-third has-text-centered">
+        <video width="100%" height="auto" autoplay loop muted playsinline>
+          <source src="../static/images/explore_anim.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <h4 class="title is-5" style="margin-top: 1rem;">ExPLORe</h4>
+      </div>
+      <div class="column is-one-third has-text-centered">
+        <video width="100%" height="auto" autoplay loop muted playsinline>
+          <source src="../static/images/traj_skills_anim.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <h4 class="title is-5" style="margin-top: 1rem;">Online RL with Pre-trained Skills</h4>
+      </div>
+      <div class="column is-one-third has-text-centered">
+        <video width="100%" height="auto" autoplay loop muted playsinline>
+          <source src="../static/images/supe_anim.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+        <h4 class="title is-5" style="margin-top: 1rem;"><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></h4>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Abstract. -->
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3" style="margin-bottom: 2rem;">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            Unsupervised pretraining has been transformative in many supervised domains. However, applying such ideas to reinforcement learning (RL) presents a unique challenge in that fine-tuning does not involve mimicking task-specific data, but rather <em>exploring</em> and locating the solution through iterative self-improvement. 
+          </p>
+          <p>
+            In this work, we study how unlabeled offline trajectory data can be leveraged to learn efficient exploration strategies. While prior data can be used to pretrain a set of low-level skills, or as additional off-policy data for online RL, it has been unclear how to combine these ideas effectively for online exploration.
+          </p>
+          <p>
+            Our method <span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (<span style="color: #8B4A8B; font-weight: bold;">S</span>kills from <span style="color: #4682B4; font-weight: bold;">U</span>nlabeled <span style="color: #2F5F8F; font-weight: bold;">P</span>rior data for <span style="color: #B8472F; font-weight: bold;">E</span>xploration) demonstrates that a careful combination of these ideas compounds their benefits. Our method first extracts low-level skills using a variational autoencoder (VAE), and then <em>pseudo-labels</em> unlabeled trajectories with optimistic rewards and high-level action labels, transforming prior data into high-level, task-relevant examples that encourage novelty-seeking behavior. Finally, <span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> uses these transformed examples as additional off-policy data for online RL to learn a high-level policy that composes pretrained low-level skills to explore efficiently. In our experiments, <span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> consistently outperforms prior strategies across a suite of 42 long-horizon, sparse-reward tasks.
+          </p>
+        </div>
+      </div>
+    </div>
+    <!--/ Abstract. -->
+  </div>
+</section>
+
+<div class="container is-max-desktop">
+  <div class="columns is-centered">
+    <div class="column">
+      <figure class="image">
+        <img src="../static/images/supe_method_graphic.png" alt="SUPE Method Overview" style="width: 100%; height: auto;">
+      </figure>
+    </div>
+  </div>
+</div>
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3" style="margin-bottom: 2rem;">Method</h2>
+        <div class="content has-text-justified">
+          <p>
+            Our method uses unlabelled prior data in two distinct ways to address two different exploration challenges.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Challenge/Solution Row 1 -->
+    <div style="background-color: #f9d6e4; border-radius: 15px; padding: 2rem; margin-bottom: 2rem;">
+      <div class="columns">
+        <div class="column">
+                     <h4 class="title is-5">Challenge #1: Unstructured Exploration</h4>
+           <figure class="image is-fullwidth" style="margin: 0; margin-bottom: 1rem;">
+             <img src="../static/images/temp_uncorrelated_website.png" alt="Temporally Incoherent Exploration" style="width: 100%; height: auto;">
+           </figure>
+           <p>
+             With no knowledge of the reward function, the RL agent does not know which directions to explore and naively sampling actions from the agent results in temporally incoherent exploration. In many long-horizon tasks, this can lead to difficulty discovering high-reward states, resulting in high sample complexity. <strong>How can we structure exploration with temporally coherent actions?</strong>
+           </p>
+         </div>
+         <div class="column">
+           <h4 class="title is-5">Solution #1: Skill Extraction</h4>
+           <figure class="image is-fullwidth" style="margin: 0; margin-bottom: 1rem;">
+             <img src="../static/images/skill-figure-website.png" alt="Skill Extraction Process" style="width: 100%; height: auto;">
+           </figure>
+          <p>
+            To structure online exploration, we extract skills from the data to capture low-level, task-agnostic behaviors. We pretrain skills using a VAE, where the decoder serves as the skill policy, reconstructing dataset trajectory segments conditioned on the skill latent and current observation. This allows exploration to stay within the space of useful behaviors present in the prior data — ie. moving in different directions within a maze, rather than applying random forces to the agent.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Challenge/Solution Row 2 -->
+    <div style="background-color: #ffe8e8; border-radius: 15px; padding: 2rem; margin-bottom: 2rem;">
+      <div class="columns">
+        <div class="column">
+                     <h4 class="title is-5">Challenge #2: No Reward Labels</h4>
+           <figure class="image is-fullwidth" style="margin: 0; margin-bottom: 1rem;">
+             <img src="../static/images/pessimistic_reward_website.png" alt="Pessimistic Reward Estimation" style="width: 100%; height: auto;">
+           </figure>
+          <p>
+            Labelled prior data can accelerate online learning by identifying high reward behaviors. However, task-specific prior data can be costly to collect, and is often not available for the task at hand. Naïvely learning a reward model online to obtain estimated rewards for the offline data works poorly, since estimates for offline transitions not in the online data distribution are pessimistic, discouraging exploration. <strong>How should we estimate dataset rewards?</strong>
+          </p>
+        </div>
+        <div class="column">
+          <h4 class="title is-5">Solution #2: Optimistic Relabelling</h4>
+                     <figure class="image" style="margin: 0 auto; margin-bottom: 1rem; width: 50%;">
+             <div class="optimistic-animation" style="position: relative; width: 100%; height: auto;">
+               <img src="../static/images/optimistic_exploration_images/‎optimistic_exploration_images.‎001.png" alt="Optimistic Exploration Animation" style="width: 100%; height: auto;" class="animation-frame active">
+               <img src="../static/images/optimistic_exploration_images/‎optimistic_exploration_images.‎002.png" alt="Optimistic Exploration Animation" style="width: 100%; height: auto; position: absolute; top: 0; left: 0;" class="animation-frame">
+               <img src="../static/images/optimistic_exploration_images/‎optimistic_exploration_images.‎003.png" alt="Optimistic Exploration Animation" style="width: 100%; height: auto; position: absolute; top: 0; left: 0;" class="animation-frame">
+               <img src="../static/images/optimistic_exploration_images/‎optimistic_exploration_images.‎004.png" alt="Optimistic Exploration Animation" style="width: 100%; height: auto; position: absolute; top: 0; left: 0;" class="animation-frame">
+               <img src="../static/images/optimistic_exploration_images/‎optimistic_exploration_images.‎005.png" alt="Optimistic Exploration Animation" style="width: 100%; height: auto; position: absolute; top: 0; left: 0;" class="animation-frame">
+             </div>
+           </figure>
+          <p>
+            To encourage online exploration, we label dataset rewards <strong>optimistically</strong> and use relabelled transitions as extra off-policy data during online learning. More concretely, we estimate the reward using a reward model learned online, plus an uncertainty bonus estimated using RND. Additionally, we estimate the skill latent action of the offline trajectory segment using the encoder from the pre-trained VAE. This causes the entire offline data distribution to have an optimistic reward estimate, encouraging the agent to visit these areas.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Full width conclusion -->
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <div class="content has-text-justified">
+          <p>
+            Putting these two components together with online RL training, our method, <span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span>, trains a high-level policy on a combination of the online replay buffer data and optimistically labeled offline data to output a high-level action every H steps. The pre-trained policy enables temporally coherent exploration and the optimistic data labeling improves the sample efficiency of policy learning.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Results. -->
+    <div class="columns is-centered">
+      <div class="column is-full-width">
+        <div class="has-text-centered" style="margin-bottom: 2rem;">
+          <h2 class="title is-3">Results</h2>
+        </div>
+        
+        <h3 class="title is-4">Sample Efficiency</h3>
+        
+                 <div class="columns is-centered">
+           <div class="column">
+             <figure class="image">
+               <img src="../static/images/supe-results-agg.png" alt="SUPE Results Across Domains" style="width: 100%; height: auto;">
+             </figure>
+           </div>
+         </div>
+
+        <div class="content has-text-justified">
+          <p>
+            We evaluate our method across a suite of eight domains consisting of 42 sparse reward, long-horizon tasks. <strong>DBC + JSRL</strong> is a simple baseline that does not use optimistic labeling or skill pre-training. It performs reasonably well on easier tasks but struggles on more challenging domains. <strong>ExPLORe</strong> <a href="https://arxiv.org/pdf/2311.05067">(Li et al., 2024)</a> adds optimistic relabelling, and performs better on easier tasks, but still struggles on challenging tasks like <code>scene</code> and <code>humanoidmaze</code>. <strong>Trajectory Skills</strong> and <strong>HILP Skills</strong> are two baselines that pretrain skills but do not use offline labelling. <strong>Trajectory Skills</strong> uses the same VAE skill extraction method <a href="https://arxiv.org/pdf/2010.13611">(Ajay et al., 2021)</a> as <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong>, and <strong>HILP Skills</strong> learns skills which traverse a Hilbert space <a href="https://arxiv.org/pdf/2402.15567">(Park et al., 2024)</a>. Both methods perform better on more challenging tasks like <code>scene</code>, but struggle on <code>humanoidmaze</code>. Finally, <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> are variants of our method which do both skill pretraining and optimistic relabelling. <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> uses the same skill pretraining as <strong>Trajectory Skills</strong>, and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> uses the skill pretraining method of <strong>HILP Skills</strong>. We see that <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span> (HILP)</strong> performs the best on <code>scene</code> and <code>antsoccer</code>, and <strong><span style="color: #8B4A8B; font-weight: bold;">S</span><span style="color: #4682B4; font-weight: bold;">U</span><span style="color: #2F5F8F; font-weight: bold;">P</span><span style="color: #B8472F; font-weight: bold;">E</span></strong> performs the best on all other environments. This highlights the importance of using offline data twice, both for skill-pretraining and as additional off-policy data during online learning.
+          </p>
+        </div>
+
+        <h3 class="title is-4">Exploration Ablation</h3>
+        
+                 <div class="columns is-centered">
+           <div class="column">
+             <figure class="image">
+               <img src="../static/images/antmaze-goal-time-new3.png" alt="AntMaze Goal Reach Times" style="width: 100%; height: auto;">
+             </figure>
+           </div>
+         </div>
+
+        <div class="content has-text-justified">
+          <p>
+            To disentangle the speed of policy learning from the sample efficiency of exploration, we look at first goal reach times in <code>antmaze</code>. We see that our method is consistently the fastest in each maze, averaging across 4 different goals per maze.
+          </p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section class="section" id="BibTeX" style="padding-top: 0rem; padding-bottom: 0rem;">
+  <div class="container is-max-desktop content">
+    <div class="has-text-centered" style="margin-bottom: 2rem;">
+      <h2 class="title">BibTeX</h2>
+    </div>
+    <pre><code>@inproceedings{wilcoxson2025leveraging,
+  title={Leveraging Skills from Unlabeled Prior Data for Efficient Online Exploration},
+  author={Wilcoxson, Max and Li, Qiyang and Frans, Kevin and Levine, Sergey},
+  booktitle={International Conference on Machine Learning (ICML)},
+  year={2025},
+}</code></pre>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container">
+    <div class="content has-text-centered">
+      <a class="icon-link"
+         href="https://arxiv.org/pdf/2410.18076">
+        <i class="fas fa-file-pdf"></i>
+      </a>
+      <a class="icon-link" href="https://github.com/rail-berkeley/supe" class="external-link">
+        <i class="fab fa-github"></i>
+      </a>
+    </div>
+    <center class="is-size-10">
+      The website design was adapted from <a href="https://nerfies.github.io" class="external-link"><span class="dnerf">Nerfies</span></a>.
+    </center>
+  </div>
+</footer>
+
+</body>
+</html>
