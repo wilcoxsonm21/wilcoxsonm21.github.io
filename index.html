@@ -1,87 +1,154 @@
-<!DOCTYPE html>
+<!DOCTYPE HTML>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Max Wilcoxson - Personal Website</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: white;
-        }
-        
-        .container {
-            text-align: center;
-            max-width: 800px;
-            padding: 2rem;
-        }
-        
-        h1 {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        p {
-            font-size: 1.2rem;
-            margin-bottom: 2rem;
-            opacity: 0.9;
-        }
-        
-        .links {
-            display: flex;
-            justify-content: center;
-            gap: 2rem;
-            flex-wrap: wrap;
-        }
-        
-        .link {
-            display: inline-block;
-            padding: 1rem 2rem;
-            background: rgba(255,255,255,0.1);
-            border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 10px;
-            text-decoration: none;
-            color: white;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }
-        
-        .link:hover {
-            background: rgba(255,255,255,0.2);
-            border-color: rgba(255,255,255,0.5);
-            transform: translateY(-2px);
-        }
-        
-        @media (max-width: 600px) {
-            h1 {
-                font-size: 2rem;
-            }
-            
-            .links {
-                flex-direction: column;
-                align-items: center;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Hi, this is Max Wilcoxson's personal website</h1>
-        <p>Welcome to my corner of the internet!</p>
-        <div class="links">
-            <a href="/supe" class="link">SUPE Research</a>
-            <a href="https://github.com/wilcoxsonm21" class="link">GitHub</a>
-            <a href="https://scholar.google.com/citations?user=YOUR_SCHOLAR_ID" class="link">Google Scholar</a>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <title>Max Wilcoxson</title>
+
+    <meta name="author" content="Max Wilcoxson">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="shortcut icon" href="images/favicon/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" type="text/css" href="stylesheet.css">
+    
+  </head>
+
+  <body>
+    <table style="width:100%;max-width:800px;border:0px;border-spacing:0px;border-collapse:separate;margin-right:auto;margin-left:auto;"><tbody>
+      <tr style="padding:0px">
+        <td style="padding:0px">
+          <table style="width:100%;border:0px;border-spacing:0px;border-collapse:separate;margin-right:auto;margin-left:auto;"><tbody>
+            <tr style="padding:0px">
+              <td style="padding:2.5%;width:63%;vertical-align:middle">
+                <p class="name" style="text-align: center;">
+                  Max Wilcoxson
+                </p>
+                <p>
+		I am an incoming PhD student at <a href="https://www.csail.mit.edu/">MIT CSAIL</a> who will be advised by <a href="https://locomotion.csail.mit.edu/russt.html">Russ Tedrake</a>. I did my B.A. at Berkeley where I was advised by <a href="https://people.eecs.berkeley.edu/~svlevine/">Sergey Levine</a>. During my undergrad, I received the <a href="https://www2.eecs.berkeley.edu/Students/Awards/4/">Warren Y. Dere Design Award</a>.
+                </p>
+                <p style="text-align:center">
+                  <a href="mailto:mwil@mit.edu">Email</a> &nbsp;/&nbsp;
+                  <a href="https://drive.google.com/file/d/1ZxyrCaO8xY9DaR03Q8MjvYHymAdPwGug/view?usp=sharing">CV</a> &nbsp;/&nbsp;
+                  <a href="https://scholar.google.com/citations?user=co22ajYAAAAJ&hl=en&oi=ao">Scholar</a> &nbsp;/&nbsp;
+                  <a href="https://github.com/wilcoxsonm21">Github</a>
+                </p>
+              </td>
+              <td style="padding:2.5%;width:37%;max-width:37%">
+                <a href="images/profile.png"><img style="width:100%;max-width:100%;object-fit: cover; border-radius: 50%;" alt="profile photo" src="images/profile.png" class="hoverZoomLink"></a>
+              </td>
+            </tr>
+          </tbody></table>
+          <table style="width:100%;border:0px;border-spacing:0px;border-collapse:separate;margin-right:auto;margin-left:auto;"><tbody>
+              <tr>
+              <td style="padding:16px;width:100%;vertical-align:middle">
+                <h2>Research</h2>
+                <p>
+                  I am interested in reinforcement learning, generative models, sample-efficient exploration, robotics, and computer vision. Some papers are <span class="highlight">highlighted</span>.
+                </p>
+              </td>
+            </tr>
+          </tbody></table>
+          <table style="width:100%;border:0px;border-spacing:0px 10px;border-collapse:separate;margin-right:auto;margin-left:auto;"><tbody>
+
+
+    <tr onmouseout="supe_stop()" onmouseover="supe_start()" bgcolor="#ffffd0">
+      <td style="padding:16px;width:20%;vertical-align:middle">
+        <div class="one">
+          <div class="two" id='supe_image'><img src='static/images/supe_method_graphic.png' width="160"></div>
+          <img src='static/images/supe_method_graphic.png' width="160">
         </div>
-    </div>
-</body>
-</html> 
+        <script type="text/javascript">
+          function supe_start() {
+            document.getElementById('supe_image').style.opacity = "1";
+          }
+
+          function supe_stop() {
+            document.getElementById('supe_image').style.opacity = "0";
+          }
+          supe_stop()
+        </script>
+      </td>
+      <td style="padding:8px;width:80%;vertical-align:middle">
+        <a href="https://arxiv.org/abs/2410.18076">
+          <span class="papertitle">Leveraging Skills from Unlabeled Prior Data for Efficient Online Exploration</span>
+        </a>
+        <br>
+        <strong>Max Wilcoxson*</strong>,
+        <a href="https://colinqiyangli.github.io/">Qiyang Li*</a>,
+        <a href="https://kvfrans.com/">Kevin Frans</a>,
+        <a href="https://people.eecs.berkeley.edu/~svlevine/">Sergey Levine</a>
+        <br>
+        <em>ICML</em>, 2025
+        <br>
+        <a href="https://wilcoxsonm21.github.io/supe/">project page</a>
+        /
+        <a href="https://arxiv.org/abs/2410.18076">arXiv</a>
+        /
+        <a href="data/wilcoxson2025leveraging.bib">bibtex</a>
+        <p></p>
+        <p>
+        Leveraging unlabeled offline data for both skill pretraining and optimistic relabelling leads to extremely efficient online exploration.
+        </p>
+      </td>
+    </tr>
+
+    <tr onmouseout="polynomial_stop()" onmouseover="polynomial_start()">
+      <td style="padding:16px;width:20%;vertical-align:middle">
+        <div class="one">
+          <div class="two" id='polynomial_image'><img src='static/images/in_context_learning_paper.png' width="160"></div>
+          <img src='static/images/in_context_learning_paper.png' width="160">
+        </div>
+        <script type="text/javascript">
+          function polynomial_start() {
+            document.getElementById('polynomial_image').style.opacity = "1";
+          }
+
+          function polynomial_stop() {
+            document.getElementById('polynomial_image').style.opacity = "0";
+          }
+          polynomial_stop()
+        </script>
+      </td>
+      <td style="padding:8px;width:80%;vertical-align:middle">
+        <a href="https://arxiv.org/abs/2407.19346">
+          <span class="papertitle">Polynomial Regression as a Task for Understanding In-context Learning Through Finetuning and Alignment</span>
+        </a>
+        <br>
+        <strong>Max Wilcoxson*</strong>,
+        <a href="https://www.linkedin.com/in/morten-svendgård-327971152/?originalSubdomain=no">Morten Svendgård*</a>,
+        <a href="https://riadoshi.github.io/">Ria Doshi*</a>,
+        <a href="https://www.linkedin.com/in/dylanjdavi">Dylan Davis*</a>,
+        <a href="https://reyavir.wixsite.com/home">Reya Vir</a>,
+        <a href="https://www2.eecs.berkeley.edu/Faculty/Homepages/sahai.html">Anant Sahai</a>
+        <br>
+        <em>ICML Workshop on In-Context Learning</em>, 2024
+        <br>
+        <a href="https://arxiv.org/abs/2407.19346">arxiv</a>
+        /
+        <a href="data/wilcoxson2024polynomialregression.bib">bibtex</a>
+        <p></p>
+        <p>
+        Univariate polynomial regression is a simple task which captures in-context fine-tuning and alignment behavior, facilitating informative visualizations and deeper understanding.
+        </p>
+      </td>
+    </tr>
+
+
+
+
+          </tbody></table>
+
+					          <table style="width:100%;border:0px;border-spacing:0px;border-collapse:separate;margin-right:auto;margin-left:auto;"><tbody>
+            <tr>
+              <td style="padding:0px">
+                <br>
+                <p style="text-align:right;font-size:small;">
+                  <a href="https://github.com/jonbarron/jonbarron_website">template</a> 
+                </p>
+              </td>
+            </tr>
+          </tbody></table>
+</td>
+</tr>
+    </table>
+  </body>
+</html>

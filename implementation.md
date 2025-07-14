@@ -1,5 +1,82 @@
 # Implementation Log
 
+## 2025-01-03 - Updated Polynomial Regression Paper Description
+
+### Changes Made:
+1. **Updated paper description** - Changed the description text for the polynomial regression paper:
+   - From: "Propose polynomial regression as a simple task to better understand in-context learning, in particular fine-tuning and alignment behavior."
+   - To: "Univariate polynomial regression is a simple task which captures in-context fine-tuning and alignment behavior, facilitating visualization and deeper understanding."
+
+### Location:
+- File: `index.html`
+- Lines modified: Description paragraph for the polynomial regression paper
+
+## 2025-01-03 - Updated Paper Links and Added Coauthor Links
+
+### Changes Made:
+1. **Changed main link for SUPE paper** - Changed the paper title link from project page to arXiv:
+   - From: `https://wilcoxsonm21.github.io/supe/`
+   - To: `https://arxiv.org/abs/2410.18076`
+
+2. **Added coauthor links for both papers**:
+   
+   **Paper 1 (SUPE paper):**
+   - Qiyang Li → https://colinqiyangli.github.io/
+   - Kevin Frans → https://kvfrans.com/
+   - Sergey Levine → https://people.eecs.berkeley.edu/~svlevine/
+   
+   **Paper 2 (Polynomial regression paper):**
+   - Morten Svendgård → https://www.linkedin.com/in/morten-svendgård-327971152/?originalSubdomain=no
+   - Ria Doshi → https://riadoshi.github.io/
+   - Dylan Davis → https://www.linkedin.com/in/dylanjdavi
+   - Reya Vir → https://reyavir.wixsite.com/home
+   - Anant Sahai → https://www2.eecs.berkeley.edu/Faculty/Homepages/sahai.html
+
+### Location:
+- File: `index.html`
+- Lines modified: Both paper entries in the publications section
+
+## 2025-01-03 - Fixed BibTeX Functionality
+
+### Changes Made:
+1. **Created /data directory** - Added a new directory to store bibtex files
+2. **Created .bib files** - Created individual bibtex files for each paper:
+   - `data/wilcoxson2025leveraging.bib` - For the SUPE paper
+   - `data/wilcoxson2024polynomialregression.bib` - For the polynomial regression paper
+3. **Updated HTML links** - Replaced JavaScript onclick handlers with direct links to .bib files:
+   - Changed `javascript:void(0)" onclick="copyBibtex1()"` to `data/wilcoxson2025leveraging.bib`
+   - Changed `javascript:void(0)" onclick="copyBibtex2()"` to `data/wilcoxson2024polynomialregression.bib`
+4. **Removed JavaScript functions** - Removed the copyBibtex1() and copyBibtex2() functions
+
+### Files Created:
+- `/data/wilcoxson2025leveraging.bib`
+- `/data/wilcoxson2024polynomialregression.bib`
+
+### Location:
+- File: `index.html`
+- Lines modified: Both paper entries in the publications section
+
+## 2025-01-03 - Updated Profile and Research Information
+
+### Changes Made:
+1. **Profile Section Update** - In `index.html`, replaced the Google DeepMind paragraph with new academic information:
+   - Changed from "research scientist at Google DeepMind" to "incoming PhD student at CSAIL"
+   - Added advisor information: "advised by Russ Tedrake"
+   - Updated education: "did by B.A. at Berkeley where I was advised by Sergey Levine"
+   - Removed Google work history and PAMI Young Researcher Award
+   - **Added links**: Linked "Russ Tedrake" to https://locomotion.csail.mit.edu/russt.html and "Sergey Levine" to https://people.eecs.berkeley.edu/~svlevine/
+   - **Added award information**: Added sentence about receiving the Warren Y. Dere Design Award during undergrad, linked to https://www2.eecs.berkeley.edu/Students/Awards/4/
+
+2. **Research Interests Update** - Updated the research section paragraph:
+   - Changed from "computer vision, deep learning, generative AI, and image processing" focus
+   - Updated to "reinforcement learning, generative models, sample-efficient exploration, robotics, and computer vision"
+   - Removed specific mentions of "inferring the physical world" and "radiance fields"
+   - Kept the "Some papers are highlighted" text
+
+### Location:
+- File: `index.html`
+- Lines modified: Profile paragraph (~lines 27-32) and Research paragraph (~lines 45-50)
+
 ## 2025-01-03 - Website Restructuring
 
 ### Changes Made:
