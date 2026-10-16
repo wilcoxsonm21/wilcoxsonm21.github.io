@@ -5,6 +5,10 @@
 // with textContent or an attribute: no HTML is built from data.
 
 const VIDEO_BASE = "https://huggingface.co/datasets/hwryu/mirror_diamond_eval/resolve/main";
+// the 4x and 16x copies of each video, for playing fast without streaming the whole video (tools/mirror_fast/)
+const FAST_BASE = "https://huggingface.co/datasets/mwilcoxson/selfimprovingvisiontoactionmodelswebsitevideos/resolve/main";
+const copies = (folder, view, n) => ({ 1: `${VIDEO_BASE}/${folder}/${view}/${pad(n)}.mp4`,
+  4: `${FAST_BASE}/${folder}/${view}_4x/${pad(n)}.mp4`, 16: `${FAST_BASE}/${folder}/${view}_16x/${pad(n)}.mp4` });
 const PLAN_LAG = 0.05;   // the recording starts one frame (the world's first view) before the first executed step
 // what each setting was trained on (the user's wording, 10-16)
 const TAB = {
@@ -158,8 +162,8 @@ async function openEpisode(n, { startAt = 0 } = {}) {
   const milestones = PAPER.map((m) => ({ t: episode.milestones[m], icon: icon(m), name: cap(NAME[m]), title: `${cap(NAME[m])} at ${clock(episode.milestones[m])}` }));
   const reached = PAPER.filter((m) => m in episode.milestones);
   player.load({
-    exec: `${VIDEO_BASE}/${folder}/raw/${pad(n)}.mp4`,
-    plan: views.includes("plan_idm") ? `${VIDEO_BASE}/${folder}/plan_idm/${pad(n)}.mp4` : null,
+    exec: copies(folder, "raw", n),
+    plan: views.includes("plan_idm") ? copies(folder, "plan_idm", n) : null,
     duration: Number(episode.seconds), startAt, milestones,
     ticks: reached.map((m) => ({ t: episode.milestones[m], title: `${cap(NAME[m])} · ${clock(episode.milestones[m])}`, icon: icon(m) })),
     toasts: [...reached.map((m) => ({ t: episode.milestones[m], icon: icon(m), text: m === "diamond" ? "Diamond!" : cap(NAME[m]) })),

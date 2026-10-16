@@ -9,8 +9,15 @@
 // plan_idm video (the right half below the label row, as tools/build_survival.py does). Nothing is built from data as
 // HTML: every value is set with textContent or an attribute.
 //
+// Each video can come in sped-up copies, a k-times copy keeping every k-th frame (tools/mirror_fast/), so its time t
+// is the episode's time k*t: at 4x and up the player plays the fastest copy no faster than the speed, at the rest of
+// the speed (8x is the 4x copy at 2x), since streaming and decoding a whole video at 16x is more than most connections
+// and phones keep up with. Each copy has its own video element; in fast-forward the copy needed next waits, already
+// seeked, behind the one playing, so the switch at each milestone is seamless.
+//
 //   const player = createWatchPlayer(figure, { planLag: 0.05 });
-//   player.load({ exec, plan, duration, startAt, milestones: [{ t, icon, title }], ticks: [{ t, title, icon, gold }],
+//   player.load({ exec: { 1: url, 4: url, 16: url } (or just a url), plan (the same, or null), duration, startAt,
+//                 milestones: [{ t, icon, title }], ticks: [{ t, title, icon, gold }],
 //                 toasts: [{ t, icon, text, death }], windows: [[start, end], …], auto, goal: (t) => text, caption });
 // x positions (px) for icons at xs (sorted) on a line `width` wide: each at least `gap` past the one before, so
 // crowded ones overlap but all show, pulled back from the right end when they would run off it
@@ -49,11 +56,14 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   const PAUSE = () => [svg("rect", { x: 13.2, y: 11.5, width: 3.2, height: 13, rx: 1 }), svg("rect", { x: 19.6, y: 11.5, width: 3.2, height: 13, rx: 1 })];
 
   // ---------------------------------------------------------------- markup
-  const exec = el("video", { class: "w-video w-exec", playsinline: "", muted: "", preload: "metadata", disablepictureinpicture: "" });
+  // one element per copy (1x, 4x, 16x), stacked; exec and plan are the ones of the copy playing (state.k)
+  const COPIES = [1, 4, 16];
+  const video = (props) => { const v = el("video", { playsinline: "", muted: "", disablepictureinpicture: "", ...props }); v.muted = true; return v; };
+  const execs = Object.fromEntries(COPIES.map((k) => [k, video({ class: "w-video w-exec", preload: k === 1 ? "metadata" : "auto" })]));
   // (the plan loads with the episode and follows it even while hidden, so "Show plan" is instant: the user, 10-16)
-  const plan = el("video", { class: "w-plan", playsinline: "", muted: "", preload: "auto", disablepictureinpicture: "", tabindex: "-1" });
-  exec.muted = plan.muted = true;
-  const planBox = el("div", { class: "w-plan-box" }, plan);
+  const plans = Object.fromEntries(COPIES.map((k) => [k, video({ class: "w-plan", preload: "auto", tabindex: "-1" })]));
+  let exec = execs[1], plan = plans[1];
+  const planBox = el("div", { class: "w-plan-box" }, ...COPIES.map((k) => plans[k]));
   const speedEl = el("span", { class: "sv-speed" }), toastEl = el("span", { class: "sv-toast" });
   const icon = svg("g", { fill: "currentColor" });
   const ring = svg("circle", { class: "vbtn-ring", cx: 18, cy: 18, r: R, "stroke-dasharray": C.toFixed(2), "stroke-dashoffset": C.toFixed(2) });
@@ -61,7 +71,7 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   const vbtn = el("button", { class: "vbtn", type: "button", "aria-label": "Play" },
     svg("svg", { viewBox: "0 0 36 36", "aria-hidden": "true" }, svg("circle", { class: "vbtn-track", cx: 18, cy: 18, r: R }), ring, icon));
   const screen = el("div", { class: "cinema-screen" },
-    el("div", { class: "sv-film" }, planBox, exec,
+    el("div", { class: "sv-film" }, planBox, ...COPIES.map((k) => execs[k]),
       el("div", { class: "sv-pane sv-plan", "aria-hidden": "true" }, el("span", { class: "sv-tag", text: "Video plan" })),
       el("div", { class: "sv-pane sv-exec", "aria-hidden": "true" }, el("span", { class: "sv-tag" }, "Execution", speedEl), toastEl)),
     el("div", { class: "w-spinner", "aria-hidden": "true" }), speedBtn, vbtn);
@@ -81,14 +91,16 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
 
   // the plan starts hidden (the user, 10-16: "Show plan" brings it in, and it stays for the next episodes)
   const state = { duration: 1, hasPlan: false, planOff: true, pending: null, speed: 1, auto: false, windows: [], milestones: [], ticks: [],
-    toasts: [], goal: () => null, load: 0, dragging: false, lastT: 0, toastTimer: 0, shown: {} };
+    toasts: [], goal: () => null, load: 0, dragging: false, lastT: 0, toastTimer: 0, shown: {},
+    k: 1, rate: 1, srcs: { exec: { 1: "" }, plan: null } };
 
   const clock = (s) => {
     if (s == null || !isFinite(s)) return "–";
     const w = Math.max(0, Math.floor(s)), h = Math.floor(w / 3600), m = Math.floor((w % 3600) / 60), sec = w % 60;
     return (h ? `${h}:${String(m).padStart(2, "0")}` : `${m}`) + `:${String(sec).padStart(2, "0")}`;
   };
-  const now = () => state.pending ?? (exec.currentTime || 0);
+  // the episode's time: the copy's time times its speed-up
+  const now = () => state.pending ?? (exec.currentTime || 0) * state.k;
   const planOn = () => state.hasPlan && !state.planOff;
   const pct = (t) => `${(100 * Math.min(Math.max(t, 0), state.duration)) / state.duration}%`;
 
@@ -113,22 +125,23 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   // It follows whether shown or not (hidden, it keeps loading, so showing it is instant). Small drift is taken up by
   // playing the plan a little faster or slower; a jump or a big drift seeks it. While it is shown and still loading or
   // seeking, the execution waits for it (state.gated: paused, with the spinner) and goes on once it can play, so the two
-  // stay together (the user, 10-16). Racing at over 4x, the plan only steps along, and holds nothing back.
+  // stay together (the user, 10-16). Racing at over 4x it plays a sped-up copy like the execution's; hidden, it stays
+  // where it is and downloads nothing, so the execution racing has the whole connection (it catches up when shown, or
+  // when the speed drops). Without sped-up copies, racing, it only steps along and holds nothing back.
   let lastFollow = 0;
   function follow(force = false) {
-    if (!state.hasPlan || plan.readyState < 1) return;
-    const target = Math.max(0, exec.currentTime - planLag), rate = exec.playbackRate;
+    if (!state.hasPlan || plan.readyState < 1 || state.pending != null) return;
+    const k = state.k, target = Math.max(0, exec.currentTime - planLag / k), rate = exec.playbackRate;
+    if (state.rate > 4 && !planOn()) { if (!plan.paused) plan.pause(); return; }
     if (rate > 4) {
       if (!plan.paused) plan.pause();
-      // (hidden, it stays where it is and downloads nothing, so the execution racing has the whole connection: it
-      // catches up when shown, or when the speed drops)
-      if (!planOn()) return;
       if (force || (performance.now() - lastFollow > 300 && !plan.seeking)) { lastFollow = performance.now(); plan.currentTime = target; }
       return;
     }
+    // (in a copy's own seconds: a 16x copy's frame is 0.8 s of the episode)
     const drift = plan.currentTime - target;
-    if (force || (!plan.seeking && Math.abs(drift) > 0.5)) plan.currentTime = target;
-    const want = Math.abs(drift) > 0.12 && !plan.seeking ? rate * (drift > 0 ? 0.9 : 1.1) : rate;
+    if (force || (!plan.seeking && Math.abs(drift) > Math.max(0.5 / k, 0.15))) plan.currentTime = target;
+    const want = Math.abs(drift) > Math.max(0.12 / k, 0.06) && !plan.seeking ? rate * (drift > 0 ? 0.9 : 1.1) : rate;
     if (plan.playbackRate !== want) plan.playbackRate = want;
     const running = !exec.paused || state.gated;
     if (!running && !plan.paused) plan.pause();
@@ -150,13 +163,15 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   }
   // (no forced seek here or on "playing": each would start the plan seeking again, and the execution waiting again)
   const ready = () => { if (state.gated && (!planOn() || (plan.readyState >= 3 && !plan.seeking))) { follow(); if (!plan.seeking) resume(); } };
-  for (const type of ["canplay", "canplaythrough", "seeked", "playing"]) plan.addEventListener(type, ready);
-  plan.addEventListener("waiting", () => { if (planOn() && !exec.paused && exec.playbackRate <= 4) hold(); });
-  plan.addEventListener("loadedmetadata", () => { planBox.style.setProperty("--plan-h", String(plan.videoHeight || 274)); follow(true); });
+  // (each copy's element hears its own events; only the one playing counts)
+  const on = (els, type, fn) => { for (const v of Object.values(els)) v.addEventListener(type, (e) => { if (e.target === (els === execs ? exec : plan)) fn(e); }); };
+  for (const type of ["canplay", "canplaythrough", "seeked", "playing"]) on(plans, type, ready);
+  on(plans, "waiting", () => { if (planOn() && !exec.paused && exec.playbackRate <= 4) hold(); });
+  on(plans, "loadedmetadata", () => { planBox.style.setProperty("--plan-h", String(plan.videoHeight || 274)); follow(true); });
 
   function seek(t) {
     const target = Math.max(0, Math.min(t, state.duration));
-    if (exec.readyState >= 1) exec.currentTime = target; else state.pending = target;
+    if (exec.readyState >= 1) exec.currentTime = target / state.k; else state.pending = target;
     state.lastT = target;   // (a jump is not playing past the notes in between)
     follow(true);
     paint(target);
@@ -172,7 +187,66 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
     if (!next) return FAST;
     return t >= next[0] - FAST * 0.05 ? 1 : FAST;   // a hair early: at 16x a few frames pass before a rate takes hold
   };
-  function applyRate(rate) { exec.playbackRate = rate; follow(true); }
+  // the copy for a speed: the fastest no faster than it
+  const copyFor = (rate) => Math.max(1, ...Object.keys(state.srcs.exec).map(Number).filter((k) => k <= rate));
+  function ensure(k) {
+    for (const [v, src] of [[execs[k], state.srcs.exec[k]], [plans[k], state.srcs.plan?.[k]]]) {
+      if (src && v.getAttribute("src") !== src) v.src = src;
+    }
+  }
+  // the copy in front is the one playing, once it has a frame to show (until then the last one's frame stays)
+  function reveal() {
+    for (const [els, active] of [[execs, exec], [plans, plan]]) {
+      if (active.readyState < 2 || active.seeking) continue;
+      for (const v of Object.values(els)) v.style.visibility = v === active ? "" : "hidden";
+    }
+  }
+  function switchCopy(k) {
+    const t = now(), playing = !exec.paused || state.gated, before = [exec, plan];
+    ensure(k);
+    state.k = k;
+    exec = execs[k];
+    plan = plans[k];
+    for (const v of before) v.pause();
+    if (exec.readyState < 1) { state.pending = t; state.startPlay = playing; }
+    else {
+      // (a copy made ready for this switch is within a second of it: it plays on from there rather than seek again)
+      if (Math.abs(exec.currentTime * k - t) > 1.5) exec.currentTime = t / k;
+      exec.playbackRate = state.rate / k;
+      if (playing) play();
+    }
+    reveal();
+  }
+  function applyRate(rate) {
+    state.rate = rate;
+    const k = copyFor(rate);
+    if (k !== state.k) switchCopy(k);
+    else exec.playbackRate = rate / k;
+    follow(true);
+  }
+  // fast-forward: the copy for the next switch (into the next milestone's 1x stretch, or out of this one) waits there
+  function prewarm() {
+    const t = now(), w = state.windows.find(([, end]) => t < end);
+    if (!w) return;
+    const [at, rate] = t < w[0] - FAST * 0.05 ? [w[0] - FAST * 0.05, 1] : [w[1], FAST], k = copyFor(rate);
+    if (k === state.k) return;
+    ensure(k);
+    for (const [v, time] of [[execs[k], at], ...(state.hasPlan ? [[plans[k], at - planLag]] : [])]) {
+      if (v.readyState >= 1 && !v.seeking && Math.abs(v.currentTime * k - time) > 0.25) v.currentTime = Math.max(0, time) / k;
+    }
+  }
+  // a missing copy is not played (the plan and the execution play the same copy, so both go)
+  for (const els of [execs, plans]) {
+    for (const [k, v] of Object.entries(els)) {
+      v.addEventListener("error", () => {
+        if (Number(k) === 1 || !v.getAttribute("src")) return;
+        delete state.srcs.exec[k];
+        if (state.srcs.plan) delete state.srcs.plan[k];
+        for (const x of [execs[k], plans[k]]) { x.removeAttribute("src"); x.load(); }
+        if (state.k === Number(k)) applyRate(state.rate);
+      });
+    }
+  }
   function setAuto(on) {
     state.auto = on && state.windows.length > 0;
     applyRate(state.auto ? rateAt(now()) : state.speed);
@@ -212,7 +286,7 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
     ring.setAttribute("stroke-dashoffset", (C * (1 - t / state.duration)).toFixed(2));
     const playing = !exec.paused || state.gated;
     set("playing", playing, (p) => { icon.replaceChildren(...(p ? PAUSE() : [PLAY()])); vbtn.setAttribute("aria-label", p ? "Pause" : "Play"); });
-    const rate = playing ? exec.playbackRate : 1;
+    const rate = playing ? state.rate : 1;
     set("rate", rate, (r) => { speedEl.replaceChildren(...(r > 1 ? [ff(), `${r}×`] : ["1×"])); speedEl.classList.toggle("fast", r > 1); });
     const goal = state.goal(t);
     set("goal", `${goal}|${clock(t)}`, () => goalEl.replaceChildren(...(goal ? ["Goal: ", el("b", { text: goal })] : []),
@@ -235,19 +309,28 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
     raf = 0;
     if (state.auto && !exec.paused && !exec.seeking && state.pending == null) {
       const r = rateAt(now());
-      if (exec.playbackRate !== r) applyRate(r);
+      if (state.rate !== r) applyRate(r);
+      prewarm();
     }
     if (!state.dragging) paint(now());
     follow();
     if (!exec.paused && !exec.ended) raf = requestAnimationFrame(loop);
   };
   const kick = () => { if (!raf) raf = requestAnimationFrame(loop); };
-  for (const type of ["timeupdate", "play", "pause", "seeked", "loadedmetadata", "ratechange", "ended"]) exec.addEventListener(type, kick);
-  exec.addEventListener("pause", () => follow(true));
-  exec.addEventListener("seeked", () => { state.lastT = now(); });
-  exec.addEventListener("waiting", () => { screen.classList.add("w-waiting"); if (!plan.paused) plan.pause(); });   // (the plan waits for the execution too)
-  exec.addEventListener("playing", () => follow());
-  for (const type of ["playing", "canplay", "seeked"]) exec.addEventListener(type, () => screen.classList.remove("w-waiting"));
+  for (const type of ["timeupdate", "play", "pause", "seeked", "loadedmetadata", "ratechange", "ended"]) on(execs, type, kick);
+  // a copy's first data: where the episode is, at the speed it plays at (a load resets the rate)
+  on(execs, "loadedmetadata", () => {
+    if (state.pending != null) { exec.currentTime = Math.min(state.pending, state.duration) / state.k; state.pending = null; }
+    exec.playbackRate = state.rate / state.k;
+    if (state.startPlay) { state.startPlay = false; play(); }
+    follow(true);
+  });
+  on(execs, "pause", () => follow(true));
+  on(execs, "seeked", () => { state.lastT = now(); });
+  on(execs, "waiting", () => { screen.classList.add("w-waiting"); if (!plan.paused) plan.pause(); });   // (the plan waits for the execution too)
+  on(execs, "playing", () => follow());
+  for (const type of ["playing", "canplay", "seeked"]) on(execs, type, () => screen.classList.remove("w-waiting"));
+  for (const type of ["loadeddata", "canplay", "seeked", "playing"]) { on(execs, type, reveal); on(plans, type, reveal); }
 
   // ---------------------------------------------------------------- the moments on the scrub line: tiny item icons
   // (the user, 10-16), faded until played past; a dot where a moment has no icon. Icons too close for one each (an
@@ -340,6 +423,10 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   function load({ exec: execSrc, plan: planSrc, duration, startAt = 0, milestones = [], ticks = [], toasts = [], windows = [], auto, goal, caption: cap = [] }) {
     state.duration = Math.max(1, duration);
     state.hasPlan = !!planSrc;
+    const copies = (src) => (src == null ? null : typeof src === "string" ? { 1: src } : { ...src });
+    state.srcs = { exec: copies(execSrc), plan: copies(planSrc) };
+    // (the two play one copy, so a copy the plan lacks is not played)
+    for (const k of Object.keys(state.srcs.exec)) if (state.srcs.plan && !state.srcs.plan[k]) delete state.srcs.exec[k];
     state.gated = false;
     state.milestones = milestones;
     state.ticks = ticks;
@@ -364,23 +451,25 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
     state.pending = startAt;
     paint(startAt);
     screen.classList.add("w-waiting");
-    const ticket = ++state.load;
-    exec.pause();
-    plan.pause();
-    exec.src = execSrc;
-    if (planSrc) plan.src = planSrc; else { plan.removeAttribute("src"); plan.load(); }
-    exec.addEventListener("loadedmetadata", () => {
-      if (ticket !== state.load) return;
-      exec.currentTime = Math.min(startAt, exec.duration || startAt);
-      exec.playbackRate = state.auto ? rateAt(startAt) : state.speed;
-      state.pending = null;
-      play();
-    }, { once: true });
+    state.load++;
+    clear();
+    state.rate = state.auto ? rateAt(startAt) : state.speed;
+    state.k = copyFor(state.rate);
+    exec = execs[state.k];
+    plan = plans[state.k];
+    for (const els of [execs, plans]) for (const v of Object.values(els)) v.style.visibility = v === exec || v === plan ? "" : "hidden";
+    // (the loadedmetadata listener above takes it to startAt, at the speed, and plays)
+    state.startPlay = true;
+    ensure(state.k);
+  }
+  function clear() {
+    for (const els of [execs, plans]) for (const v of Object.values(els)) { v.pause(); if (v.getAttribute("src")) { v.removeAttribute("src"); v.load(); } }
   }
   function unload() {
     state.load++;
     state.gated = false;
-    for (const v of [exec, plan]) { v.pause(); v.removeAttribute("src"); v.load(); }
+    state.startPlay = false;
+    clear();
     screen.classList.remove("w-waiting");
     clearTimeout(state.toastTimer);
     toastEl.classList.remove("on");

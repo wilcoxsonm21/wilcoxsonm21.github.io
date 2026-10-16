@@ -5,6 +5,10 @@
 // a switch to the other model on the same world. Every value from the data file is set with textContent or an attribute.
 
 const VIDEO_BASE = "https://huggingface.co/datasets/hwryu/mirror_diamond_eval/resolve/main";
+// the 4x and 16x copies of each video, for playing fast without streaming the whole video (tools/mirror_fast/)
+const FAST_BASE = "https://huggingface.co/datasets/mwilcoxson/selfimprovingvisiontoactionmodelswebsitevideos/resolve/main";
+const copies = (folder, view, n) => ({ 1: `${VIDEO_BASE}/${folder}/${view}/${pad(n)}.mp4`,
+  4: `${FAST_BASE}/${folder}/${view}_4x/${pad(n)}.mp4`, 16: `${FAST_BASE}/${folder}/${view}_16x/${pad(n)}.mp4` });
 // each task: a bold line, then the rules (the user's wording, 10-16; BASALT's own descriptions are in MineRL's
 // herobraine/env_specs/basalt_specs.py). MakeWaterfall's "picture" is the agent ending the episode while facing its
 // waterfall: its video plan turns gray there (the data's end), which is when the episode is judged; the data has no
@@ -117,8 +121,8 @@ function openEpisode(n, { version = state.version, startAt = 0 } = {}) {
   player.extra.replaceChildren(...(jump ? [jump] : []));
   const folder = state.index[state.tab][version].folder;
   player.load({
-    exec: `${VIDEO_BASE}/${folder}/raw/${pad(n)}.mp4`,
-    plan: episode.views.includes("plan_idm") ? `${VIDEO_BASE}/${folder}/plan_idm/${pad(n)}.mp4` : null,
+    exec: copies(folder, "raw", n),
+    plan: episode.views.includes("plan_idm") ? copies(folder, "plan_idm", n) : null,
     duration: episode.seconds, startAt,
     ticks: at != null ? [{ t: markAt, title: `${episode.success ? task.hit : fail.note} · ${clock(at)}`, gold: episode.success }] : [],
     toasts: at != null ? [episode.success ? { t: markAt, text: task.hit } : { t: markAt, death: true, text: fail.note }] : [],
