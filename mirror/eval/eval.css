@@ -1,0 +1,240 @@
+/* The Diamond Challenge episode viewer's own parts; ../css/viewer.css has what it shares with the BASALT viewer. */
+
+/* the tabs name the setting, with the video planner in grey */
+.ev-tabs button span { font-weight: 400; color: var(--muted); }
+.ev-tabs button[aria-selected="true"] span { color: color-mix(in srgb, var(--bg) 70%, transparent); }
+
+/* what the tab's agent used, then the milestones its episodes reached: one tile each, with the paper's item icon */
+.ev-facts { margin: 0 0 26px; }
+/* (PR #4) one fixed width for every tab, so the marks stay put when the tab changes */
+#arm-facts { width: min(470px, 100%); }
+.ev-rates { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin: 0 0 40px; }
+/* viewers2 10-15: above the table headings' grey band (.ev-dtable thead th::before reaches 58 px up), which otherwise cut
+   the tiles' bottoms and bars off in the modal */
+.ev-rates { position: relative; z-index: 3; }
+.ev-rate { padding: 16px 10px 14px; text-align: center; }
+.ev-rate img { width: 44px; height: 44px; margin: 0 auto 8px; image-rendering: pixelated; }
+.ev-rate .ev-count { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.ev-rate .ev-count small { font-size: 14px; font-weight: 500; color: var(--muted); }
+.ev-rate .ev-name { font-size: 13.5px; color: var(--muted); line-height: 1.25; margin-top: 2px; }
+.ev-rate .ev-bar { margin: 10px 8px 0; }
+.ev-rate.ev-diamond .ev-bar span { background: var(--mirror); }
+/* a tab switch changes the counts in place, and the bars slide to their new length (eval.js keeps the tiles) */
+html.ev-ready .ev-rate .ev-bar span { transition: width .5s var(--ev-ease); }
+@media (prefers-reduced-motion: reduce) { html.ev-ready .ev-rate .ev-bar span { transition: none; } }
+/* on a phone a fact's detail goes under its name, not into a column of its own */
+@media (max-width: 560px) {
+  #arm-facts li { display: block; padding-left: 1.6em; text-indent: -1.6em; }
+  #arm-facts li::before { display: inline-block; margin-right: .6em; }
+  #arm-facts .ev-fact-detail::before { content: " "; }
+}
+
+/* the table: the diamond time in blue, and the milestone path (the six key items, faded until reached) */
+.ev-episodes .ev-has-diamond { color: var(--mirror-text); font-weight: 700; }
+.ev-path { display: inline-flex; gap: 3px; vertical-align: middle; margin-right: 10px; }
+.ev-path img { width: 20px; height: 20px; image-rendering: pixelated; opacity: .16; filter: grayscale(1); }
+.ev-path img.ev-on { opacity: 1; filter: none; }
+/* the headings are buttons: the label in the heading's own type, darker on hover, and the arrow a sort would give shown
+   faintly on hover where the column isn't the sorted one */
+.ev-dtable .ev-sort { appearance: none; border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
+@media (hover: hover) {
+  .ev-dtable th:hover { color: var(--ink); }
+  .ev-dtable th:not(.ev-sorted):hover::after { content: " \25BE"; opacity: .45; }
+}
+.ev-dtable .ev-sort:focus-visible { outline: 2px solid var(--mirror); outline-offset: 3px; border-radius: 4px; }
+.ev-dtable tbody tr:focus-visible { outline: none; }
+.ev-dtable tbody tr:focus-visible td { box-shadow: inset 0 2px 0 var(--mirror), inset 0 -2px 0 var(--mirror); }
+.ev-dtable tbody tr:focus-visible td:first-child { box-shadow: inset 2px 2px 0 var(--mirror), inset 0 -2px 0 var(--mirror); }
+.ev-dtable tbody tr:focus-visible td:last-child { box-shadow: inset -2px 2px 0 var(--mirror), inset 0 -2px 0 var(--mirror); }
+.ev-dtable td.ev-number { color: var(--ink-2); }
+/* the number columns share the width, so "Furthest milestone" doesn't leave a wide gap before them */
+.ev-dtable th.ev-number { width: 17%; }
+.ev-dtable th:first-child { width: 13%; }
+/* (PR #4) fixed column widths, the same on every tab: the columns keep their place when the tab changes; the
+   milestone column takes what is left, and a name too long for it ends in an ellipsis */
+.ev-dtable { table-layout: fixed; }
+.ev-dtable td { overflow: hidden; text-overflow: ellipsis; }
+/* (the sticky headings are in ../css/viewer.css, shared with the BASALT table) */
+.ev-dtable td.ev-number.ev-has-diamond { color: var(--mirror-text); }
+
+/* ------------------------------------------------------------------ the episode window */
+/* the head: the setting in grey over "Episode 08", then the outcome and the milestone strip */
+.ev-setting { margin: 0 0 2px; font-size: 16px; color: var(--muted); }
+.ev-outcome { margin: 0 2px 12px; font-size: clamp(17px, 1.4vw, 20px); line-height: 1.35; }
+.ev-outcome strong { font-weight: 700; color: var(--ink); }
+.ev-outcome .ev-won { color: var(--mirror-text); }
+/* the paper's twelve milestones, in order: lit with its time where reached, faded where not; a click jumps there */
+.ev-strip { list-style: none; margin: 0 0 22px; padding: 8px; display: grid; grid-template-columns: repeat(12, 1fr); gap: 2px;
+            background: var(--bg); border-radius: 18px; }
+.ev-strip button { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 8px 2px 7px;
+                   border: 0; border-radius: 12px; background: transparent; cursor: pointer; font: 600 13.5px/1 var(--sans);
+                   color: var(--ink-2); font-variant-numeric: tabular-nums; transition: background .2s; }
+.ev-strip img { width: 30px; height: 30px; image-rendering: pixelated; }
+.ev-strip li:not(.ev-on) img { opacity: .17; filter: grayscale(1); }
+.ev-strip li:not(.ev-on) button { cursor: default; color: var(--faint); font-weight: 400; }
+@media (hover: hover) { .ev-strip li.ev-on button:hover { background: var(--bg-2); } }
+/* airy 10-16: no white card around the strip (12 slots stretched across a 1440 sheet were mostly empty white); the
+   slots keep a natural width from the left, on the grey */
+.ev-strip { background: none; padding: 0; margin: 0 0 26px -2px; grid-template-columns: repeat(12, minmax(0, 66px)); }
+@media (hover: hover) { .ev-strip li.ev-on button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); } }
+.ev-strip button:focus-visible { outline: 2px solid var(--mirror); outline-offset: -2px; }
+
+/* the sheet is as wide as the video at its height limit, so the head, strip, video and timeline share their edges (as
+   basalt.css; the modal's close button sits a row higher, outside the column) */
+.ev-sheet { width: min(1160px, 100%, calc(58vh * 16 / 9 + 52px)); }
+html.ev-embed .ev-sheet { width: min(var(--w), calc(58vh * 16 / 9)); }
+html.ev-embed .ev-sheet-buttons { margin-right: 0; }
+/* the video leaves room for what is happening now below it on a laptop screen */
+/* (the clips are 16:9): sized before it loads, so nothing below moves when an episode opens or changes, and where the
+   height limit makes it narrower than the sheet it sits centred on the grey, without black bars at its sides */
+.ev-screen { container-type: inline-size; }
+.ev-screen video:not(.ev-back) { aspect-ratio: 16 / 9; }
+@media (min-width: 900px) {
+  .ev-screen { background: transparent; border-radius: 0; overflow: visible; display: flex; justify-content: center; }
+  .ev-screen video:not(.ev-back) { width: auto; max-width: 100%; height: min(58vh, 56.25cqw); max-height: none; margin: 0; border-radius: 10px; }
+  .ev-screen video.ev-back { left: 50%; width: min(100%, 58vh * 16 / 9); transform: translateX(-50%); }
+}
+
+/* speed as a segmented control (as Recording / Executed + video plan), fast-forward as a toggle at the right */
+/* (the segmented control's rules are in ../css/viewer.css) */
+
+/* what is happening now: the subgoal with its icon and the clock, then the prompt the video planner was given */
+.ev-now { border-left-width: 5px; padding: 12px 16px 13px; margin: 12px 0 0; }   /* (viewers2 10-15: now under the speed row) */
+/* airy 10-16: a plain white platter; the subgoal's colour (its band on the timeline) is a short pill before its icon,
+   instead of a thick coloured left border (a tint of the whole box read as an alert for the red-ish subgoals) */
+.ev-now { border-left: 0; padding: 14px 18px 15px; margin-top: 18px; }
+.ev-now[style*="--stage"] .ev-what::before { content: ""; flex: none; align-self: stretch; width: 4px; min-height: 20px; border-radius: 2px;
+                           background: var(--stage); margin-right: 2px; }   /* (only with a subgoal: none on the oracle tab) */
+.ev-now .ev-line1 { justify-content: space-between; align-items: center; flex-wrap: nowrap; gap: 12px; }
+.ev-now .ev-what { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.ev-now .ev-now-icon { width: 24px; height: 24px; image-rendering: pixelated; flex: none; }
+.ev-now .ev-subgoal { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
+.ev-now .ev-status { display: flex; align-items: center; gap: 10px; flex: none; }
+.ev-now .ev-clock { font-size: 16px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ev-now .ev-alert { font-size: 15px; }
+.ev-now .ev-fast { font: 600 13px/1 var(--sans); padding: 5px 8px; border-radius: 999px; color: var(--mirror-text);
+                   background: var(--mirror-tint); font-variant-numeric: tabular-nums; }
+.ev-now .ev-caption { margin-top: 5px; font-size: 15px; line-height: 1.4; color: var(--ink-2); }
+
+/* the timeline: its height comes from eval.js (one row per stack of milestone icons) */
+#timeline { margin: 12px 0 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+#timeline .lane-label { font-size: 12px; }
+#timeline .tick-label { font-size: 11.5px; }
+#timeline .stage-label { fill: #1c1b1a; font: 600 10.5px var(--sans); pointer-events: none; }
+#timeline .stage-current { fill: none; stroke: var(--ink); stroke-width: 2; }
+#timeline .health { stroke: var(--ink-2); stroke-width: 1.5; }
+#timeline .spell { fill: color-mix(in srgb, var(--fail) 22%, transparent); }
+#timeline .dead { fill: rgba(60, 60, 60, .16); }
+#timeline .death { stroke: var(--fail); stroke-width: 2; }
+#timeline .milestone { stroke: var(--faint); stroke-width: 1.2; }
+#timeline .playhead line { stroke: var(--mirror); stroke-width: 2; }
+#timeline .playhead circle { fill: var(--mirror); }
+#timeline image { image-rendering: pixelated; }
+#timeline .milestone-more { fill: var(--muted); font: 600 10.5px var(--sans); }
+
+/* the key's swatches (the key's layout and the shortcuts are in ../css/viewer.css) */
+.ev-key-subgoal::before { background: linear-gradient(90deg, hsl(0, 62%, 72%), hsl(100, 62%, 72%), hsl(200, 62%, 72%), hsl(300, 62%, 72%)); }
+.ev-key-health::before { height: 2px; background: var(--ink-2); }
+.ev-key-damage::before { background: color-mix(in srgb, var(--fail) 22%, transparent); }
+.ev-key-death::before { width: 2px; height: 12px; background: var(--fail); margin: 0 6px; }
+.ev-key-item::before { width: 14px; height: 14px; background: url(icons/stone_pickaxe.png) center / contain no-repeat; image-rendering: pixelated; }
+
+/* the subgoals and the deaths: every entry jumps the video there */
+.ev-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin-top: 22px; }
+.ev-lists section { background: var(--bg); border-radius: 18px; padding: 14px 12px 10px; min-width: 0; }
+.ev-lists h3 { font-size: 17px; margin: 0 0 8px 9px; letter-spacing: -0.005em; }
+/* airy 10-16: as iOS grouped lists, the heading sits on the grey above its white card (was inside it); a wider gap
+   above the lists than between the player's parts */
+.ev-lists { gap: 28px 18px; margin-top: 36px; }
+.ev-lists section { background: none; padding: 0; border-radius: 0; }
+.ev-lists h3 { margin: 0 0 8px 2px; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.ev-lists ol { background: var(--bg); border-radius: 18px; padding: 6px; }
+.ev-lists li.ev-empty { padding: 10px 12px; }
+.ev-lists ol { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; }
+.ev-lists li { margin: 0 0 2px; }
+.ev-lists li button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  font: 15px/1.35 var(--sans);
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.ev-lists li button img { width: 18px; height: 18px; image-rendering: pixelated; flex: none; }
+@media (hover: hover) { .ev-lists li button:hover { background: var(--bg-2); } }
+.ev-lists li.ev-current button { background: var(--mirror-tint); color: var(--ink); font-weight: 600; }
+.ev-lists li.ev-death button { color: var(--ink-2); }
+.ev-lists li.ev-empty { color: var(--muted); font-size: 15px; padding: 6px 9px; }
+.ev-lists .ev-t { font-weight: 600; color: var(--muted); min-width: 3.4em; flex: none; }
+.ev-lists .ev-until { margin-left: auto; padding-left: 10px; color: var(--muted); font-size: 14px; white-space: nowrap; }
+/* without subgoals (the oracle VP) the deaths are alone: a grid of entries across the width instead of one long column */
+#section-stages[hidden] + section ol { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px 8px; max-height: none; }
+
+/* ------------------------------------------------------------------ narrow screens */
+@media (max-width: 900px) {
+  .ev-rates { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 700px) {
+  /* two lines kept for the prompt, so a change of subgoal doesn't move what is below */
+  .ev-now .ev-caption { min-height: 2.8em; }
+}
+@media (max-width: 560px) {
+  .ev-tabs button span { display: block; font-size: .8em; }
+  /* airy 10-16: on a phone the six milestones are one white card of rows (icon, name over its bar, count at the right),
+     as an iOS grouped list: three tiles across at 393 px were six cramped boxes */
+  .ev-rates { grid-template-columns: 1fr; gap: 0; background: var(--bg); border-radius: 18px; padding: 2px 0; }
+  .ev-rate { position: relative; display: grid; grid-template-columns: 28px 1fr auto; grid-template-areas: "img name count" "img bar count";
+             align-items: center; column-gap: 14px; row-gap: 7px; padding: 11px 18px 12px 16px; text-align: left; background: none; border-radius: 0; }
+  .ev-rate + .ev-rate::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; border-top: 1px solid var(--line); }
+  .ev-rate img { grid-area: img; width: 28px; height: 28px; margin: 0; }
+  .ev-rate .ev-name { grid-area: name; margin: 0; font-size: 16px; color: var(--ink); line-height: 1.2; }
+  .ev-rate .ev-bar { grid-area: bar; margin: 0; }
+  .ev-rate .ev-count { grid-area: count; font-size: 20px; min-width: 4.6em; text-align: right; }
+  .ev-rate .ev-count small { font-size: 13px; }
+  .ev-facts { margin-bottom: 30px; }
+  /* the table fits a phone: the icons say how far it got, and the deaths are in each episode */
+  .ev-episodes .ev-furthest-name, .ev-episodes .ev-col-deaths { display: none; }
+  /* viewers2 10-15: with Deaths hidden, the Diamond cell ends the row, so it takes the row's round right end */
+  .ev-dtable tbody tr:first-child td:nth-last-child(2) { border-top-right-radius: 18px; }   /* (airy: one card now, so only its corners) */
+  .ev-dtable tbody tr:last-child td:nth-last-child(2) { border-bottom-right-radius: 18px; }
+  .ev-dtable .ev-long { display: none; }
+  .ev-dtable th, .ev-dtable td { padding-left: 9px; padding-right: 9px; }
+  /* (merge 10-16) PR #4's fixed columns on a phone: the three short columns as wide as their headings, the milestones take
+     the rest; the sorted arrow sits in the padding, so it doesn't widen its column */
+  .ev-dtable th:first-child { width: 68px; }
+  .ev-dtable th.ev-number:nth-child(3) { width: 97px; }
+  .ev-dtable th.ev-number:nth-child(4) { width: 76px; }
+  .ev-dtable th.ev-sorted::after, .ev-dtable th:not(.ev-sorted):hover::after { position: absolute; }
+  /* (perf2 10-16) the six icons shrink to the column (17 px at a Pro Max, 16 at a Pro, 13 at an SE) instead of the
+     last ones being cut off; the milestone column's own padding is narrower, so the icons keep their size */
+  .ev-path { display: flex; margin-right: 0; gap: 2px; }
+  .ev-path img { flex: 0 1 17px; min-width: 0; width: auto; height: auto; aspect-ratio: 1; }
+  .ev-dtable th:nth-child(2), .ev-dtable td:nth-child(2) { padding-left: 3px; padding-right: 3px; }
+  .ev-outcome { font-size: 17px; }
+  /* still one row of twelve on a phone, so the video stays near the top */
+  .ev-strip { padding: 0; gap: 0; border-radius: 0; margin: 0 -2px 22px; grid-template-columns: repeat(12, 1fr); }   /* (airy: no card) */
+  .ev-strip button { font-size: 10.5px; letter-spacing: -0.02em; padding: 6px 0 5px; gap: 4px; border-radius: 9px; }
+  .ev-strip img { width: 21px; height: 21px; }
+  /* speed and fast-forward on one row: the toggle says only "Fast-forward" (the title has the rest) */
+  .ev-controls { gap: 8px; flex-wrap: nowrap; }
+  .ev-controls .ev-speeds button { padding: 7px 7.5px; font-size: 13.5px; }
+  .ev-controls .ev-highlight { padding: 8px 12px; font-size: 13.5px; white-space: nowrap; }
+  .ev-highlight .ev-long { display: none; }
+  .ev-now { padding: 10px 12px 11px; }
+  /* the clock and fast-forward above the subgoal, so a long subgoal keeps the full width */
+  .ev-now .ev-line1 { flex-direction: column-reverse; align-items: flex-start; gap: 4px; }
+  .ev-now .ev-clock { font-size: 14.5px; }
+  .ev-now .ev-subgoal { font-size: 17px; }
+  .ev-now .ev-caption { font-size: 14px; }
+  .ev-legend { font-size: 13px; gap: 4px 12px; }
+  /* viewers2 10-15: the view toggle spans the width, as the BASALT viewer's on a phone */
+  #view-toggle { display: flex; width: 100%; }
+  #view-toggle button { flex: 1 1 0; padding: 8px 6px; }
+}

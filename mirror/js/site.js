@@ -1,0 +1,1434 @@
+// site.js: the scroll engine of the Mirror page.
+//
+// Chapters pin a talk animation (an iframe running scenes/<name>.html?scroll, or a figure drawn in the page). Scrolling
+// moves from chapter to chapter: it brings the headline in, lifts it away as the stage comes forward, and dissolves
+// the stage as it scrolls on. Once the stage is in focus, the animation plays like a video, click after click, holding
+// each click's last frame while its text is read. A thin bar along the bottom of each animation's box shows how far it
+// has played, one segment per click. A tap or click on the box pauses or plays it, a swipe left (or the right arrow
+// key, a trackpad swipe, a mouse drag) goes on to the next click and a swipe right back to the previous one, as a
+// carousel pages. The box lets go once it leaves the screen or its animation ends.
+// Everything else on the page (hero, statements, headlines, the dark interlude) is driven from the same frame loop.
+(() => {
+  "use strict";
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const smooth = (a, b, x) => { const u = clamp((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const root = document.documentElement;
+
+  // style writes that skip unchanged values, so a page at rest invalidates nothing
+  const memo = new WeakMap();
+  function css(el, prop, v) {
+    let m = memo.get(el);
+    if (!m) memo.set(el, m = {});
+    if (m[prop] !== v) { m[prop] = v; if (prop.startsWith("--")) el.style.setProperty(prop, v); else el.style[prop] = v; }
+  }
+  const docTop = el => { let t = 0; for (let e = el; e; e = e.offsetParent) t += e.offsetTop; return t; };
+  // where the page's sections are and how tall: measured once per layout, not every frame, since a read after the
+  // frame's style writes forces a style pass. geo.clear() drops them when the layout changes (relayout, and a
+  // ResizeObserver on the sections, at the frame loop)
+  const geo = new Map();
+  const measure = (el, k, f) => { let m = geo.get(el); if (!m) geo.set(el, m = {}); return k in m ? m[k] : (m[k] = f(el)); };
+  const topOf = el => measure(el, "top", docTop);
+  const heightOf = el => measure(el, "h", e => e.offsetHeight);
+
+  let vh = innerHeight, vw = innerWidth, narrow = false;
+  let portrait = false;   // a phone held upright: the animations load their tall layouts (scenes/portrait/)
+  let short = false;      // a phone held sideways: a screen too short for the desktop layout (fitCard, css "fix: short landscape")
+  let sy = scrollY, lastSy = -1;
+
+  // ------------------------------------------------------------------ hero: "Mirror", seen through its letters
+  const heroEl = $(".hero"), mark = $(".hero-mark"), heroVideo = $(".hero-video");
+  const heroCopy = $(".hero-copy"), cue = $(".scroll-cue");
+  // The knockout itself is markup and css (index.html, .hero-word), so it is right from the first paint. This measures
+  // what depends on the text's layout: whether the scroll cue fits, and the statements' gold phrases.
+  function layoutHero() {
+    // the cue steps aside on short screens, where it would touch the links above it or the TL;DR peeking in below
+    cue.classList.remove("off");
+    const st = $(".statement-sticky");
+    const cueTop = cue.offsetTop, cueBottom = cueTop + cue.offsetHeight;   // in the hero's box, which starts at its top
+    const copyBottom = heroCopy.offsetTop + heroCopy.offsetHeight;
+    const nextTop = st ? docTop(st) - st.offsetHeight / 2 - docTop(heroEl) : Infinity;   // it is drawn raised by half
+    cue.classList.toggle("off", cueTop < copyBottom + 24 || cueBottom > nextTop - 12);
+    wordBlocks.forEach(goldPhrase);
+  }
+  function updateHero() {
+    // with reduced motion the hero only fades: no zoom or drift, and the montage holds its poster
+    const p = clamp(sy / (.5 * vh));                  // it fades over the first half screen of scrolling
+    css(mark, "opacity", (1 - smooth(.4, .97, p)).toFixed(3));
+    if (!REDUCED) {
+      css(mark, "transform", `translate3d(0,${(-p * 8).toFixed(2)}vh,0) scale(${(1 - .07 * p).toFixed(4)})`);
+      css(heroVideo, "transform", `scale(${(1 + .25 * p).toFixed(4)})`);
+      css(heroCopy, "transform", `translate3d(0,${(-p * 70).toFixed(1)}px,0)`);
+    }
+    css(heroCopy, "opacity", (1 - smooth(.02, .42, p)).toFixed(3));
+    css(cue, "opacity", (1 - smooth(0, .08, p)).toFixed(3));
+    cue.classList.toggle("still", p >= .08);          // its looping line stops once it has faded (css "fix: perf")
+    const on = sy < topOf(heroEl) + heightOf(heroEl);
+    if (on && heroVideo.paused && !REDUCED) heroVideo.play().catch(() => {});
+    else if (!on && !heroVideo.paused) heroVideo.pause();
+  }
+
+  // ------------------------------------------------------------------ statements, revealed word by word
+  const wordBlocks = $$("[data-words]").map(el => {
+    // one span per word; words of the key phrase (<span class="mk">) keep that class, and punctuation that follows
+    // the phrase directly (no space) stays attached to it
+    const words = [];
+    let gap = false;                                     // whitespace since the last word
+    el.childNodes.forEach(n => {
+      const cls = n.nodeType === 1 && n.classList.contains("mk") ? "w mk" : "w";
+      for (const t of n.textContent.split(/(\s+)/)) {
+        if (!t) continue;
+        if (/^\s+$/.test(t)) { gap = true; continue; }
+        words.push((words.length && gap ? " " : "") + `<span class="${cls}">${t}</span>`);
+        gap = false;
+      }
+    });
+    // the last two words never part, so no line holds a single word ("planner.")
+    const k = words.length - 1;
+    if (k > 2 && words[k].startsWith(" ")) words[k] = " " + words[k].slice(1);
+    el.innerHTML = words.join("");
+    const sec = el.closest("section");
+    return { el, sec, words: [...el.querySelectorAll(".w")], after: $(".closing-sub", sec),
+             spacer: $(".statement-spacer, .closing-spacer", sec) };
+  });
+  // the gold phrase is split into words too, but its gradient runs once across the whole phrase, as on a headline's
+  // single <span class="mk">: each word shows its own stretch of one gradient as wide as the phrase laid end to end
+  function goldPhrase(b) {
+    let x = 0, prev = null;
+    const at = [];
+    for (const w of b.words) {
+      if (!w.classList.contains("mk")) continue;
+      const r = w.getBoundingClientRect();
+      if (prev && Math.abs(r.top - prev.top) < r.height / 2) x += r.left - prev.right;   // the space, on the same line
+      at.push([w, x]);
+      x += r.width;
+      prev = r;
+    }
+    for (const [w, off] of at) {
+      css(w, "backgroundSize", `${x.toFixed(1)}px 100%`);
+      css(w, "backgroundPosition", `${(-off).toFixed(1)}px 0`);
+    }
+  }
+  // the words fill in over REVEAL viewport heights of scrolling, starting when the text is REVEAL_IN below its pin;
+  // the spacer (css) keeps the finished statement pinned for a while after
+  const REVEAL = .56, REVEAL_IN = .28;
+  function updateWords(b) {
+    // the text pins (its layout top at the centre line) at pin, for as long as the spacer after it; the words fill in
+    // from when it is a little below the centre until most of the way through
+    const NAV = 52, pin = topOf(b.sec) - (vh + NAV) / 2;
+    b.p0 = pin - REVEAL_IN * vh;                       // the scroll position where the reveal starts
+    const p = (sy - b.p0) / (REVEAL * vh);
+    const n = b.words.length, r = clamp(p) * (n + 2);
+    b.words.forEach((w, i) => css(w, "opacity", REDUCED ? "1" : (.14 + .86 * clamp((r - i) / 2.2)).toFixed(3)));
+    if (b.after) {
+      const u = REDUCED ? 1 : smooth(.86, 1.02, p);
+      css(b.after, "opacity", u.toFixed(3));
+      css(b.after, "transform", `translate3d(0,${((1 - u) * 16).toFixed(1)}px,0)`);
+    }
+  }
+
+  // ------------------------------------------------------------------ the reader's scrolling, and the page scrolling itself
+  // The reader counts as scrolling from their first wheel step, scroll key, touch or scroll movement until MOVE_HOLD
+  // after the scroll stops (momentum and the scrollbar show up as movement), and for as long as a finger is down.
+  // Then a statement plays on, and a chapter caught between its headline and its stage settles on one of them.
+  const MOVE_HOLD = .15;   // seconds
+  const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "]);
+  let holdUntil = 0, readerDir = 1;          // readerDir: which way the reader last scrolled
+  let touching = false;                      // a finger is on the screen
+  let glide = null, ownAt = null;            // the page's own scrolling: a glide under way; the last position it set
+  const scrolling = now => touching || now < holdUntil;
+  function takeOver(s) { glide = null; snapArmed = true; holdUntil = Math.max(holdUntil, performance.now() + s * 1e3); }
+  addEventListener("wheel", () => takeOver(MOVE_HOLD), { passive: true });
+  addEventListener("keydown", e => { if (SCROLL_KEYS.has(e.key)) takeOver(MOVE_HOLD); });
+  // a finger landing stops a glide where it is, even if it doesn't move
+  addEventListener("touchstart", e => { touching = e.touches.length > 0; if (touching) glide = null; }, { passive: true });
+  for (const ev of ["touchend", "touchcancel"])
+    addEventListener(ev, e => { touching = e.touches.length > 0; if (!touching) takeOver(MOVE_HOLD); }, { passive: true });
+  document.addEventListener("visibilitychange", () => takeOver(MOVE_HOLD));   // back on the tab: a moment first
+
+  function scrollSelf(y) { ownAt = y; scrollTo({ top: y, behavior: "instant" }); }
+  // a glide eases the page to a scroll position: a chapter's stage, or its headline
+  function glideTo(y, ms) {
+    if (REDUCED) { scrollSelf(y); return; }
+    const from = scrollY;
+    glide = { from, to: y, t0: performance.now(), dur: ms || clamp(300 + .25 * Math.abs(y - from), 300, 1200) };
+  }
+  function stepGlide(now) {
+    const u = clamp((now - glide.t0) / glide.dur), e = u < .5 ? 4 * u * u * u : 1 - Math.pow(2 - 2 * u, 3) / 2;
+    scrollSelf(lerp(glide.from, glide.to, e));
+    if (u >= 1) glide = null;
+  }
+
+  // A reader who stops with a video or a block of text almost centred is nudged the last few pixels to centre it, once
+  // per stop, a moment after their scrolling (and its momentum) has ended. The full-screen spots snap the same way: a
+  // chapter just short of pinning (its headline still rising) is carried up to its pin, and a statement just short of
+  // its pin is centred. Nothing too tall to fit on the screen snaps.
+  const SNAP_SEL = ".prose-body, .bibtex, .cinema-head, .cinema-screen, .results-head, .gallery";
+  const SNAP_NEAR = .06;   // viewport heights off centre, at most, to snap (capped at 64 px)
+  // a box can ask for a wider reach (data-snap-near, viewport heights, capped at a quarter of the screen): the survival
+  // video, a short strip on a desktop, is easy to stop well short of
+  const SNAP_WAIT = .15;   // seconds after the reader's scrolling ends
+  let snapArmed = false, noSnapUntil = 0;
+  const snapEls = $$(SNAP_SEL).filter(el => !el.closest("[class*='-sticky']"));
+  const snapPinned = $$(".statement-text, .closing-text");
+  function snapNear(now) {
+    if (!snapArmed || REDUCED || glide || comeBack || scrolling(now) || now < holdUntil + SNAP_WAIT * 1e3) return;
+    snapArmed = false;
+    if (now < noSnapUntil || wordBlocks.some(b => b.autoY != null)) return;
+    const navH = $(".localnav").offsetHeight, mid = (navH + vh) / 2, room = vh - navH;
+    const near0 = Math.min(64, SNAP_NEAR * vh);
+    let best = null, near = near0;
+    const offer = (d, n = near0) => { if (Math.abs(d) <= n && (best == null || Math.abs(d) < Math.abs(best))) { best = d; near = n; } };
+    for (const el of snapEls) {
+      const h = el.offsetHeight;   // layout boxes: a .reveal still sliding in is measured where it lands
+      const n = el.dataset.snapNear ? Math.min(.25 * vh, parseFloat(el.dataset.snapNear) * vh) : near0;
+      if (h && h <= .9 * room) offer(docTop(el) - scrollY + h / 2 - mid, n);
+    }
+    // pinned text: once pinned it sits centred by itself (d = 0), so this only carries it the last bit to its pin
+    for (const el of snapPinned) { const r = el.getBoundingClientRect(); if (r.height) offer(r.top + r.height / 2 - mid); }
+    // a chapter rising into view: its pin is where its headline (or, without one, its figure) fills the screen
+    for (const c of chapters) { const d = topOf(c.el) - scrollY; if (d > 0) offer(d); }
+    if (best && Math.abs(best) > 1 && Math.abs(best) <= near) glideTo(scrollY + best, 320);
+  }
+
+  // A statement the reader stops in partway plays on: the page scrolls on so the words fill in at reading pace, and
+  // stops once the last one is in. Before the second word lights, nothing moves (the hero is still in view).
+  function autoplayWords(b, now, dt) {
+    const n = b.words.length, span = REVEAL * vh, p = (sy - b.p0) / span, pEnd = (n + 1.2) / (n + 2);
+    if (REDUCED || glide || scrolling(now) || p < 2 / (n + 2) || p >= pEnd) { b.autoY = null; return; }
+    if (b.autoY == null || Math.abs(b.autoY - sy) > 3) b.autoY = sy;
+    b.autoY = Math.min(b.p0 + pEnd * span, b.autoY + WPS * span / (n + 2) * dt);
+    scrollSelf(b.autoY);
+  }
+
+  // ------------------------------------------------------------------ chapters
+  // Scrolling moves between chapters and only brings each stage into focus and out again; it no longer scrubs the
+  // animation. A chapter in focus plays like a video: each click runs at normal speed, holds while its text is read,
+  // and the next one follows, up to the last. The reader can take control of it (select, below).
+  const HEAD = .8;     // viewport heights of pinned scroll for the headline and the stage coming forward
+  const Z0 = .7;       // headline lengths in: the animation starts playing as the stage comes forward
+  const REST = .9;     // headline lengths in: the stage is fully forward (a reader who stops short is carried here)
+  const DWELL = .4;    // viewport heights the stage stays pinned at full size before it scrolls away
+  const SETTLE = .3;   // headline lengths in: past this, a reader who stops is carried through to the stage
+  // pacing: when a played-out click moves on by itself
+  const HOLD = .25;    // seconds on its last frame
+  const WPS = 6;       // the statements' pace (words per second) as they fill in (autoplayWords)
+  // A click waits until its text has been read in full: the step's text, or the scene's title, at READ_WPS from when
+  // it showed. There is no cap: a reader who has read it can swipe on (controls).
+  const READ_WPS = 4;
+  // data-read values were set at 3.8 words/s: READ_PACE rescales the part of each that goes past the click's own
+  // length to READ_WPS
+  const READ_PACE = 3.8 / READ_WPS;
+  // A chapter's data-read="s0,s1,…" sets each click's dwell outright (seconds from the click's start before the next
+  // click plays, at least the click's own length), and the word count still applies: a title that shows late in a long
+  // click gets its full reading time.
+
+  const TAP = matchMedia("(hover: none)").matches ? "Tap" : "Click";
+
+  // narrow screens: the box around a scene keeps CARD_SIDE from the screen's sides and at least CARD_EDGE from the nav.
+  // Under it are its controls (the transport, below): CTL_ROOM for them and the gap above them, then CTL_FOOT.
+  const CARD_SIDE = 12, CARD_EDGE = 14, CTL_ROOM = 48, CTL_FOOT = 8;
+  const SHORT_EDGE = 8;   // a phone held sideways: the box's room above and below (fitShort)
+  const CTL_SIDE = 48;    // ... and the room it keeps at either side for the transport, which stands beside it
+  let meter = null;
+  // a hidden caption block at width w, for measuring titles in the caption's own type
+  function captionMeter(w) {
+    if (!meter) {
+      meter = document.createElement("div");
+      meter.className = "stage-caption";
+      meter.setAttribute("aria-hidden", "true");
+      meter.style.cssText = "position:absolute;left:-9999px;top:0;visibility:hidden;min-height:0";
+      document.body.append(meter);
+    }
+    meter.style.width = w + "px";
+    return meter;
+  }
+
+  // a scene frame's window, its SCENE and its address; null while the frame holds a page of another origin (the
+  // browser's error page for a scene that failed to load, as on a phone's dropped connection), which can't be read
+  const frameAt = f => { try { const w = f.contentWindow; return w && { w, S: w.SCENE, href: w.location.href }; } catch (e) { return null; } };
+
+  class Chapter {
+    constructor(el) {
+      this.el = el;
+      this.head = $(".chapter-head", el);
+      this.stage = $(".stage", el);
+      this.iframe = $("iframe", el);
+      this.capEl = $(".stage-caption", el);
+      this.steps = $(".steps", el);
+      this.stepList = !!this.steps;   // a list of the steps, written in the page
+      this.inline = el.hasAttribute("data-inline");              // drawn in the page, not in an iframe
+      this.noHead = el.dataset.head === "none";                  // no headline phase: pinned as it arrives
+      this.setSegs(el.dataset.segs.split(",").map(Number));
+      this.read = (el.dataset.read || "").split(",").map(x => x.trim() === "" ? null : Number(x));
+      // seconds of still opening to skip (data-lead): the animation starts where something first moves
+      this.lead = Number(el.dataset.lead) || 0;
+      // how much faster than the talk the animation plays (data-speed), videos included: one number, then any changes
+      // from a scene time on as "T:speed" (e.g. "1.25, 25.3:.5, 27.6:1.25")
+      this.speeds = (el.dataset.speed || "1").split(",").map(s => s.split(":").map(Number))
+        .map(p => p.length > 1 ? { at: p[0], v: p[1] || 1 } : { at: 0, v: p[0] || 1 }).sort((a, b) => a.at - b.at);
+      this.T = 0;
+      this.k = 0;             // the click being played (or held on, once it has played out)
+      this.clock = 0;         // seconds this chapter has been playing: pauses and time out of focus don't count
+      this.held = REDUCED;    // doesn't play by itself (with reduced motion, where each tap shows the next step)
+      this.ended = false;     // the last click has played out
+      this.live = false;      // in focus and playing
+      this.rate = 0;
+      this.api = null;
+      this.state = "idle";
+      this.wasVisible = false;
+      this.stageO = 0;
+      this.shown = 1;         // the stage fades out while the scene reloads in the other layout, and back in (reveal)
+      this.swap = null;       // that reload: when the new scene was ready, and how many frames it has drawn since
+      this.capHTML = null;
+      this.capText = "";      // the scene's title as plain text, since capAt (clock)
+      this.capAt = 0;
+      this.cur = -1;          // the click on screen, since curAt (clock)
+      this.curAt = 0;
+      this.doneAt = null;     // when the current click finished playing (clock)
+      this.gen = 0;           // loads of the scene so far (a newer one makes an older one's events stale)
+      this.mode = null;       // whether the scene was loaded in its portrait layout
+      this.card = null;       // narrow screens: the box around the scene (fitCard)
+      this.frameH = null;     // the frame's height while a click fills only part of the stage (fillFrame)
+      // the box the reader taps to take control (select, below): the animation's frame, or the figure drawn in the page
+      this.box = this.inline ? $("figure", el) : this.frameEl();
+      this.selected = false;
+      this.played = 0;        // how far the click on screen has got, its reading hold included (progress)
+      controls(this);
+    }
+    setSegs(durs) {
+      let G = 0;
+      this.segs = durs.map(d => { const s = { start: G, dur: d }; G += d; return s; });
+      this.total = G;
+      if (this.k !== undefined) this.k = clamp(this.k, 0, this.segs.length - 1);
+      // a written step plays when picked; the progress bar has a segment per click (controls, below)
+      this.dots = this.stepList ? [...this.steps.children] : [];
+      this.dots.forEach((d, i) => { d.onclick = () => this.goto(i); });
+      if (this.bar) { this.bar.innerHTML = this.segs.map(() => "<i></i>").join(""); this.segEls = [...this.bar.children]; }
+    }
+    layout() {
+      this.headLen = HEAD * vh;
+      this.rest = this.noHead ? 0 : REST * this.headLen;
+      this.pinLen = this.rest + DWELL * vh;
+      this.el.style.height = Math.round(this.pinLen + vh) + "px";
+      this.fitCard();
+    }
+    // Narrow screens: the scene's title sits in the grey box, above the animation, as it does on a wide screen. Every
+    // chapter's box is the screen's width less CARD_SIDE a side, so the boxes line up from chapter to chapter. The
+    // animation is as large as the box allows below the nav: one too tall for the screen at that width is drawn
+    // narrower, centred in the box, with grey on either side. The caption block is as tall as the scene's longest
+    // title, so the box keeps its size from click to click. Any room left over goes to the screen's top and bottom
+    // edges, not between the text and the figure.
+    fitCard() {
+      if (this.inline || !this.capEl) return;
+      const f = this.frameEl();
+      if (short) { this.fitShort(); return; }
+      if (!narrow) {
+        for (const k of ["--card-w", "--cap-h", "--card-top"]) this.el.style.removeProperty(k);
+        this.card = null; f.style.height = "";
+        Object.assign(this.iframe.style, { height: "", width: "", left: "" });
+        return;
+      }
+      const tall = this.el.classList.contains("tall"), r = tall ? parseFloat(this.el.style.getPropertyValue("--scene-r"))
+        : 1920 / 880;
+      const navH = parseFloat(getComputedStyle(root).getPropertyValue("--nav-h")) || 52;
+      // under the box: the transport
+      const avail = vh - navH - CARD_EDGE - CTL_ROOM - CTL_FOOT;
+      const w = Math.floor(vw - 2 * CARD_SIDE), capH = Math.ceil(this.captionHeight(w));
+      const fw = Math.floor(Math.min(w, Math.max(200, (avail - capH) * r)));
+      // the box is anchored where it sits centred at its full size; a click that fills less of the stage (FILL)
+      // shortens it from the bottom, so the room it leaves goes to the screen's bottom edge
+      const full = fw / r, top = Math.max(CARD_EDGE, (vh - navH - CTL_ROOM - capH - full) / 2);
+      this.el.style.setProperty("--card-w", w + "px");
+      this.el.style.setProperty("--cap-h", capH + "px");
+      this.el.style.setProperty("--card-top", Math.round(top) + "px");
+      this.card = { w, fw, full, tall };
+      Object.assign(this.iframe.style, { width: fw + "px", left: (w - fw) / 2 + "px", height: tall ? full + "px" : "" });
+      f.style.height = full.toFixed(1) + "px";
+      this.frameH = null;
+      this.fillFrame();
+    }
+    // A phone held sideways (short): the nav slides away while a chapter is on screen, so the box has the screen's
+    // whole height. It is the narrow layout's box (title above, animation below, cropped to its 1920 x 880 body), as
+    // large as the height allows and only as wide as the animation, so the room left over goes to the screen's sides
+    // (and clears the notch). The transport stands beside the box, centred on the animation (--ctl-x, --ctl-y).
+    fitShort() {
+      const f = this.frameEl(), r = 1920 / 880, st = getComputedStyle(this.stage);
+      const pl = parseFloat(st.paddingLeft) || 0, pr = parseFloat(st.paddingRight) || 0;
+      const side = Math.max(CARD_SIDE, pl, pr) + CTL_SIDE;
+      const avail = vh - 2 * SHORT_EDGE, wMax = Math.floor(vw - 2 * side);
+      let fw = wMax, capH = 0;
+      for (let i = 0; i < 4; i++) {   // a narrower box can wrap the title onto another line
+        capH = Math.ceil(this.captionHeight(fw));
+        const next = Math.floor(Math.min(wMax, Math.max(200, (avail - capH) * r)));
+        if (next === fw) break;
+        fw = next;
+      }
+      const full = fw / r, top = Math.round(Math.max(0, (vh - capH - full) / 2));
+      this.el.style.setProperty("--card-w", fw + "px");
+      this.el.style.setProperty("--cap-h", capH + "px");
+      this.el.style.setProperty("--card-top", top + "px");
+      this.el.style.setProperty("--ctl-x", Math.round(pl + (vw - pl - pr + fw) / 2 + 8) + "px");
+      this.el.style.setProperty("--ctl-y", Math.round(top + capH + full / 2) + "px");
+      this.card = { w: fw, fw, full, tall: false };
+      Object.assign(this.iframe.style, { width: "", left: "", height: "" });
+      f.style.height = full.toFixed(1) + "px";
+      this.frameH = null;
+    }
+    frameEl() { return this.iframe.parentNode; }
+    // A portrait layout can say how much of its stage each click fills (PORTRAIT.FILL, one entry per click: the height
+    // in stage px, or { h, at, dur } to time the change in seconds of the click, or a list of those for several changes
+    // in one click; the first click's first entry is where it starts). The frame shows that much: it grows or shrinks
+    // over each change (default .1 to 1.1 s into the click) and follows T.
+    fillFrame() {
+      if (this.inline) return;
+      const c = this.card, F = this.fill, el = this.frameEl();
+      if (!c || !c.tall || !F || !this.stageW) {
+        if (this.frameH !== null) { el.style.height = c ? c.full.toFixed(1) + "px" : ""; this.frameH = null; }
+        return;
+      }
+      const steps = i => { const f = F[clamp(i, 0, F.length - 1)];
+                           return (Array.isArray(f) ? f : [f]).map(x => typeof x === "number" ? { h: x } : x); };
+      let i = 0;
+      this.segs.forEach((g, k) => { if (this.T >= g.start) i = k; });
+      const local = this.T - this.segs[i].start, here = steps(i);
+      let fh = i ? steps(i - 1).at(-1).h : here[0].h;
+      for (const x of here) {
+        const u = clamp((local - (x.at ?? .1)) / (x.dur ?? 1));
+        fh = lerp(fh, x.h, u < .5 ? 4 * u * u * u : 1 - Math.pow(2 - 2 * u, 3) / 2);
+      }
+      const h = Math.min(c.full, fh * c.fw / this.stageW);
+      if (this.frameH === null || Math.abs(h - this.frameH) > .4) { this.frameH = h; el.style.height = h.toFixed(1) + "px"; }
+    }
+    // the height of the caption block at width w with the scene's longest title (and note); three lines before the
+    // scene has said what its titles are
+    captionHeight(w) {
+      const m = captionMeter(w), caps = this.caps;
+      const high = h => { m.innerHTML = `<div class="cap-in">${h}</div>`; return m.offsetHeight; };
+      const tallest = (list, wrap) => Math.max(0, ...list.map(h => high(wrap(h))));
+      if (!caps || !caps.titles.length) return high("x<br>x<br>x");
+      const t = tallest(caps.titles, h => h);
+      if (!caps.subs.length) return t;
+      return t + tallest(caps.subs, h => `x<span class="sub">${h}</span>`) - high("x");
+    }
+    restY() { return topOf(this.el) + this.rest; }   // the scroll position with the stage fully forward
+    // a step picked from the list, or stepped to, plays from its start (with reduced motion it shows its last frame);
+    // a stage still coming forward is brought forward
+    goto(i) {
+      this.k = i;
+      this.T = this.segs[i].start + (REDUCED && this.held ? this.segs[i].dur : 0);
+      if (i === 0 && !(REDUCED && this.held)) this.fromLead();
+      this.cur = -1;          // restart its clock, even if it is the step already on screen
+      this.doneAt = null;
+      this.ended = false;
+      if (!REDUCED) this.held = false;
+      if (sy - topOf(this.el) < this.rest - 2) glideTo(this.restY(), 500);
+    }
+    // the animation's start, past its still opening (data-lead), which can reach into a later click
+    fromLead() {
+      this.T = Math.min(this.lead, this.total);
+      this.k = 0;
+      this.segs.forEach((g, i) => { if (this.T >= g.start - 1e-6 && g.dur > 0) this.k = i; });
+    }
+    // A swipe left (or the right arrow) goes on to the next click, which plays from its start; on the last click it
+    // ends the chapter. A swipe right goes back to the previous click and plays it again. With reduced motion each shows
+    // the click's last frame.
+    step(dir) {
+      if (!this.api) return;
+      this.select();
+      const last = this.segs.length - 1;
+      if (dir > 0 && (this.k >= last || this.ended)) {
+        if (!REDUCED) { this.k = last; this.T = this.total; this.ended = true; this.held = false; }
+        this.flash("next");
+        this.deselect();
+        return;
+      }
+      this.goto(clamp(this.k + (dir > 0 ? 1 : -1), 0, last));
+      this.flash(dir > 0 ? "next" : "prev");
+    }
+    // A tap pauses or plays (one that has ended plays from the start); the first one on a box also shows what the
+    // gestures do
+    tap() {
+      const first = !this.selected;
+      this.select();
+      if (!REDUCED) {
+        if (this.ended) { this.ended = false; this.fromLead(); this.cur = -1; this.doneAt = null; this.held = false; }
+        else this.held = !this.held;
+      }
+      this.flash(first || REDUCED ? "select" : "toggle");
+    }
+    select() {
+      if (this.selected) return;
+      if (picked) picked.deselect();
+      picked = this;
+      this.selected = tapped = true;
+      root.classList.add("ctl-used");   // (the transport's note on the keys has done its job)
+      this.sync();
+    }
+    // The box lets go when it leaves the screen, when its animation ends, or when another box is selected. A pause the
+    // reader made goes with it, so the chapter plays on when it is next in focus.
+    deselect() {
+      if (!this.selected) return;
+      this.selected = false;
+      if (picked === this) picked = null;
+      if (!REDUCED) this.held = false;
+      this.sync();
+    }
+    // the box's classes, and what its controls say, for the state it is in now
+    sync() {
+      const play = this.held || this.ended;
+      this.box.classList.toggle("selected", this.selected);
+      this.box.classList.toggle("paused", this.selected && play && !REDUCED);
+      this.glyph.innerHTML = play ? ICON_PLAY : ICON_PAUSE;
+      const steps = TAP === "Tap" ? "swipe \u2190 next \u00b7 swipe \u2192 back" : "arrow keys or swipe to step";
+      const what = `${TAP} to ${this.ended ? "replay" : play ? "play" : "pause"}`;
+      const line = REDUCED ? steps : this.ended ? what : `${what} \u00b7 ${steps}`;
+      this.hintEl.innerHTML = (line.charAt(0).toUpperCase() + line.slice(1))
+        .replace(/[←→]/g, '<span class="ctl-ar">$&</span>');   // (the text face's arrows are tiny)
+      this.syncTransport();
+      wake();
+    }
+    // the transport's middle button says what pressing it does: pause, play, or play again
+    syncTransport() {
+      const s = this.ended ? "replay" : this.held ? "play" : "pause";
+      if (s === this.tpState) return;
+      this.tpState = s;
+      this.tpPlay.innerHTML = s === "pause" ? ICON_PAUSE : s === "play" ? ICON_PLAY : ICON_REPLAY;
+      this.tpPlay.setAttribute("aria-label", s === "pause" ? "Pause" : s === "play" ? "Play" : "Play again");
+    }
+    // The controls show for a moment (FLASH), then fade: on selecting, the glyph (what a tap does next), the chevrons
+    // and a line saying what the gestures do; after a tap, the glyph; after a swipe, its chevron.
+    flash(kind) {
+      this.sync();
+      const o = this.ctl, parts = kind === "select" ? ["prev", "next", "hint", ...(REDUCED ? [] : ["glyph"])]
+        : kind === "toggle" ? ["glyph"] : [kind];
+      o.className = "ctl";
+      void o.offsetWidth;     // (so a repeated flash starts again)
+      o.classList.add(...parts.map(p => "show-" + p));
+      clearTimeout(this.flashT);
+      this.flashT = setTimeout(() => { o.className = "ctl"; }, FLASH * 1e3);
+    }
+    // the bar: the clicks before the one on screen are full, and that one fills over its playing and its reading hold,
+    // so it is full as the next click starts (with reduced motion, as each click shows its last frame)
+    progress() {
+      const c = this.cur, g = this.segs[c];
+      let p = 1;
+      if (!REDUCED && !this.ended && g) {
+        const end = g.start + g.dur, left = this.T < end - 1e-4 ? this.playLen(this.T, end) : 0;
+        const until = c === this.segs.length - 1 ? this.clock + left
+          : Math.max((this.doneAt ?? this.clock + left) + HOLD, this.readUntil());
+        p = until > this.curAt + 1e-3 ? clamp((this.clock - this.curAt) / (until - this.curAt)) : 1;
+        p = Math.max(p, this.played);   // (it never runs back when a title showing late adds reading time)
+      }
+      this.played = p;
+      this.segEls.forEach((s, i) => css(s, "--p", (i < c ? 1 : i > c ? 0 : p).toFixed(3)));
+    }
+    load() {
+      if (this.state !== "idle") return;
+      this.state = "loading";
+      if (this.inline) {
+        const S = (window.INLINE_SCENES || {})[this.el.dataset.scene];
+        if (S) this.attach(S); else this.state = "failed";
+        return;
+      }
+      // the stage stays hidden, and the chapter doesn't play, until the scene has drawn where it starts, with its videos
+      // and fonts in (swap, as for a reload in the other layout), so the reader's first sight of it is its opening
+      if (!this.swap) { this.swap = { at: null, n: 0, first: true }; this.shown = 0; }
+      // on a phone held upright the scene loads its portrait layout, and the frame starts out tall (3:4 until the
+      // scene says its size). gen drops a load that was overtaken by a change of layout.
+      const gen = ++this.gen, src = this.iframe.dataset.src + (portrait ? "&portrait" : "");
+      this.mode = portrait;
+      if (portrait && !this.el.classList.contains("tall")) this.frameShape(3, 4);
+      const want = new URL(src, location.href).href;
+      const onload = () => {
+        if (gen !== this.gen) return;
+        const a = frameAt(this.iframe), S = a && a.S;
+        if (!S && a && a.href === "about:blank") return;
+        // the browser's Back or Forward took the frame to the page it had at that entry (the other layout): load ours
+        if (a && a.href !== want) { a.w.location.replace(want); return; }
+        this.iframe.removeEventListener("load", onload);
+        if (!S) { this.state = "failed"; return; }
+        this.attach(S, gen);
+      };
+      this.iframe.addEventListener("load", onload);
+      // a reload in the other layout replaces the frame's page: a new src would add a history entry, and Back (or a
+      // modal's close, js/modal.js) would then take the frame back to the old layout instead of leaving
+      const fw = frameAt(this.iframe);   // (null after a failed load: its error page is another origin's, so set src)
+      if (fw && fw.href !== "about:blank") fw.w.location.replace(want);
+      else this.iframe.src = src;
+    }
+    // the frame's shape: the deck's 16:9 (w = 0), or a scene's tall portrait stage
+    frameShape(w, h) {
+      this.el.classList.toggle("tall", !!w);
+      if (w) { this.el.style.setProperty("--scene-ar", `${w} / ${h}`); this.el.style.setProperty("--scene-r", (w / h).toFixed(4)); }
+      this.fitCard();
+    }
+    // the layout changed between landscape and portrait: the scene loads again in the other one when it next comes near
+    reset() {
+      this.gen++;
+      this.api = null;
+      this.state = "idle";
+      this.capHTML = null;
+      this.frameShape(0);
+      this.shown = 0;         // hidden until the scene has drawn again, so the box never shows blank or half drawn
+      this.swap = { at: null, n: 0 };
+    }
+    attach(S, gen) {
+        S.ready.then(info => {
+          if (gen !== undefined && gen !== this.gen) return;
+          if (!info) { this.state = "failed"; return; }
+          this.api = S;
+          this.state = "ready";
+          S.setNarrow(narrow || short);
+          if (!this.inline) this.frameShape(info.h > info.w ? info.w : 0, info.h);
+          this.caps = S.captions ? S.captions() : null;
+          this.fill = info.fill || null;
+          this.stageW = info.w;
+          this.fitCard();
+          // the scene's own timing wins over the one written into the page
+          const durs = info.segs.map(s => s.dur);
+          // (exactly, so its beats line up with the clicks; the page lays itself out again only if it was off)
+          const off = durs.length !== this.segs.length || durs.some((d, i) => Math.abs(d - this.segs[i].dur) > .02);
+          this.setSegs(durs);
+          if (off) relayout();
+          // reduced motion: the first click's last frame
+          if (REDUCED && this.T === 0) this.T = this.segs[0].dur;
+          else if (this.T === 0) this.fromLead();
+          if (this.swap) this.swap.at = performance.now();
+          // the frame loop draws it, and a video in it that finishes seeking or loading gets drawn again (wake)
+          if (!this.inline) try {
+            for (const ev of ["seeked", "loadeddata", "canplay"]) this.iframe.contentDocument.addEventListener(ev, wake, true);
+          } catch (e) {}
+          wake();
+        });
+    }
+    style(y) {
+      if (this.noHead) { this.stageO = 1; return; }   // part of the page: it just scrolls in and out
+      const a = y / this.headLen;                     // < 0 while the chapter rises into view
+      // the headline rises in with the chapter, holds, then lifts away as the stage comes forward
+      const hin = smooth(-.62, -.1, a), hout = smooth(.26, .6, a), ho = hin * (1 - hout);
+      css(this.head, "opacity", ho.toFixed(3));
+      css(this.head, "visibility", ho < .003 ? "hidden" : "visible");
+      css(this.head, "transform", `translate3d(0,${(-hout * 9).toFixed(2)}vh,0) scale(${(1 - .04 * hout).toFixed(4)})`);
+      // the stage waits faintly behind it, then comes forward; it dissolves as it scrolls away
+      const r = smooth(.42, .88, a), e = clamp((y - this.pinLen) / vh);
+      const o = r * (1 - smooth(0, .55, e));
+      const sc = lerp(.9, 1, r) * (1 - .05 * smooth(0, 1, e));
+      this.stageO = o;
+      const so = o * this.shown;
+      css(this.stage, "opacity", so.toFixed(3));
+      // (not while it holds the focus: Chrome drops the focus from a hidden box, and a Tab onto a box lands while the
+      // stage is still faint, before the glide brings it forward)
+      css(this.stage, "visibility", so < .003 && !this.stage.contains(document.activeElement) ? "hidden" : "visible");
+      css(this.stage, "transform", `scale(${sc.toFixed(4)})`);
+    }
+    // in focus: the stage has come forward (or, without a headline, is mostly on screen) and hasn't dissolved yet
+    inFocus(y) {
+      if (this.noHead) return y > -.4 * vh && y < this.pinLen + .35 * vh;
+      return y >= Z0 * this.headLen && this.stageO > .5;
+    }
+    update(now, dt) {
+      const y = sy - topOf(this.el);
+      // Back or Forward across an entry made before the scene last reloaded (the modal's close is a Back) takes its frame
+      // back to the page it had then, which isn't the scene this chapter holds: start over with the layout of now
+      if (this.api && !this.inline && frameAt(this.iframe)?.S !== this.api) this.reset();
+      // A scene's page takes one long task to parse (Minecraft's: 70-150 ms on a phone), so it loads 2.5 screens ahead
+      // at a moment when nothing moves: no animation plays (between clicks or chapters, or once a chapter has ended),
+      // the page doesn't glide, and the reader has stopped scrolling or is past LOAD_SOON screens from it, where no
+      // chapter is in focus. Within LOAD_NOW screens it loads whatever moves.
+      const wait = moving || scrolling(now) && y < -LOAD_SOON * vh;
+      if (y > -2.5 * vh && y < this.pinLen + 1.5 * vh && (this.inline || !wait || y > -LOAD_NOW * vh)) this.load();
+      const visible = y > -vh && y < this.pinLen + vh;
+      // (perf2 10-16: and once on the first frame, so a chapter the reader hasn't reached yet starts out hidden, as one
+      // scrolled past is: its scene's frame then doesn't render behind every frame while it waits far down the page)
+      if (visible || this.wasVisible || !this.styled) { this.style(y); this.styled = true; }
+      // (perf2 10-16) a figure drawn in the page (no headline, so style() never hides it) is hidden while it is more than
+      // .6 of a screen off the screen: off the screen it still cost every scroll frame its paint and layer updates
+      // (both figures: ~15% of the main thread's time). The margin keeps a fast flick from showing it a frame late.
+      if (this.noHead) {
+        const near = y > -1.6 * vh && y < this.pinLen + 1.6 * vh;
+        if (near !== this.near && (near || !this.stage.contains(document.activeElement))) {
+          this.near = near;
+          css(this.stage, "visibility", near ? "" : "hidden");
+        }
+      }
+      if (this.selected && this.stageO * this.shown < .05) this.deselect();   // (dissolved: as good as off the screen)
+      // a chapter that played to its end plays from the start when the reader comes to it again from above
+      if (visible && !this.wasVisible && y < 0 && this.ended) { this.ended = false; this.fromLead(); this.cur = -1; }
+      if (this.state === "failed") this.swap = null;   // (a scene that failed to load shows its empty box)
+      // (it holds its opening while the stage fades in after a load)
+      this.live = !!this.api && !this.swap && this.shown >= 1 && visible && this.wasVisible && this.inFocus(y) && !this.held && !this.ended;
+      // coming into focus, the transport shows for a while, until the reader has used the controls (cue, below)
+      const foc = !!this.api && this.shown >= 1 && visible && this.inFocus(y);
+      if (foc && !this.foc && !tapped) this.cue(0, 3.2);
+      this.foc = foc;
+      if (visible) this.syncTransport();
+      this.rate = 0;
+      if (this.live) this.play(dt);
+      if (visible && this.api) this.settle(y, now);
+      if (this.api) {
+        if (visible) {
+          this.api.render(this.T, { rate: this.rate, visible: this.stageO > .04 });
+          if (narrow || short) this.fillFrame();
+          if ((narrow || short) && this.capEl) this.caption();
+          this.updateBeats();
+          // reloaded in the other layout: the stage fades back in once the scene has drawn the click it was on (a few
+          // frames, with its videos done seeking, or 0.6 s at most)
+          const w = this.swap;
+          // (a first load waits up to 4 s for slow videos)
+          if (w && w.at !== null && (++w.n > (w.first ? 240 : 36) || w.n > 2 && !this.seeking())) this.swap = null;
+        } else if (this.wasVisible) this.api.pause();
+      }
+      if (!this.swap && this.shown < 1) this.shown = REDUCED ? 1 : Math.min(1, this.shown + dt / .25);
+      // the frame loop keeps running while this chapter plays (or holds between clicks), or fades back in (wake)
+      this.busy = this.live || (!this.swap ? this.shown < 1 : visible && this.swap.at !== null);
+      // a slow connection: a spinner shows once the stage, in place, has waited 0.6 s for its scene or a click for its
+      // videos (css .wait)
+      const spin = visible && this.stageO > .5 && (this.shown < .05 && this.state !== "failed" || this.live && this.stall > .6);
+      this.waitAt = spin ? this.waitAt ?? now : null;
+      this.el.classList.toggle("wait", spin && now - this.waitAt > 600);
+      this.busy ||= spin;
+      // a phone held sideways: the nav makes way while the stage holds the screen (relayout, the frame loop)
+      this.staged = visible && (this.noHead ? y > -.2 * vh && y < this.pinLen + .2 * vh : this.stageO > .5);
+      this.wasVisible = visible;
+    }
+    starved(dt) {
+      let s = false;
+      if (!this.inline) try { s = [...this.iframe.contentDocument.querySelectorAll("video")].some(v => v.style.visibility === "visible"
+        && v.currentSrc && !v.error && v.readyState < 1 && v.networkState === 2); } catch (e) {}
+      // (only a video that hasn't even its size yet: iOS Safari decodes no frame of a paused video until it plays, so
+      // waiting for one held the click for good on a phone, while the clip had long downloaded)
+      this.stall = s ? (this.stall || 0) + dt : 0;
+      return s && this.stall < 8;
+    }
+    seeking() {
+      // a video on show that is seeking, or has no frame yet; or the scene's fonts still loading
+      try { const d = this.iframe.contentDocument;
+            return d.fonts.status !== "loaded" || [...d.querySelectorAll("video")].some(v => v.seeking ||
+              v.readyState < 1 && v.currentSrc && !v.error && v.style.visibility !== "hidden" && +(v.style.opacity || 1) > 0); }
+      catch (e) { return false; }
+    }
+    // the speed at scene time T (data-speed)
+    speedAt(T) {
+      let v = 1;
+      for (const s of this.speeds) if (s.at <= T + 1e-6) v = s.v;
+      return v;
+    }
+    // seconds of the reader's time that scene times a to b take to play
+    playLen(a, b) {
+      let t = 0;
+      this.speeds.forEach((s, i) => {
+        const lo = Math.max(a, i ? s.at : -Infinity), hi = Math.min(b, i + 1 < this.speeds.length ? this.speeds[i + 1].at : Infinity);
+        if (hi > lo) t += (hi - lo) / s.v;
+      });
+      return t;
+    }
+    // One frame of playing: the click runs to its end at the chapter's speed (the scene's videos play natively at that
+    // rate), then holds its last frame until its text has had time to be read, and the next click follows. The last
+    // click holds, and the chapter has ended.
+    play(dt) {
+      const g = this.segs[this.k], end = g.start + g.dur;
+      if (this.T < g.start) this.T = g.start;
+      // a slow connection: a video on show with no frame yet (or fetching the one it was sent to) holds the click, its
+      // clock and bar with it, rather than it playing on over an empty or frozen frame (starved; 8 s at most)
+      if (this.T < end - 1e-4 && this.starved(dt)) return;
+      this.clock += dt;
+      if (this.T < end - 1e-4) {
+        // a change of speed within the frame takes effect where it falls
+        let v = this.speedAt(this.T), T = this.T + dt * v;
+        const next = this.speeds.find(s => s.at > this.T + 1e-6);
+        if (next && T > next.at) T = next.at + (dt - (next.at - this.T) / v) * next.v;
+        this.T = Math.min(end, T);
+        this.rate = v;
+        this.doneAt = null;
+        return;
+      }
+      this.T = end;
+      if (this.k === this.segs.length - 1) { this.ended = true; this.deselect(); return; }
+      if (this.doneAt === null) this.doneAt = this.clock;
+      if (this.clock - this.doneAt >= HOLD && this.clock >= this.readUntil()) { this.k++; this.doneAt = null; }
+    }
+    // when the click on screen has been read (clock), the later of: its data-read value, counted from the click's start (for the first
+    // click, from where it plays from, past its still opening); the word count, from when the text (the step in the
+    // list, or the scene's title as it is now) first showed, which can be late in a long click
+    readUntil() {
+      const c = this.cur, d = this.segs[c] ? this.segs[c].dur : 0;
+      let t = this.curAt + .4;
+      if (this.read[c] != null) {
+        const a = this.segs[c].start, from = c === 0 ? Math.min(Math.max(a, this.lead), a + d) : a;
+        t = this.curAt + this.playLen(from, a + d) + Math.max(0, (this.read[c] - d) * READ_PACE);
+      }
+      const text = this.stepList ? (this.dots[c] || {}).textContent || "" : this.capText;
+      const words = text.split(/\s+/).filter(Boolean).length;
+      if (words) t = Math.max(t, (this.stepList ? this.curAt : this.capAt) + words / READ_WPS);
+      return t;
+    }
+    // The caption fades with the scene's title and note (c.o, c.so). When it changes height, its grey top (a layer
+    // behind it at --cap-top, css/site.css) and its text glide to the new height together, so the box never jumps.
+    caption() {
+      // a resize of the caption block (fitCard, fitShort, fonts) has it re-measure its grey top
+      if (!this.capRO) (this.capRO = new ResizeObserver(() => { this.capHTML = null; })).observe(this.capEl);
+      const c = this.api.caption();
+      const html = c ? `<div class="cap-in"><span class="cap-t">${c.html}</span>${c.sub ? `<span class="sub"${c.subColor ? ` style="color:${c.subColor}"` : ""}>${c.sub}</span>` : ""}</div>` : "";
+      if (html !== this.capHTML) {
+        const old = this.capEl.firstElementChild, tf = old ? getComputedStyle(old).transform : "none";
+        const from = old ? old.offsetTop + (tf === "none" ? 0 : new DOMMatrix(tf).m42) : null;
+        this.capHTML = html;
+        this.capEl.innerHTML = html;
+        const el = this.capEl.firstElementChild, top = el ? el.offsetTop : this.capEl.offsetHeight;
+        // a caption arriving where there was none (the scene has just loaded) shows at once, grey and all
+        if (!old) this.capEl.style.setProperty("--cap-dur", "0s");
+        this.capEl.style.setProperty("--cap-top", top + "px");
+        if (!old) { void getComputedStyle(this.capEl, "::before").transform; this.capEl.style.removeProperty("--cap-dur"); }
+        if (el && from !== null && Math.abs(from - top) > .5) {   // the text starts where the old text was
+          el.style.transition = "none";
+          el.style.transform = `translateY(${(from - top).toFixed(1)}px)`;
+          void el.offsetWidth;
+          el.style.transition = el.style.transform = "";
+        }
+        this.capO = this.capSO = null;
+      }
+      if (!c) return;
+      const el = this.capEl.firstElementChild;
+      const o = c.o.toFixed(2), so = c.so.toFixed(2);
+      if (o !== this.capO) { this.capO = o; el.firstElementChild.style.opacity = o; }
+      if (c.sub && so !== this.capSO) { this.capSO = so; el.lastElementChild.style.opacity = so; }
+    }
+    // A reader who stops while the headline lifts away and the stage comes forward is carried through the change, the
+    // way they were scrolling: on to the stage, fully forward, or back to the headline.
+    settle(y, now) {
+      if (glide || scrolling(now) || REDUCED) return;
+      // ... and one who stops while the stage scrolls away is carried on to what follows, or back to the full stage
+      if (y > this.pinLen + 2 && y < this.pinLen + vh - 2) {
+        glideTo(readerDir < 0 ? topOf(this.el) + this.pinLen : topOf(this.el) + this.pinLen + vh, 450);
+        return;
+      }
+      if (this.noHead) return;
+      const a = y / this.headLen;
+      if (a <= SETTLE || a >= REST - .01) return;
+      glideTo(readerDir < 0 ? topOf(this.el) + .1 * this.headLen : this.restY(), 450);
+    }
+    updateBeats() {
+      // the scene's title, and when it last changed
+      if (!this.stepList) {
+        const c = this.api.caption(), t = c ? (c.html + " " + (c.sub || "")).replace(/<[^>]*>/g, " ").trim() : "";
+        if (t !== this.capText) { this.capText = t; this.capAt = this.clock; }
+      }
+      // the click being played counts from its very start (a step picked from the list lights at once, not the one
+      // before it)
+      let cur = clamp(this.k, 0, this.segs.length - 1);
+      this.segs.forEach((s, i) => { if (this.T >= s.start + .05) cur = Math.max(cur, i); });
+      // a click's clock starts as it starts playing (click 0 waits through the headline, with the stage still faint)
+      if (cur !== this.cur || (cur === 0 && this.T < this.segs[0].start + .05)) {
+        this.cur = cur;
+        this.curAt = this.clock;
+        this.played = 0;
+        if (cur === 0) this.capAt = this.clock;
+      }
+      // a written step list lights the current step and shows how far it has played
+      this.dots.forEach((d, i) => {
+        d.classList.toggle("on", i === cur);
+        d.classList.toggle("done", i < cur);
+        const s = this.segs[i], p = i === cur ? clamp((this.T - s.start) / s.dur) : 0;
+        css(d, "--p", p.toFixed(3));
+      });
+      this.progress();
+    }
+  }
+
+  // ------------------------------------------------------------------ controls: progress, then select, pause and step
+  // Each animation's box (the frame of a scene, or the figure drawn in the page) has a thin bar along its bottom, one
+  // segment per click (progress). A tap or click pauses or plays, a swipe left goes on to the next click and a swipe
+  // right back to the previous one (the content moves with the finger, as a carousel pages), each showing its control
+  // for a moment (flash). On a desktop the arrow keys, a sideways trackpad swipe and a mouse drag step too, and Enter
+  // or Space on a focused box pause. A finger's first move decides: mostly sideways, and the box keeps the gesture (the
+  // page doesn't scroll under it); otherwise the page scrolls as usual.
+  // Each box also has a transport: previous, pause or play, and next, as buttons that work at once (nothing to select
+  // first), with a note on the keys (or the swipe) until the reader has used the controls. On a wide screen it floats
+  // over the bottom of the box, shown while the pointer moves over the box, as the chapter comes into focus and after a
+  // key (cue), and always on a touch screen. Where there is room it sits under the box instead and stays (html.ctl-below:
+  // narrow screens, where fitCard keeps CTL_ROOM for it, and wide ones with room under the frame); on a phone held
+  // sideways it stands beside the box (fitShort). css/site.css "controls: the transport".
+  const FLASH = 1.1;      // seconds the controls show before they fade (css: .45 s)
+  const SWIPE = 40;       // px the mouse moves sideways, and 1.5 times as far as up or down, to step
+  const FLICK = 30;       // px a finger moves sideways, once the gesture is the box's, to step
+  const LOCK = 8;         // px a finger moves before the gesture's direction is decided
+  const LOCK_RATIO = 1.5; // how much more sideways than up or down a move must be to count as a swipe
+  const SWIPE_LATE = 1.5, SWIPE_RATIO = 1.2;   // a swipe the page began scrolling: FLICKs sideways, and how much more than up or down
+  const ICON_PAUSE = '<svg viewBox="0 0 36 36"><rect x="11.5" y="10" width="4.6" height="16" rx="1.4"/><rect x="19.9" y="10" width="4.6" height="16" rx="1.4"/></svg>';
+  const ICON_PLAY = '<svg viewBox="0 0 36 36"><path d="M13.2 10.4v15.2c0 .9 1 1.4 1.7.9l12-7.6c.7-.4.7-1.4 0-1.8l-12-7.6c-.7-.5-1.7 0-1.7.9z"/></svg>';
+  const CHEVRON = '<svg viewBox="0 0 24 24"><path d="M9.5 5.5L16 12l-6.5 6.5"/></svg>';
+  const ICON_REPLAY = '<svg class="st" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/></svg>';
+  const KEY = d => `<kbd><svg viewBox="0 0 12 12"${d > 0 ? ' style="transform:scaleX(-1)"' : ""}><path d="M10 6H2.5M5.5 3L2.5 6l3 3"/></svg></kbd>`;
+  let picked = null;      // the selected chapter
+  let tapped = false;     // the reader has selected a box (the first chapter's hint has done its job)
+  const boxIO = new IntersectionObserver(es => es.forEach(e => {
+    if (!e.isIntersecting) { const c = chapters.find(x => x.box === e.target); if (c) c.deselect(); }
+  }));
+  function controls(c) {
+    const box = c.box;
+    box.classList.add("ctl-box");
+    box.tabIndex = 0;
+    box.setAttribute("role", "group");
+    box.setAttribute("aria-roledescription", "animation");
+    const name = c.iframe ? c.iframe.title : `Figure: ${($(".eyebrow", c.el) || {}).textContent || ""}`;
+    box.setAttribute("aria-label", `${name}. Enter pauses or plays it, and the arrow keys step through it.`);
+    box.insertAdjacentHTML("beforeend", '<div class="ctl" aria-hidden="true"><span class="ctl-side ctl-prev">' + CHEVRON +
+      '</span><span class="ctl-glyph"></span><span class="ctl-side ctl-next">' + CHEVRON + '</span><span class="ctl-hint">' +
+      '</span></div><div class="pbar" aria-hidden="true"></div>');
+    c.ctl = $(".ctl", box);
+    c.glyph = $(".ctl-glyph", box);
+    c.hintEl = $(".ctl-hint", box);
+    c.bar = $(".pbar", box);
+    c.setSegs(c.segs.map(s => s.dur));
+    boxIO.observe(box);
+    // the transport. A scene's frame clips what it holds, so a scene's transport sits in the stage beside the frame; a
+    // figure drawn in the page holds its own.
+    const tp = document.createElement("div"), chev = CHEVRON.replace("<svg", '<svg class="st"');
+    tp.className = "ctl-bar";
+    tp.setAttribute("role", "group");
+    tp.setAttribute("aria-label", "Animation controls");
+    tp.innerHTML = `<button type="button" class="ctl-btn ctl-b-prev" data-dir="-1" aria-label="Previous step">${chev}</button>` +
+      '<button type="button" class="ctl-btn ctl-b-play"></button>' +
+      `<button type="button" class="ctl-btn ctl-b-next" data-dir="1" aria-label="Next step">${chev}</button>` +
+      `<span class="ctl-tip" aria-hidden="true">${TAP === "Tap" ? "or swipe" : `or press ${KEY(-1)}${KEY(1)}`}</span>`;
+    (c.inline ? box : c.stage).append(tp);
+    c.tp = tp;
+    c.tpPlay = $(".ctl-b-play", tp);
+    c.syncTransport();
+    const [tpPrev, , tpNext] = tp.querySelectorAll("button");
+    tp.addEventListener("click", e => {
+      const b = e.target.closest("button");
+      if (b) { if (b.dataset.dir) c.step(+b.dataset.dir); else c.tap(); }
+    });
+    // shown for s seconds (wide screens, css), with the button a key stands for lit for a moment
+    let tpT = 0, hitT = 0;
+    c.cue = (dir, s = 1.8) => {
+      tp.classList.add("awake");
+      clearTimeout(tpT);
+      tpT = setTimeout(() => tp.classList.remove("awake"), s * 1e3);
+      if (!dir) return;
+      const b = dir > 0 ? tpNext : tpPrev;
+      b.classList.add("hit");
+      clearTimeout(hitT);
+      hitT = setTimeout(() => b.classList.remove("hit"), 260);
+    };
+    for (const el of [box, tp]) el.addEventListener("pointermove", e => { if (e.pointerType !== "touch") c.cue(0, 2.4); });
+    // a finger: a tap, or a sideways swipe. Touch events rather than pointer events, since only a cancelled touchmove
+    // stops the page from scrolling (with touch-action: pan-y a slightly diagonal swipe still scrolls, and the browser
+    // then cancels the pointer).
+    let f = null;
+    box.addEventListener("touchstart", e => {
+      const t = e.touches[0];
+      f = e.touches.length > 1 || e.target.closest(".ctl-bar") ? null : { x: t.clientX, y: t.clientY, t: e.timeStamp, dir: null, moved: false,
+        stop: !!glide || performance.now() < holdUntil };   // (the page was still moving: a finger landing to stop it)
+    }, { passive: true });
+    box.addEventListener("touchmove", e => {
+      if (!f) return;
+      if (e.touches.length > 1) { f = null; return; }
+      const t = e.touches[0], dx = t.clientX - f.x, dy = t.clientY - f.y;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) f.moved = true;
+      // (only a clearly sideways start is a swipe: a thumb's scroll often arcs sideways for its first few px)
+      if (!f.dir && Math.max(Math.abs(dx), Math.abs(dy)) > LOCK) f.dir = Math.abs(dx) > LOCK_RATIO * Math.abs(dy) ? "x" : "y";
+      // (before the direction is decided, only a clearly sideways move: Safari lets a swipe scroll or not by its first
+      // touchmove, and a finger's first pixel or two of jitter at the start of a scroll up or down is often sideways)
+      const side = !f.dir && Math.abs(dx) >= 3 && Math.abs(dx) > 2 * Math.abs(dy);
+      if ((f.dir === "x" || side) && e.cancelable) e.preventDefault();   // the box's: no scrolling
+      f.dx = dx; f.dy = dy;
+    }, { passive: false });
+    let gestureAt = -1e9;   // the last tap or swipe the touch or pointer handlers took (click, below)
+    box.addEventListener("touchend", e => {
+      if (!f) return;
+      const s = f;
+      f = null;
+      gestureAt = performance.now();
+      // a swipe: the box's from its start, or one Safari began scrolling (it decides on the first pixels, which are often
+      // diagonal) that still went clearly more sideways than up or down
+      const sideways = Math.abs(s.dx) > SWIPE_LATE * FLICK && Math.abs(s.dx) > SWIPE_RATIO * Math.abs(s.dy || 0);
+      if ((s.dir === "x" && Math.abs(s.dx) > FLICK) || sideways) c.step(s.dx < 0 ? 1 : -1);
+      // (a finger that lands to stop the page gliding or coasting on isn't a tap)
+      else if (!s.moved && !s.stop && e.timeStamp - s.t < 800) { e.preventDefault(); c.tap(); }   // (and no click after it)
+    }, { passive: false });
+    box.addEventListener("touchcancel", () => { f = null; });
+    // the mouse or a pen: a click, or a sideways drag
+    let g = null;
+    box.addEventListener("pointerdown", e => {
+      g = e.pointerType === "touch" || e.button > 0 || !e.isPrimary || e.target.closest(".ctl-bar") ? null
+        : { id: e.pointerId, x: e.clientX, y: e.clientY, t: e.timeStamp, side: false, moved: false };
+      if (g && e.pointerType === "mouse") box.setPointerCapture(e.pointerId);
+    });
+    box.addEventListener("pointermove", e => {
+      if (!g || e.pointerId !== g.id) return;
+      const dx = e.clientX - g.x, dy = e.clientY - g.y;
+      if (Math.abs(dx) > SWIPE && Math.abs(dx) > 1.5 * Math.abs(dy)) g.side = true;
+      if (Math.abs(dx) > 10 || Math.abs(dy) > 10) g.moved = true;
+    });
+    box.addEventListener("pointerup", e => {
+      if (!g || e.pointerId !== g.id) return;
+      const s = g, dx = e.clientX - g.x;
+      g = null;
+      gestureAt = performance.now();
+      if (s.side && Math.abs(dx) > SWIPE) c.step(dx < 0 ? 1 : -1);
+      else if (!s.moved && e.timeStamp - s.t < 800) c.tap();
+    });
+    box.addEventListener("pointercancel", () => { g = null; });   // the browser took it: the page scrolls
+    // a click that came without them: WebKit sends only a click for a touch over a scene's frame (the iframe under the
+    // box), and so does a screen reader activating the box
+    box.addEventListener("click", e => {
+      if (performance.now() - gestureAt < 300 || e.target.closest(".ctl-bar, a, button")) return;   // (it was one of them)
+      c.tap();
+    });
+    box.addEventListener("dragstart", e => e.preventDefault());
+    // Tab onto a scene's box: the browser scrolls the least it can to show it, which is the chapter's top, where the
+    // stage is still faint behind the headline. Bring the stage forward instead.
+    box.addEventListener("focus", () => requestAnimationFrame(() => {
+      const y = scrollY - topOf(c.el);
+      if (!c.noHead && (y < Z0 * c.headLen || y > c.pinLen)) glideTo(c.restY(), 450);
+    }));
+    // a sideways trackpad swipe: one step per gesture (it ends once its events stop for 0.3 s, momentum included). With
+    // natural scrolling, fingers moving left send positive deltaX: next, as a finger on a phone.
+    const w = { at: -1e9, sum: 0, done: false };
+    const wheel = e => {
+      if (Math.abs(e.deltaX) <= 1.5 * Math.abs(e.deltaY)) return;   // up or down: the page scrolls
+      e.preventDefault();     // (and the browser doesn't take it as going back a page)
+      // (momentum never turns back: a clear move the other way is a new gesture, however soon it follows)
+      if (e.timeStamp - w.at > 300 || w.sum * e.deltaX < 0 && Math.abs(e.deltaX) >= 8) { w.sum = 0; w.done = false; }
+      w.at = e.timeStamp;
+      w.sum += e.deltaX * (e.deltaMode === 1 ? 16 : 1);
+      if (!w.done && Math.abs(w.sum) > 50) { w.done = true; c.step(w.sum > 0 ? 1 : -1); }
+    };
+    box.addEventListener("wheel", wheel, { passive: false });
+    if (!c.inline) tp.addEventListener("wheel", wheel, { passive: false });   // (a scene's transport is outside its box)
+  }
+  // keys: Enter or Space on a focused box; the arrows on the box in view (the focused or selected one if it still is,
+  // else the one filling most of the screen), from anywhere but a field, or a control that takes the arrows itself (the
+  // gallery, the survival tabs) while that is on the screen: a button keeps the focus after a click, long after the
+  // reader has scrolled on. (A box keeps the focus after a click too, and the figure chapters count as fully shown even
+  // off the screen, so neither alone will do.)
+  const inView = x => {
+    if (!x.api || x.stageO * x.shown < .5) return 0;
+    const r = x.box.getBoundingClientRect(), h = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);
+    return h > 0 ? h / Math.min(r.height, innerHeight) : 0;
+  };
+  const onScreen = () => chapters.map(x => [inView(x), x]).filter(a => a[0] > .5).sort((a, b) => b[0] - a[0])[0]?.[1];
+  const takesArrows = t => {
+    if (t.closest("input, textarea, select, [contenteditable]")) return true;
+    const r = t.closest(".gallery-track, [role=tablist]")?.getBoundingClientRect();
+    return !!r && r.bottom > 0 && r.top < innerHeight;
+  };
+  addEventListener("keydown", e => {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented || !(e.target instanceof Element)) return;
+    const t = e.target, box = t.closest(".ctl-box"), tp = t.closest(".ctl-bar");
+    const mine = (box || tp) && chapters.find(x => x.box === box || x.tp === tp);
+    const own = mine && inView(mine) > .5 ? mine : null;
+    // a transport button keeps the focus after a click, long after the reader has scrolled its box away: Space or Enter
+    // then would press it and select (and pause) a box off the screen. Let it go instead, so Space pages down.
+    if (tp && mine && !inView(mine) && (e.key === " " || e.key === "Enter")) { t.blur(); return; }
+    const c = own || (picked && inView(picked) > .5 ? picked : onScreen());
+    if (!c) return;
+    if (own && t === own.box && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); c.tap(); }
+    else if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && (own || !takesArrows(t))) {
+      e.preventDefault();
+      const dir = e.key === "ArrowRight" ? 1 : -1;
+      c.step(dir);
+      c.cue(dir);
+    }
+  });
+
+  const chapters = $$(".chapter").map(el => new Chapter(el));
+
+  // ------------------------------------------------------------------ survival mode: the lights go down
+  const backdrop = $("#backdrop"), cinema = $("#survival"), cScreen = $(".cinema-screen");
+  const cVideo = $(".cinema-video"), cCap = $(".cinema-caption"), segBtns = $$(".segmented button");
+  let cinemaLoaded = false, cinemaOn = false;
+  // each tab names its clip and the clip's shape (data-ar); a two-up clip also has a stacked version, plan above
+  // execution, that a phone held upright plays (data-portrait-video, built by tools/build_gallery_portrait.py)
+  const clip = btn => portrait && btn.dataset.portraitVideo ? [btn.dataset.portraitVideo, btn.dataset.portraitAr]
+    : [btn.dataset.video, btn.dataset.ar];
+  // the screen takes the clip's shape before the clip loads, so nothing below it jumps; between tabs, and when the
+  // plan is hidden or shown, its size glides. --film is the clip's shape, --ar the screen's: the clip's, or with the
+  // plan hidden the execution's alone (16:9), which crops the clip to its execution half (css .sv-film)
+  let planOff = false;
+  const cFig = $(".cinema-figure"), planBtn = $(".sv-toggle");
+  function shape(ar, glideIt) {
+    const w0 = cScreen.offsetWidth, h0 = cScreen.offsetHeight;
+    cScreen.style.width = cScreen.style.height = "";
+    cScreen.style.setProperty("--film", ar);
+    cScreen.style.setProperty("--ar", planOff ? "16 / 9" : ar);
+    const w1 = cScreen.offsetWidth, h1 = cScreen.offsetHeight;
+    if (!glideIt || REDUCED || Math.abs(h1 - h0) < 1 && Math.abs(w1 - w0) < 1) return;
+    cScreen.style.width = w0 + "px";
+    cScreen.style.height = h0 + "px";
+    void cScreen.offsetHeight;   // start from the old size
+    cScreen.style.width = w1 + "px";
+    cScreen.style.height = h1 + "px";
+  }
+  cScreen.addEventListener("transitionend", e => {
+    if (e.target === cScreen && (e.propertyName === "height" || e.propertyName === "width")) cScreen.style.width = cScreen.style.height = "";
+  });
+  // the plan shows beside the execution by default; the button under the screen hides it (and the choice holds across
+  // the tabs)
+  planBtn?.addEventListener("click", () => {
+    planOff = !planOff;
+    cFig.classList.toggle("plan-off", planOff);
+    planBtn.setAttribute("aria-pressed", String(planOff));
+    planBtn.lastElementChild.textContent = planOff ? "Show plan" : "Hide plan";
+    const btn = segBtns.find(b => b.getAttribute("aria-selected") === "true") || segBtns[0];
+    shape(clip(btn)[1], true);
+  });
+  shape(clip(segBtns.find(b => b.getAttribute("aria-selected") === "true") || segBtns[0])[1], false);
+  // turning the phone swaps the stacked clip in or out on the spot, keeping its time and whether it plays
+  // the clip's first frame (media/posters/, like the gallery's) shows until the clip has a frame, so the screen is never
+  // black while a phone fetches it. It is the video's background, not its poster: WebKit didn't fetch the first clip's
+  // poster, and drew a later one at another place than the clip's first frame
+  function setClip(src) {
+    const p = "media/posters/" + src.split("?")[0].split("/").pop().replace(/\.\w+$/, ".jpg");
+    cVideo.removeAttribute("poster");
+    cVideo.style.background = `#000 url("${p}") center / contain no-repeat`;
+    cVideo.src = src;
+  }
+  function swapCinema() {
+    const btn = segBtns.find(b => b.getAttribute("aria-selected") === "true");
+    if (!btn) return;
+    const [src, ar] = clip(btn);
+    shape(ar, false);
+    if (!cVideo.getAttribute("src") || cVideo.getAttribute("src") === src) return;
+    const t = cVideo.currentTime, playing = !cVideo.paused;
+    setClip(src);
+    if (t) cVideo.addEventListener("loadedmetadata", () => { cVideo.currentTime = Math.min(t, cVideo.duration || t); }, { once: true });
+    if (playing) cVideo.play().catch(() => {});
+  }
+  function pick(btn, play = true) {
+    segBtns.forEach(b => b.setAttribute("aria-selected", String(b === btn)));
+    cVideo.style.opacity = 0;
+    cCap.style.opacity = 0;
+    shape(clip(btn)[1], cinemaLoaded);
+    setTimeout(() => {
+      setClip(clip(btn)[0]);
+      cCap.innerHTML = btn.dataset.caption;
+      cVideo.style.opacity = 1;
+      cCap.style.opacity = 1;
+      if (play && cinemaOn && !cVideo.dataset.held) cVideo.play().catch(() => {});
+    }, cinemaLoaded ? 260 : 0);
+    cinemaLoaded = true;
+  }
+  segBtns.forEach(b => b.addEventListener("click", () => { delete cVideo.dataset.held; pick(b); }));
+  function updateCinema() {
+    // (the frame loop runs this before the frame's other style writes, so reading the screen's box costs no style pass)
+    const r = cScreen.getBoundingClientRect(), u = smooth(1.05, .5, r.top / vh);
+    const top = topOf(cinema) - sy, bottom = top + heightOf(cinema);
+    const o = smooth(.62, .12, top / vh) * (1 - smooth(.86, .42, bottom / vh));
+    css(backdrop, "opacity", o.toFixed(3));
+    css(cinema, "--dark", smooth(.3, .7, o).toFixed(3));   // the copy flips while the light is mid-grey
+    root.classList.toggle("is-dark", o > .5);
+    // (landing already in view, after a reload, the clip plays as soon as its source is set)
+    if (!cinemaLoaded && top < 2 * vh && bottom > -vh) pick(segBtns[0]);
+    // (no transform once it is full size, so the labels over the clip are drawn at the screen's own resolution)
+    css(cScreen, "transform", u > .999 ? "none" : `scale(${lerp(.88, 1, u).toFixed(4)})`);
+    const on = r.top < vh * .85 && r.bottom > vh * .15;
+    if (on !== cinemaOn) {
+      cinemaOn = on;
+      if (on) { if (!cVideo.dataset.held) cVideo.play().catch(() => {}); } else cVideo.pause();
+    }
+  }
+
+  // ------------------------------------------------------------------ nav
+  const navLinks = $$(".localnav-links a"), navTargets = navLinks.map(a => $(a.getAttribute("href")));
+  const progress = $(".localnav-progress span");
+  function updateNav() {
+    let cur = -1;
+    navTargets.forEach((t, i) => { if (t && topOf(t) <= sy + vh * .5) cur = i; });
+    navLinks.forEach((a, i) => a.classList.toggle("active", i === cur));
+    const max = measure(root, "sh", e => e.scrollHeight) - vh;
+    css(progress, "transform", `scaleX(${clamp(sy / Math.max(1, max)).toFixed(4)})`);
+  }
+
+  // ------------------------------------------------------------------ lazy media, fade-ups, gallery, bibtex
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }), { rootMargin: "0px 0px -10% 0px" });
+  $$(".reveal").forEach(el => io.observe(el));
+  // A gallery video loads and plays once at least half of it is on the screen, so the card peeking in at the side of a
+  // phone's gallery doesn't download too (it was 4-8 MB). When the reader starts moving the track, the next card's video
+  // in that direction fetches its first frames (preload="metadata"), so it starts at once when it arrives.
+  const vio = new IntersectionObserver(es => es.forEach(e => {
+    const v = e.target;
+    if (e.isIntersecting && e.intersectionRatio >= .5) {
+      if (!v.getAttribute("src") && v.dataset.src) v.src = v.dataset.src;
+      if (!v.dataset.held) v.play().catch(() => {});   // held: the reader paused it (js/controls.js)
+    } else if (!e.isIntersecting && !v.paused) v.pause();
+  }), { rootMargin: "150px 0px", threshold: [0, .5] });
+  $$("video.lazy").forEach(v => vio.observe(v));
+  $$(".gallery-track").forEach(track => {
+    let lastX = track.scrollLeft;
+    track.addEventListener("scroll", () => {
+      const x = track.scrollLeft, dir = Math.sign(x - lastX), mid = track.getBoundingClientRect().left + track.clientWidth / 2;
+      lastX = x;
+      if (!dir) return;
+      const ahead = $$("video.lazy", track).filter(v => !v.getAttribute("src") && v.dataset.src)
+        .map(v => ({ v, d: (v.getBoundingClientRect().left + v.getBoundingClientRect().width / 2 - mid) * dir }))
+        .filter(o => o.d > 0).sort((a, b) => a.d - b.d)[0];
+      if (ahead) { ahead.v.preload = "metadata"; ahead.v.src = ahead.v.dataset.src; }
+    }, { passive: true });
+  });
+
+  // on a phone held upright the gallery's two-up videos (plan beside execution) play their stacked versions, plan
+  // above execution (data-portrait-src, built by tools/build_gallery_portrait.py). data-src always names the one for
+  // the current layout, so the lazy loading above and the play button (js/controls.js) pick it up. A video that has
+  // loaded swaps on the spot: it keeps its time, plays on if it was playing and stays paused if not
+  const twoUp = $$("video[data-portrait-src]");
+  twoUp.forEach(v => { v.dataset.landscapeSrc = v.dataset.src; });
+  function swapTwoUp() {
+    twoUp.forEach(v => {
+      const src = portrait ? v.dataset.portraitSrc : v.dataset.landscapeSrc;
+      if (v.dataset.src === src) return;
+      v.dataset.src = src;
+      if (!v.getAttribute("src")) return;
+      const t = v.currentTime, playing = !v.paused;
+      if (v.preload === "none") v.preload = "metadata";   // so a paused video shows its frame
+      v.src = src;
+      if (t) v.addEventListener("loadedmetadata", () => { v.currentTime = Math.min(t, v.duration || t); }, { once: true });
+      if (playing) v.play().catch(() => {});
+    });
+    setPosters();
+  }
+  // until its video has a frame, each gallery card shows the video's first frame (media/posters/<name>.jpg, cut with
+  // ffmpeg), so a card never slides in black. The posters load once the gallery is a screen away
+  const galleryVideos = $$(".gallery-track video");
+  let postersOn = false;
+  function setPosters() {
+    if (postersOn) galleryVideos.forEach(v => {
+      const p = "media/posters/" + v.dataset.src.split("/").pop().replace(/\.\w+$/, ".jpg");
+      if (v.getAttribute("poster") !== p) v.setAttribute("poster", p);
+    });
+  }
+  const pio = new IntersectionObserver(es => {
+    if (es.some(e => e.isIntersecting)) { postersOn = true; setPosters(); pio.disconnect(); }
+  }, { rootMargin: "100% 0px" });
+  $$("[data-gallery]").forEach(g => pio.observe(g));
+
+  $$("[data-gallery]").forEach(g => {
+    const track = $(".gallery-track", g), [prev, next] = $$(".paddle", g);
+    // a paddle goes to the next card's place (the cards differ in width, so a fixed step skipped some), as the dots do
+    // (js/controls.js): stacked rows' cards less than 60 px apart count as one place
+    const go = dir => {
+      const max = track.scrollWidth - track.clientWidth, x = track.scrollLeft;
+      const pad = parseFloat(getComputedStyle(track).scrollPaddingLeft) || 0;
+      const xs = $$(".card", track).map(c => clamp(c.offsetLeft - pad, 0, max)).sort((a, b) => a - b);
+      const to = dir > 0 ? xs.find(v => v > x + 60) : xs.reverse().find(v => v < x - 60);
+      track.scrollTo({ left: to ?? (dir > 0 ? max : 0), behavior: REDUCED ? "auto" : "smooth" });
+    };
+    prev.addEventListener("click", () => go(-1));
+    next.addEventListener("click", () => go(1));
+    // the track ends where the last card snaps into place, or at the end of the scroll if that comes first
+    const last = [...track.querySelectorAll(".card")].pop();
+    const sync = () => {
+      const pad = parseFloat(getComputedStyle(track).scrollPaddingLeft) || 0;
+      const end = Math.min(track.scrollWidth - track.clientWidth, last ? last.offsetLeft - pad : Infinity);
+      prev.disabled = track.scrollLeft < 4;
+      next.disabled = track.scrollLeft > end - 4;
+    };
+    track.addEventListener("scroll", sync, { passive: true });
+    addEventListener("resize", sync);
+    sync();
+  });
+
+  const copyBtn = $(".bibtex-copy");
+  if (copyBtn) copyBtn.addEventListener("click", () => {
+    navigator.clipboard.writeText($(".bibtex code").textContent).then(() => {
+      copyBtn.textContent = "Copied";
+      setTimeout(() => { copyBtn.textContent = "Copy"; }, 1600);
+    }).catch(() => {});
+  });
+
+  // ------------------------------------------------------------------ keeping the reader's place
+  // A relayout (a phone turned, a window resized) changes how tall everything is, so the same scroll position would be
+  // somewhere else. As the reader scrolls, the page notes the section across the middle of the screen and how far
+  // through it they are (in a chapter, how far into it in screen heights, since a chapter's lengths all scale with the
+  // screen's height), and after a relayout it scrolls back to that place. A chapter keeps its click and T anyway.
+  const placeEls = $$("main > section, body > footer");
+  let place = null, placeHeld = false;   // placeHeld: a relayout is due, so the layout is stale and place stays as it was
+  function notePlace() {
+    if (placeHeld) return;
+    const mid = sy + vh / 2;
+    for (const el of placeEls) {
+      const top = topOf(el), h = heightOf(el);
+      if (mid >= top + h && el !== placeEls.at(-1)) continue;
+      place = chapters.some(c => c.el === el) ? { el, y: (sy - top) / vh } : { el, f: (mid - top) / Math.max(1, h) };
+      Object.assign(place, { dy: sy - top, w: vw, h: vh });   // at the same screen size: exactly where it was
+      return;
+    }
+  }
+  function restorePlace(p = place) {
+    if (!p) return;
+    const top = docTop(p.el);
+    const y = p.w === vw && p.h === vh || p.y == null && p.f == null ? top + p.dy
+      : p.y != null ? top + p.y * vh : top + p.f * p.el.offsetHeight - vh / 2;
+    scrollSelf(Math.max(0, Math.round(y)));
+  }
+  // A reload, or coming back from another page, returns to the same place. The browser's own restoration would land
+  // while the chapters still have their css height, before site.js lays them out, and miss, so the page does it itself:
+  // it saves the place as it is left (sessionStorage) and scrolls back to it after the first layout, and again whenever
+  // a section changes size (fonts, videos) until the reader scrolls or the page has settled. A fresh visit starts at the
+  // top, or at its #anchor, which is held in place the same way (scroll anchoring can't, as most of the page is sticky).
+  // (A page kept whole in the back/forward cache needs none of this.)
+  const PLACE_KEY = "mirror-place:" + location.pathname;
+  let comeBack = null;   // the place being returned to, while the page settles
+  try {
+    history.scrollRestoration = "manual";
+    const nav = (performance.getEntriesByType("navigation")[0] || {}).type;
+    const s = (nav === "reload" || nav === "back_forward") && JSON.parse(sessionStorage.getItem(PLACE_KEY));
+    if (s && placeEls[s.i]) place = comeBack = { ...s, el: placeEls[s.i] };
+    else comeBack = anchorPlace();
+  } catch (e) {}
+  // the #anchor's place: its top under the nav (its scroll-margin)
+  function anchorPlace() {
+    let t = null;
+    try {
+      // a modal's #hash (js/modal.js): the section the modal belongs to
+      const id = window.MIRROR_MODAL?.section(location.href) || decodeURIComponent(location.hash.slice(1));
+      t = location.hash.length > 1 && document.getElementById(id);
+    } catch (e) {}
+    return t ? { el: t, dy: -(parseFloat(getComputedStyle(t).scrollMarginTop) || 0) } : null;
+  }
+  // a jump to an #anchor within the page (the nav's links) is held there too for a moment, while the sections it
+  // passed load and take their size (the survival clip's screen takes its shape)
+  addEventListener("hashchange", e => {
+    if (window.MIRROR_MODAL?.owns(e.oldURL) || window.MIRROR_MODAL?.owns(e.newURL)) return;   // a modal opening or closing
+    const a = comeBack = anchorPlace();
+    noSnapUntil = performance.now() + 2500;   // the nav's jump lands where it was sent
+    setTimeout(() => { if (comeBack === a) comeBack = null; }, 1500);
+  });
+  addEventListener("pagehide", () => {
+    sy = scrollY;
+    notePlace();
+    try {
+      if (place) sessionStorage.setItem(PLACE_KEY, JSON.stringify({ ...place, el: undefined, i: placeEls.indexOf(place.el) }));
+      else sessionStorage.removeItem(PLACE_KEY);
+    } catch (e) {}
+  });
+  const settleBack = () => { if (comeBack) restorePlace(comeBack); };
+  const letGo = () => { comeBack = null; };
+  for (const ev of ["wheel", "touchstart", "keydown", "pointerdown"]) addEventListener(ev, letGo, { capture: true, passive: true });
+  document.fonts.ready.then(settleBack);
+  addEventListener("load", () => { settleBack(); setTimeout(() => { settleBack(); letGo(); }, 1500); });
+
+  // ------------------------------------------------------------------ layout + frame loop
+  // the screen's height with a phone browser's toolbars showing (100svh), which the css lays the sticky stages out to.
+  // innerHeight grows as the toolbars slide away, and a relayout then (a phone turned with them hidden) laid the boxes
+  // out for a screen taller than their stage, low and against its bottom edge, until the next turn.
+  const svh = document.createElement("div");
+  svh.style.cssText = "position:fixed;top:0;left:0;width:0;height:100vh;height:100svh;visibility:hidden;pointer-events:none";
+  document.body.append(svh);
+  function relayout() {
+    vh = Math.min(innerHeight, svh.offsetHeight || innerHeight);
+    vw = innerWidth;
+    // a phone held sideways (too short for the desktop layout, and not narrow even when under 760 wide): the animations
+    // get the narrow layout's box with the title drawn by the page, and the figure chapters a compact layout
+    // (fitShort, css "fix: short landscape")
+    const s = vh < 500 && vw > vh;
+    const n = !s && (vw < 760 || vw / vh < .82);
+    if (n !== narrow) {
+      narrow = n;
+      root.classList.toggle("narrow", narrow);
+      chapters.forEach(c => { if (c.api) c.api.setNarrow(narrow || short); c.capHTML = null; });
+    }
+    if (s !== short) {
+      short = s;
+      root.classList.toggle("short", short);
+      if (!short) root.classList.remove("stage-on");
+      chapters.forEach(c => { if (c.api) c.api.setNarrow(narrow || short); c.capHTML = null; if (c.capEl) c.capEl.innerHTML = ""; });
+    }
+    // a narrow screen that is taller than wide (a phone held upright) gets the animations' portrait layouts
+    const p = narrow && vw < vh;
+    if (p !== portrait) {
+      portrait = p;
+      root.classList.toggle("portrait", portrait);
+      chapters.forEach(c => { if (!c.inline && c.state !== "idle" && c.mode !== portrait) c.reset(); });
+      swapTwoUp();
+      swapCinema();
+    }
+    chapters.forEach(c => c.layout());
+    // the transport goes under the boxes on a narrow screen, and on a wide one with room for it under the frame
+    const fr = !narrow && !short && $(".chapter:not(.chapter-split) .stage-frame");
+    const navH = parseFloat(getComputedStyle(root).getPropertyValue("--nav-h")) || 52;
+    root.classList.toggle("ctl-below", !short && (narrow || !!fr && (vh - navH - fr.offsetHeight) / 2 >= CTL_ROOM + CTL_FOOT));
+    layoutHero();
+    restorePlace();
+    placeHeld = false;
+    lastSy = -1;
+    glide = null;   // its target moved
+    geo.clear();
+    wake();
+  }
+  let rT = null, lastW = vw, lastH = vh;
+  addEventListener("resize", () => {
+    // mobile browsers resize the viewport as their toolbars slide: ignore small height-only changes
+    if (innerWidth === lastW && Math.abs(innerHeight - lastH) < 140) return;
+    lastW = innerWidth;
+    lastH = innerHeight;
+    placeHeld = true;
+    clearTimeout(rT);
+    rT = setTimeout(relayout, 120);
+  });
+  // a phone's connection back: a scene that failed to load while it was gone loads again when it next comes near
+  addEventListener("online", () => chapters.forEach(c => { if (!c.inline && c.state === "failed") { c.reset(); wake(); } }));
+  document.fonts.ready.then(layoutHero);
+
+  // The frame loop sleeps once nothing has changed for IDLE seconds: no scrolling or finger down, no glide, no chapter
+  // playing (or holding between clicks) or fading in, no statement playing on. Input, scrolling, a resize, the tab
+  // coming back, a section changing size, a scene loading and its videos seeking or loading wake it (wake).
+  const IDLE = 1;        // seconds
+  const LOAD_NOW = 1.2;  // screens: a scene this close loads even while something moves (Chapter.update)
+  const LOAD_SOON = 1.8; // screens: a scene this close loads while the reader scrolls, if nothing else moves
+  let lastNow = performance.now(), rafId = 0, quietAt = 0;
+  let moving = false;    // in the last frame an animation played or the page scrolled itself: a scene load waits (Chapter.update)
+  function wake() {
+    if (rafId) return;
+    lastNow = quietAt = performance.now();   // the time asleep is not a frame's dt
+    rafId = requestAnimationFrame(frame);
+  }
+  for (const ev of ["scroll", "wheel", "keydown", "pointerdown", "click", "touchstart", "touchmove", "touchend", "resize", "pageshow"])
+    addEventListener(ev, wake, { capture: true, passive: true });
+  document.addEventListener("visibilitychange", wake);
+  // a section that changes size moves everything below it: measure again (geo), and redraw what depends on it
+  const ro = new ResizeObserver(() => { geo.clear(); lastSy = -1; settleBack(); wake(); });
+  [$("main"), ...placeEls].forEach(el => el && ro.observe(el));
+
+  function frame(now) {
+    rafId = 0;
+    const dt = Math.min(.1, Math.max(0, (now - lastNow) / 1000));
+    lastNow = now;
+    sy = scrollY;
+    const moved = sy !== lastSy;
+    if (moved) {
+      // a move the page didn't make itself is the reader's
+      if (lastSy >= 0 && (ownAt === null || Math.abs(sy - ownAt) > 3)) { takeOver(MOVE_HOLD); readerDir = Math.sign(sy - lastSy); }
+      lastSy = sy;
+      notePlace();
+      updateCinema();   // first: it reads the screen's box, before this frame's style writes
+      updateHero();
+      wordBlocks.forEach(updateWords);
+      updateNav();
+    }
+    for (const c of chapters) c.update(now, dt);
+    if (short) root.classList.toggle("stage-on", chapters.some(c => c.staged));
+    // under an episode modal (js/modal.js) the page holds still: a glide or snap under way stops where it is
+    if (root.classList.contains("modal-open")) { glide = null; snapArmed = false; wordBlocks.forEach(b => { b.autoY = null; }); }
+    else {
+      wordBlocks.forEach(b => autoplayWords(b, now, dt));
+      snapNear(now);
+    }
+    if (glide) stepGlide(now);
+    const words = wordBlocks.some(b => b.autoY != null);
+    moving = !!glide || words || chapters.some(c => c.rate > 0);
+    if (moved || moving || scrolling(now) || chapters.some(c => c.busy)) quietAt = now;
+    if (!rafId && now - quietAt < IDLE * 1e3) rafId = requestAnimationFrame(frame);
+  }
+  relayout();
+  wake();
+  window.MIRROR = { chapters };   // for poking at from the console
+})();

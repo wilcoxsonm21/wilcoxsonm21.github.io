@@ -1,0 +1,239 @@
+/* The episode viewers (eval/ and basalt/): everything the two share. Colours and type come from css/theme.css and the
+   nav, pills, paddles and footer from css/site.css; eval/eval.css and basalt/basalt.css add each viewer's own parts.
+   Both pages also open as the project page's modal (?embed, js/embed.js): then html has .ev-embed, the page's nav and
+   footer go, and an episode opens as a view pushed over the list instead of a window over the page. The look is the
+   page's results band: Apple's grey, white cards, a left-aligned headline. */
+:root {
+  --w: min(1120px, calc(100vw - 2 * var(--gutter)));
+  --ev-ease: cubic-bezier(.22, .61, .36, 1);
+}
+body { background: var(--bg-2); }
+.ev { padding: calc(var(--nav-h) + 8vh) 0 10vh; }
+.ev-muted { color: var(--muted); }
+
+/* ------------------------------------------------------------------ headline */
+.ev-head { width: var(--w); margin: 0 auto; }
+.ev-head .eyebrow { font-size: clamp(17px, 1.45vw, 24px); }
+.ev-head h1 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.03em; line-height: 1.04; margin: 0;
+              font-size: clamp(36px, 4.6vw, 72px); text-wrap: balance; }
+.ev-head .lede { max-width: 36em; margin: 16px 0 0; font-size: clamp(17px, 1.4vw, 22px); line-height: 1.42; letter-spacing: .011em; }
+
+/* ------------------------------------------------------------------ tabs (a segmented control, as the survival section's) */
+.ev-tabs-wrap { width: var(--w); margin: 0 auto; }
+.ev-tabs, .ev-view {
+  display: inline-flex;
+  padding: 4px;
+  gap: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+.ev-tabs { margin: clamp(28px, 4vh, 44px) 0 22px; max-width: 100%; }
+.ev-tabs button, .ev-view button {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+/* no fade on the first render (a deep link to another tab), only on clicks */
+html.ev-ready .ev-tabs button, html.ev-ready .ev-view button { transition: background .3s, color .3s, box-shadow .3s; }
+.ev-tabs button { padding: 11px clamp(18px, 2vw, 28px); font: 600 clamp(15px, 1.2vw, 19px)/1.2 var(--sans); }
+.ev-tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+.ev-tabs button:focus-visible, .ev-view button:focus-visible { outline: 2px solid var(--mirror); outline-offset: 2px; }
+
+/* what an agent used: a short checklist, one line each */
+.ev-facts { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; list-style: none; padding: 0; margin: 0; }
+.ev-facts li { display: flex; align-items: baseline; gap: 9px; font-size: 16px; line-height: 1.35; color: var(--ink); text-align: left; }
+.ev-facts li::before { font-weight: 700; width: 1em; text-align: center; flex: none; text-indent: 0; }
+/* (airy 10-16: text-indent 0, else a hanging indent's negative indent is inherited inside the mark's box and pushes the
+   ✓/✗ out past the text margin) */
+.ev-facts li.ev-yes::before { content: "\2713"; color: var(--plan-text); }
+.ev-facts li.ev-no::before { content: "\2717"; color: var(--fail); }
+.ev-facts .ev-fact-name { font-weight: 600; }
+.ev-facts .ev-fact-detail { color: var(--muted); }
+
+/* a white tile: the milestone tiles and the two BASALT versions */
+.ev-tile { background: var(--bg); border-radius: 22px; }
+.ev-bar { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--ink) 9%, transparent); overflow: hidden; }
+.ev-bar span { display: block; height: 100%; background: var(--gold-1); }
+
+/* ------------------------------------------------------------------ episode table: white rows on the grey */
+.ev-episodes { width: var(--w); margin: 0 auto; }
+.ev-table-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.ev-episodes table { border-collapse: collapse; width: 100%; font-size: 15.5px; font-variant-numeric: tabular-nums; }
+.ev-episodes th, .ev-episodes td { padding: 10px 14px; text-align: left; white-space: nowrap; }
+.ev-episodes th { font-size: 15px; font-weight: 600; color: var(--muted); cursor: pointer; user-select: none; padding-bottom: 8px; }
+/* (viewers2 10-15: one heading style in both tables, 15px muted, one line on every phone; was 13.5px here, 15px ink-2 in BASALT) */
+.ev-episodes th.ev-sorted { color: var(--ink); }
+.ev-episodes th.ev-sorted::after { content: " \25BE"; }
+.ev-episodes th.ev-sorted.ev-ascending::after { content: " \25B4"; }
+.ev-episodes td.ev-number, .ev-episodes th.ev-number { text-align: center; }
+.ev-episodes tbody tr { cursor: pointer; }
+/* airy 10-16: one white card with hairlines between the rows, as an iOS grouped list (was a white pill per row, 4 px
+   apart, which read as dozens of boxes) */
+.ev-episodes tbody td { background: var(--bg); border-top: 1px solid var(--line); transition: background .2s; }
+.ev-episodes tbody tr:first-child td { border-top: 0; }
+.ev-episodes tbody td:first-child { font-weight: 600; }
+.ev-episodes tbody tr:first-child td:first-child { border-top-left-radius: 18px; }
+.ev-episodes tbody tr:first-child td:last-child { border-top-right-radius: 18px; }
+.ev-episodes tbody tr:last-child td:first-child { border-bottom-left-radius: 18px; }
+.ev-episodes tbody tr:last-child td:last-child { border-bottom-right-radius: 18px; }
+@media (hover: hover) { .ev-episodes tbody tr:hover td { background: color-mix(in srgb, var(--ink) 4%, var(--bg)); } }
+.ev-episodes tbody tr.ev-current td { background: color-mix(in srgb, var(--mirror) 10%, var(--bg)); }
+
+/* ------------------------------------------------------------------ the episode window */
+/* on its own page: a window over the page; in the modal: a view pushed over the list (below) */
+.ev-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 40px 16px;
+  background: rgba(15, 14, 13, .5);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  backdrop-filter: blur(14px) saturate(140%);
+}
+.ev-modal[hidden] { display: none; }
+html.ev-locked { overflow: hidden; }
+.ev-sheet [hidden] { display: none !important; }   /* a tab without that control or list */
+.ev-sheet { width: min(1160px, 100%); background: var(--bg-2); border-radius: 28px; padding: 26px 26px 30px;
+            box-shadow: 0 40px 120px -40px rgba(0, 0, 0, .6); }
+.ev-return { display: none; }
+.ev-sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin: 0 2px 16px; }
+.ev-sheet-head h2 { font-size: clamp(24px, 2.3vw, 34px); line-height: 1.12; letter-spacing: -0.02em; }
+.ev-sheet-head p { margin: 5px 0 0; font-size: 16px; }
+.ev-sheet-buttons { display: flex; gap: 10px; flex: none; }
+.ev-close { font-size: 24px; }
+.ev-sheet-buttons .paddle { display: inline-block; }   /* (site.css hides the gallery's paddles on touch screens) */
+.ev-view { margin: 0 0 14px; }
+.ev-view button { padding: 8px 18px; font: 600 15px/1.2 var(--sans); }
+.ev-view button[aria-selected="true"] { background: var(--bg); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+/* square-ish corners on the video, as the page's: the clips have labels and the hotbar in their corners */
+.ev-screen { position: relative; background: #000; border-radius: 10px; overflow: hidden; }
+.ev-screen video { width: 100%; height: auto; max-height: 68vh; margin: 0 auto; background: #000; }
+/* the other view keeps playing, transparent behind the shown one, so a switch needs no reload */
+.ev-screen video.ev-back { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; object-fit: contain;
+                           opacity: 0; pointer-events: none; }
+.ev-controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin: 16px 0 8px; }
+.ev-controls button {
+  font: 600 14px/1.2 var(--sans);
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition: background .2s, color .2s;
+}
+@media (hover: hover) { .ev-controls button:hover { background: color-mix(in srgb, var(--ink) 13%, transparent); } }
+.ev-controls button.ev-on, .ev-controls button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.ev-speeds, .ev-jumps { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+
+/* what is happening now */
+.ev-now { background: var(--bg); border-radius: 18px; border-left: 6px solid var(--line); padding: 12px 16px; margin: 10px 0 10px; }
+.ev-now .ev-line1 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.ev-now .ev-fact { font-size: 15px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ev-now .ev-alert { font-size: 15px; font-weight: 600; color: var(--fail); }
+
+/* the timeline (SVG) */
+#timeline { width: 100%; display: block; cursor: pointer; background: var(--bg); border-radius: 18px; }
+#timeline .lane { fill: var(--bg-2); }
+#timeline .lane-label, #timeline .tick-label { fill: var(--muted); font: 10.5px var(--sans); }
+#timeline .health { fill: none; stroke: var(--plan); stroke-width: 1.6; }
+#timeline .frame { fill: none; stroke: var(--line); }
+#timeline .dead { fill: rgba(60, 60, 60, .22); }
+#timeline .death { stroke: var(--fail); stroke-width: 2.2; }
+#timeline .axis { stroke: var(--line); }
+#timeline .playhead { stroke: var(--mirror); stroke-width: 2; }
+.ev-legend { font-size: 13.5px; line-height: 1.45; margin: 8px 4px 0; }
+
+/* ------------------------------------------------------------------ shared by both viewers (viewers2 10-15: these were
+   copied in eval/eval.css and basalt/basalt.css; each keeps only its own phone sizes) */
+/* one order in both: the video, the timeline right under it as a player's scrubber, then the speed row (then, in the
+   Diamond viewer, what is happening now), then the timeline's key */
+.ev-controls { margin: 12px 0 0; }
+/* speed as a segmented control, as the Recording / With the video plan toggle */
+.ev-speeds { padding: 3px; gap: 2px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 7%, transparent); flex-wrap: nowrap; }
+.ev-controls .ev-speeds button { background: transparent; padding: 7px 12px; color: var(--ink-2); }
+@media (hover: hover) { .ev-controls .ev-speeds button:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); } }
+.ev-controls .ev-speeds button.ev-on { background: var(--bg); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+/* the speed fast-forward goes back to (Diamond viewer, while it runs): the selection's place, outlined only */
+.ev-controls .ev-speeds button.ev-base { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--ink) 22%, transparent); }
+/* the key under the timeline, a swatch each; the keyboard shortcuts at the right, only where there is a keyboard */
+.ev-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 14px; color: var(--ink-2); margin: 10px 4px 0; }
+.ev-key { display: inline-flex; align-items: center; gap: 6px; }
+.ev-key::before { content: ""; flex: none; width: 14px; height: 10px; border-radius: 2px; }
+.ev-keys { margin-left: auto; color: var(--muted); font-size: 13.5px; }
+@media (hover: none) { .ev-keys { display: none; } }
+/* the table headings stay in view while the rows scroll. In the modal they stop below the modal's round close button,
+   and a grey band above them (::before; box-shadow isn't drawn on collapsed table cells) hides the rows going up under
+   it, so the button never covers a heading; on its own page they stop below the nav. (The wrapper's overflow would make
+   it the sticky box, so it goes; both tables fit every width without it.) Whatever sits right above a table (the
+   milestone tiles, the model cards) is lifted over the band with position: relative; z-index: 3. */
+.ev-episodes .ev-table-wrap { overflow: visible; }
+.ev-episodes thead th { position: sticky; top: var(--nav-h); z-index: 2; background: var(--bg-2); --band: 0px; }
+.ev-episodes thead th::before { content: ""; position: absolute; left: -1px; right: -1px; bottom: 100%; height: var(--band); background: var(--bg-2); }
+html.ev-embed .ev-episodes thead th { top: 58px; --band: 58px; }
+@media (max-width: 560px) { html.ev-embed .ev-episodes thead th { top: 50px; --band: 50px; } }
+
+/* ------------------------------------------------------------------ in the project page's modal (?embed) */
+html.ev-embed .localnav, html.ev-embed .footer { display: none; }
+html.ev-embed .ev { padding: clamp(40px, 7vh, 72px) 0 64px; }
+html.ev-embed .ev-head { padding-right: 52px; }   /* clear of the modal's close button */
+/* an episode: a view pushed over the list, the sheet's full size, and "All episodes" leads back */
+html.ev-embed .ev-modal { padding: 0; background: var(--bg-2); -webkit-backdrop-filter: none; backdrop-filter: none;
+                          animation: ev-push .42s var(--ev-ease) both; }
+html.ev-embed .ev-sheet { width: var(--w); border-radius: 0; box-shadow: none; background: transparent; padding: 22px 0 48px; }
+html.ev-embed .ev-close { display: none; }
+html.ev-embed .ev-sheet-buttons { margin-right: 52px; }
+html.ev-embed .ev-return {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 14px -2px;
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  font: 600 17px/1.2 var(--sans);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.ev-return::before { content: ""; width: 9px; height: 9px; border: solid currentColor; border-width: 0 0 2px 2px; transform: rotate(45deg);
+                     margin: 0 2px 0 4px; }
+@media (hover: hover) { .ev-return:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; } }
+@keyframes ev-push { from { opacity: 0; transform: translateX(36px); } }
+@media (prefers-reduced-motion: reduce) { html.ev-embed .ev-modal { animation: none; } }
+
+/* ------------------------------------------------------------------ narrow screens */
+@media (max-width: 900px) {
+  .localnav-links { display: none; }
+}
+@media (max-width: 560px) {
+  :root { --w: calc(100vw - 40px); }   /* airy 10-16: 20 px sides, as iOS (was 16) */
+  /* airy 10-16: the page's end clears Safari's floating toolbar, which covers the bottom of the sheet */
+  html.ev-embed .ev { padding: 52px 0 calc(110px + env(safe-area-inset-bottom)); }
+  .ev-tabs { margin: 30px 0 24px; }
+  .ev-modal { padding: 0; }
+  .ev-sheet { border-radius: 0; padding: 16px 14px 20px; min-height: 100%; }
+  html.ev-embed .ev-sheet { padding: 14px 0 calc(110px + env(safe-area-inset-bottom)); }   /* (airy: clears Safari's toolbar) */
+  .ev-tabs { display: flex; }
+  .ev-tabs button { flex: 1 1 0; padding: 10px 8px; }
+  .ev-sheet-head { flex-direction: column; gap: 10px; }
+  /* viewers2 10-16 (was eval.css only; BASALT put them on a row of their own): on its own page the arrows and close
+     stay at the title's right, smaller (in the modal they share the "All episodes" row, below) */
+  html:not(.ev-embed) .ev-sheet-head { flex-direction: row; align-items: flex-start; }
+  html:not(.ev-embed) .ev-sheet-buttons { gap: 8px; }
+  html:not(.ev-embed) .ev-sheet-buttons .paddle { width: 36px; height: 36px; font-size: 22px; }
+  /* in the modal the arrows share the "All episodes" row, left of the modal's close button */
+  html.ev-embed .ev-sheet { position: relative; }
+  html.ev-embed .ev-sheet-buttons { position: absolute; top: 13px; right: 40px; margin: 0; gap: 8px; }
+  html.ev-embed .ev-sheet-buttons .paddle { width: 34px; height: 34px; font-size: 22px; }
+  .ev-episodes th, .ev-episodes td { padding: 9px 10px; }
+}

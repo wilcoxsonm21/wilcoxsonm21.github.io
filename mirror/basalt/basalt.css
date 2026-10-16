@@ -1,0 +1,167 @@
+/* The BASALT episode viewer's own parts; ../css/viewer.css has what it shares with the Diamond Challenge viewer.
+   10-15 polish (agent basalt): each model has its colour from the theme's roles (grey for supervised, --mirror for
+   self-improving), and the episode window is the task, the world and the outcome, a model toggle, the video, and a slim
+   timeline with the success marked. PR #4 (merged 10-16): the two model cards switch the table between the versions
+   (never mixed), the table has fixed columns, and a MakeWaterfall episode ends where the agent ends it. */
+
+/* the two models' role colours, used by their tiles, the table's headers and the dots */
+.ev-supervised { --role: var(--lava-vpt); --role-text: var(--ink-2); }   /* the baseline grey of the figures: the two read apart at a glance */
+.ev-self_improving { --role: var(--mirror); --role-text: var(--mirror-text); }
+.ev-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--role); margin-right: 8px;
+          vertical-align: 1px; flex: none; }
+
+.ev-head .lede { text-wrap: pretty; }
+
+/* the task and its success rule */
+.ev-goal { max-width: 46em; margin: 0 0 22px; color: var(--muted); font-size: 17px; line-height: 1.5; }
+.ev-goal strong { color: var(--ink); font-weight: 600; }
+
+/* the two models side by side: successes out of 11, and what each used. Each card is a tab: the selected one's episodes
+   are the table's. (PR #4: 400 px wide, so every checklist line fits on one line) */
+.ev-versions { display: grid; grid-template-columns: repeat(2, minmax(0, 400px)); gap: 14px; margin: 0 0 36px; }
+/* viewers2 10-15: above the table headings' grey band (thead th::before reaches 58 px up), which otherwise cut the
+   cards' bottoms off in the modal */
+.ev-versions { position: relative; z-index: 3; }
+.ev-version { padding: 20px 24px 22px; text-align: left; cursor: pointer; border: 2px solid transparent;
+               transition: border-color .25s, opacity .25s, box-shadow .25s; }
+/* the selected card: a ring in its model's colour; the other one faded, full on hover */
+.ev-version[aria-selected="true"] { border-color: var(--role); box-shadow: 0 8px 28px -16px rgba(0, 0, 0, .3); }
+.ev-version[aria-selected="false"] { opacity: .62; }
+@media (hover: hover) { .ev-version[aria-selected="false"]:hover { opacity: 1; } }
+.ev-version:focus-visible { outline: 2px solid var(--mirror); outline-offset: 3px; }
+.ev-version h2 { display: flex; align-items: center; font-size: 21px; margin: 0 0 8px; }
+.ev-version h2::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--role); margin-right: 10px; flex: none; }
+.ev-version .ev-count { font-size: 40px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.05; }
+.ev-version .ev-count small { font-size: 17px; font-weight: 500; letter-spacing: 0; color: var(--muted); }
+.ev-version .ev-bar { height: 6px; border-radius: 3px; margin: 14px 0 16px; }
+.ev-version .ev-bar span { background: var(--role); }
+/* (PR #4) a fact on one line; where the card is too narrow, its detail moves under the name whole instead of breaking */
+.ev-version .ev-facts li { position: relative; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 9px;
+                           padding-left: calc(1em + 9px); }
+.ev-version .ev-facts li::before { position: absolute; left: 0; top: 0; }
+.ev-version .ev-fact-name, .ev-version .ev-fact-detail { white-space: nowrap; }
+/* (cards 10-16) the selected version's checklist under the pair: phones only (see "narrow screens") */
+.ev-version-facts { display: none; }
+
+/* the table: the selected model's 11 episodes; a row opens its episode. (PR #4) fixed column widths, the same on every
+   tab and version */
+.ev-episodes table { table-layout: fixed; }
+.ev-episodes th:nth-child(1) { width: 25%; }
+.ev-episodes th:nth-child(2) { width: 35%; }
+.ev-episodes th:nth-child(3) { width: 20%; }
+.ev-episodes th:nth-child(4) { width: 20%; }
+.ev-episodes td { overflow: hidden; text-overflow: ellipsis; }
+.ev-episodes td.ev-number { color: var(--ink-2); }
+/* (the sticky headings are in ../css/viewer.css, shared with the Diamond table) */
+/* the headings are buttons, as the Diamond table's: darker on hover, with the arrow a sort would give shown faintly */
+.ev-episodes .ev-sort { appearance: none; border: 0; background: none; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
+@media (hover: hover) {
+  .ev-episodes th:hover { color: var(--ink); }
+  .ev-episodes th:not(.ev-sorted):hover::after { content: " \25BE"; opacity: .45; }
+}
+.ev-episodes .ev-sort:focus-visible { outline: 2px solid var(--mirror); outline-offset: 3px; border-radius: 4px; }
+.ev-episodes tbody tr:focus-visible { outline: none; }
+.ev-episodes tbody tr:focus-visible td { box-shadow: inset 0 2px 0 var(--mirror), inset 0 -2px 0 var(--mirror); }
+.ev-episodes tbody tr:focus-visible td:first-child { box-shadow: inset 2px 2px 0 var(--mirror), inset 0 -2px 0 var(--mirror); }
+.ev-episodes tbody tr:focus-visible td:last-child { box-shadow: inset -2px 2px 0 var(--mirror), inset 0 -2px 0 var(--mirror); }
+/* the outcome: its mark in colour; a failure's words muted (the red cross carries it; red labels drowned the successes) */
+.ev-outcome.ev-failure { color: var(--muted); }
+.ev-glyph { font-weight: 700; flex: none; }
+.ev-glyph.ev-success, .ev-success > .ev-glyph { color: var(--plan-text); }
+.ev-glyph.ev-failure, .ev-failure > .ev-glyph { color: var(--fail); }
+
+/* ------------------------------------------------------------------ the episode window */
+/* the head: the task in grey over "World 01", then the outcome in its colour */
+/* as the Diamond viewer's head: the task in grey, the h2, then the outcome in bold ink (its mark in colour) */
+.ev-setting { margin: 0 0 2px; font-size: 16px; color: var(--muted); }
+.ev-sheet-head .ev-result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 7px; margin: 10px 0 0; font-size: clamp(17px, 1.4vw, 20px);
+                            line-height: 1.35; font-weight: 700; color: var(--ink); }
+
+/* (PR #4) MakeWaterfall, when the agent ends the episode before the video does */
+.ev-result .ev-runs-on { font-weight: 400; font-size: .85em; color: var(--muted); }
+.ev-result .ev-runs-on::before { content: "· "; }
+
+/* the model on this world (with each one's outcome), and on MakeWaterfall the video plan */
+.ev-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin: 0 0 14px; }
+.ev-row .ev-view { margin: 0; }
+.ev-model .ev-glyph { margin-right: 7px; }
+
+/* the screen keeps a 16:9 box whatever is loading or shown, so nothing below it moves; the side-by-side view
+   (3:1) fits its width inside it, and a new episode fades in once it has a frame */
+.ev-screen { aspect-ratio: 16 / 9; max-height: 58vh; margin: 0 auto; }
+/* the window is as wide as the video can be at that height, so the head, video and timeline share their edges */
+.ev-sheet { width: min(1160px, 100%, calc(58vh * 16 / 9 + 52px)); }
+html.ev-embed .ev-sheet { width: min(var(--w), calc(58vh * 16 / 9)); }
+html.ev-embed .ev-sheet-buttons { margin-right: 0; }   /* (the modal's close button sits a row higher, outside the column) */
+.ev-screen video, .ev-screen video.ev-back { position: absolute; inset: 0; width: 100%; height: 100%; max-height: none; object-fit: contain; }
+.ev-screen video:not(.ev-back) { transition: opacity .25s ease; }
+.ev-screen.ev-loading video { opacity: 0; }
+
+/* the timeline: a slim bar under the video */
+#timeline { height: 60px; margin: 12px 0 0; border-radius: 14px; touch-action: pan-y; }
+#timeline .track { fill: color-mix(in srgb, var(--ink) 9%, transparent); }
+#timeline .played { fill: color-mix(in srgb, var(--ink) 24%, transparent); }
+#timeline .done { fill: var(--plan); opacity: .4; }
+#timeline .success { stroke: var(--plan-text); stroke-width: 2; }
+#timeline .success-label { fill: var(--plan-text); font: 600 13px var(--sans); }
+/* (PR #4) MakeWaterfall: the episode's end (where the agent counts as pressing Esc), and the video past it greyed out */
+#timeline .end { stroke: var(--ink); stroke-width: 2; }
+#timeline .end-label { fill: var(--ink-2); font: 600 13px var(--sans); }
+#timeline .failed { fill: var(--fail); opacity: .4; }
+#timeline .tick-label { fill: var(--muted); font: 12px var(--sans); font-variant-numeric: tabular-nums; }
+#timeline .playhead line { stroke: var(--mirror); stroke-width: 2; }
+#timeline .playhead circle { fill: var(--mirror); stroke: none; }
+
+/* speed as a segmented control (as the Diamond viewer's), the jump at the right */
+/* (the segmented control's rules are in ../css/viewer.css) */
+/* the key's swatch (the key's layout and the shortcuts are in ../css/viewer.css) */
+.ev-key-done::before { background: color-mix(in srgb, var(--plan) 40%, transparent); }
+.ev-key-end::before { width: 2px; height: 14px; border-radius: 0; background: var(--ink); }
+.ev-key-failed::before { background: color-mix(in srgb, var(--fail) 40%, transparent); }
+
+@media (prefers-reduced-motion: reduce) { .ev-screen video:not(.ev-back), .ev-version { transition: none; } }
+
+/* ------------------------------------------------------------------ narrow screens */
+@media (max-width: 760px) {
+  .ev-versions { grid-template-columns: 1fr; gap: 10px; }
+  .ev-version { padding: 18px 20px 20px; }
+  .ev-version .ev-count { font-size: 34px; }
+}
+@media (max-width: 560px) {
+  /* (cards 10-16) the two versions side by side as a compact two-up switch: the name, "N of 11 worlds" and the bar;
+     the selected one's checklist once under the pair, so the table starts on the first screen */
+  .ev-versions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 12px; }
+  .ev-version { padding: 12px 14px 14px; border-radius: 18px; }
+  .ev-version h2 { font-size: 16px; margin: 0 0 4px; white-space: nowrap; }
+  .ev-version h2::before { width: 8px; height: 8px; margin-right: 7px; }
+  .ev-version .ev-count { font-size: 28px; }
+  .ev-version .ev-count small { font-size: 13.5px; }
+  .ev-version .ev-bar { height: 4px; margin: 9px 0 0; }
+  .ev-version .ev-facts { display: none; }
+  .ev-version-facts { display: flex; position: relative; z-index: 3; gap: 5px; margin: 0 0 28px; padding: 0 4px; }
+  .ev-version-facts li { font-size: 14.5px; flex-wrap: wrap; column-gap: 7px; }
+  .ev-version-facts .ev-fact-detail { white-space: nowrap; }
+  /* the table fits a phone: "01" for "World 01", 9 px sides, 46 px tall rows (a tap target) */
+  .ev-episodes .ev-long { display: none; }
+  .ev-episodes th, .ev-episodes td { padding-left: 9px; padding-right: 9px; }
+  .ev-episodes tbody td { padding-top: 13px; padding-bottom: 13px; }
+  .ev-episodes th:nth-child(1) { width: 19%; }
+  .ev-episodes th:nth-child(2) { width: 33%; }
+  .ev-episodes th:nth-child(3) { width: 27%; }
+  .ev-episodes th:nth-child(4) { width: 21%; }
+  /* the sorted arrow sits in the padding, so it doesn't push into the next heading */
+  .ev-episodes th.ev-sorted::after, .ev-episodes th:not(.ev-sorted):hover::after { position: absolute; }
+  /* "the video runs on to 5:00" on its own line, without the separating dot */
+  .ev-result .ev-runs-on { flex-basis: 100%; }
+  .ev-result .ev-runs-on::before { content: none; }
+  .ev-row .ev-view { display: flex; width: 100%; }
+  .ev-row .ev-view button { flex: 1 1 0; padding: 8px 6px; }
+  .ev-controls .ev-speeds button { padding: 7px 10px; }
+  .ev-legend { font-size: 13px; }
+}
+/* SE-sized phones: the speeds and the jump keep one row */
+@media (max-width: 400px) {
+  .ev-controls { flex-wrap: nowrap; gap: 8px; }
+  .ev-controls .ev-speeds button { padding: 7px 7.5px; font-size: 13.5px; }
+  .ev-controls #to-moment { padding: 8px 12px; font-size: 13.5px; white-space: nowrap; }
+}

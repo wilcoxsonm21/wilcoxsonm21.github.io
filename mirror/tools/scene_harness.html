@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>scene harness</title>
+<style>html,body{margin:0;background:#faf9f5}iframe{border:0;width:1920px;height:1080px;display:block}</style>
+<iframe id="f"></iframe>
+<script>
+const q = new URLSearchParams(location.search);
+const f = document.getElementById("f");
+f.src = "../scenes/" + q.get("scene") + ".html?scroll";
+window.INFO = null;
+f.addEventListener("load", () => f.contentWindow.SCENE.ready.then(info => { window.INFO = info; }));
+window.R = (T) => f.contentWindow.SCENE.render(T, { rate: 0, visible: true });
+window.CAP = () => f.contentWindow.SCENE.caption();
+</script>

@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+<head>
+<link rel="stylesheet" href="scene-fonts.css">
+<script>
+// mirror: with ?scroll the parent page renders every frame (scene-adapter.js), so the page's own
+// presentation loop is never scheduled; without it the page works as in the deck (click or arrow keys to step).
+window.SCENE_SCROLL = /[?&]scroll\b/.test(location.search);
+if (window.SCENE_SCROLL) {
+  const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = cb => (cb && cb.name === "loop" ? 0 : raf(cb));
+  document.documentElement.classList.add("scene-scroll");
+}
+// start loading the website's face (scene-fonts.css) before the page measures any text (its document.fonts.ready
+// then waits for it)
+['400 20px "Source Sans 3"', '500 20px "Source Sans 3"', '600 20px "Source Sans 3"', '700 20px "Source Sans 3"',
+ 'italic 400 20px "Source Sans 3"'].forEach(f => document.fonts.load(f).catch(() => {}));
+</script>
+<script>
+window.SCENE_PORTRAIT = /[?&]portrait\b/.test(location.search);
+window.PORTRAIT = null;
+if (window.SCENE_PORTRAIT) document.documentElement.classList.add("portrait");
+</script>
+<script src="portrait/suites.js"></script>
+<script>
+if (window.PORTRAIT) document.head.insertAdjacentHTML("beforeend", "<style>#stage{width:" + PORTRAIT.W + "px!important;" +
+  "height:" + PORTRAIT.H + "px!important}html.portrait .title,html.portrait #ptitle,html.portrait .callout" +
+  "{display:none!important}</style>");
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mirror: DMC, OGBench and Atari</title>
+<style>
+:root { --bg: #f5f5f4; --ink: #1c1b1a; --muted: #6e6b67; --blue: #3e6fd8; --red: #dc4436; }
+html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; cursor: none; }
+body.cursor { cursor: default; }
+#stage { position: relative; width: 1920px; height: 1080px; flex: none; background: var(--bg);
+         font-family: "Source Sans 3", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 400;
+         color: var(--ink); overflow: hidden; }
+.title { position: absolute; left: 120px; width: 1680px; top: 58px; height: 142px; display: flex; align-items: center;
+         font-family: "Source Sans 3", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 700;
+         font-size: 49px; line-height: 1.08; letter-spacing: -0.02em; opacity: 0; visibility: hidden; }
+.title > div { white-space: nowrap; }
+.red { color: var(--red); }
+.blue { color: var(--blue); }
+svg#plot { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: visible; }
+svg#plot text { font-family: "Source Sans 3", "Helvetica Neue", Helvetica, Arial, sans-serif;
+                font-variant-numeric: tabular-nums; }
+svg#plot path.line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+/* tiles: drawn at native size and placed with zoom, not scale(): zoomed content is laid out at its on-screen size */
+.tile { position: absolute; left: 0; top: 0; width: 400px; height: 400px; overflow: hidden; background: #1b2233;
+        transform-origin: 0 0; }
+.tile video { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block; object-fit: cover; }
+#hud { position: fixed; right: 14px; bottom: 10px; font: 13px/1.3 system-ui, sans-serif; color: #989897;
+       opacity: 0; transition: opacity .3s; pointer-events: none; }
+body.cursor #hud { opacity: 1; }
+</style>
+<!-- mirror theme (tools/theme.py) -->
+<style>
+/* website theme (tools/theme.py): captions in Source Sans 3; a key claim in the page's gold, problems red, plans green */
+.title, #ptitle { font-weight: 600 !important; letter-spacing: -0.012em; }
+.title b { font-weight: 700; }
+.title .blue, .title .violet, .title .teal { background: linear-gradient(90deg, #d49a00, #b98000); -webkit-background-clip: text; background-clip: text;
+                                           color: transparent; -webkit-text-fill-color: transparent; }
+.title .red { color: #dc4436; }
+.title .green { color: #23804d; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="title" id="t0"><div>Mirror solves a diverse set of RL environments</div></div>
+  <div class="title" id="t1"><div>All methods learn from expert videos, without actions or rewards</div></div>
+  <div class="title" id="t2"><div><span class="red">No prior method</span> does well on all three suites</div></div>
+  <div class="title" id="t3"><div>Training the V2A model on <span class="red">random exploration</span> falls short</div></div>
+  <div class="title" id="t4"><div>Mirror <span class="blue">matches or beats every baseline</span> on all three suites</div></div>
+  <div class="title" id="t5"><div>With an oracle video planner, Mirror <span class="blue">matches the expert</span> on Atari</div></div>
+  <div class="title" id="t6"><div>Final performance after 1M environment steps</div></div>
+  <svg id="plot" viewBox="0 0 1920 1080">
+    <defs id="defs"></defs>
+    <g id="cam"></g>
+    <g id="labels"></g>
+    <g id="table"></g>
+  </svg>
+</div>
+<div id="hud"></div>
+
+<script>
+"use strict";
+const DATA = {"suites":[{"key":"dmc","name":"DeepMind Control","sub":"13 tasks","metric":"Episode return","lo":-30,"hi":1030,"ticks":[0,250,500,750,1000],"fmt":["0","250","500","750","1000"],"expert":902.9},{"key":"ogbench","name":"OGBench","sub":"4 tasks","metric":"Success rate","lo":-0.03,"hi":1.03,"ticks":[0,0.25,0.5,0.75,1],"fmt":["0","0.25","0.5","0.75","1"],"expert":0.9875},{"key":"atari","name":"Atari","sub":"7 games","metric":"Score (% of expert)","lo":-25,"hi":105,"ticks":[0,25,50,75,100],"fmt":["0","25","50","75","100"],"expert":100.0}],"curves":{"dmc/mirror_oracle":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[350.2,401.9,428.7,482.0,527.6,558.6,577.0,588.8,592.4,611.7,626.2,636.4,648.7,654.4,659.4,674.9,683.5,690.9,699.7,705.8,716.3,726.9,735.5,740.2,746.5,755.2,765.4,769.3,774.6,775.9,778.0,777.1,791.3,781.9,780.5,794.3,791.9,799.7,781.8,788.4],"e":[10.97,8.94,11.23,6.833,10.77,7.433,6.852,5.235,8.93,7.716,9.984,9.915,10.19,10.11,8.884,9.057,9.74,10.05,8.829,8.996,9.483,7.251,9.768,9.516,7.269,10.15,7.684,6.818,9.18,7.714,8.349,9.25,5.434,8.83,9.1,6.609,6.254,5.365,15.95,15.18]},"dmc/mirror":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[331.8,382.8,410.4,447.9,502.5,543.5,552.1,576.2,580.2,603.0,604.2,605.2,625.9,625.4,631.8,647.3,644.7,657.4,667.6,676.4,677.3,690.2,696.9,698.3,712.9,717.3,722.2,730.6,734.0,737.5,740.5,745.1,749.5,748.4,742.0,743.9,743.5,744.6,734.5,744.9],"e":[9.279,8.667,9.782,6.093,9.821,8.88,7.966,5.28,8.587,8.135,9.132,9.895,8.997,9.561,8.999,8.346,9.187,9.305,8.066,7.379,8.334,6.748,9.044,8.366,5.944,9.533,7.125,6.755,8.736,7.333,8.063,8.493,6.097,8.747,14.1,13.53,13.56,13.01,16.41,14.59]},"dmc/bco":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[91.86,106.8,126.5,132.3,144.6,147.2,166.9,176.9,167.3,184.8,176.6,188.5,182.7,170.8,188.2,203.3,195.0,195.6,195.0,194.1,194.3,199.1,201.4,193.2,199.9,207.7,193.9,202.2,200.4,198.1,200.5,201.9,203.8,205.7,208.6,210.5,205.3,207.6,210.1,204.6],"e":[6.335,7.125,9.692,10.26,10.2,8.467,13.02,12.73,12.59,11.82,11.33,9.888,11.95,11.6,9.161,5.776,7.742,5.883,7.877,5.35,9.841,7.557,6.707,9.094,7.711,5.252,12.6,8.772,6.357,5.167,6.606,7.451,7.302,5.374,5.339,4.561,8.619,4.839,4.515,6.09]},"dmc/laifo":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[114.3,217.4,273.8,376.4,451.8,471.1,509.8,542.8,575.2,614.4,614.0,638.5,635.1,654.4,672.1,678.5,686.3,689.3,683.4,690.6,697.4,705.2,713.6,713.7,725.6,727.0,713.5,733.5,729.8,740.5,723.0,742.1,732.0,743.2,748.3,739.6,744.8,732.1,751.2,744.7],"e":[16.27,17.69,18.65,23.83,19.67,20.53,20.64,18.48,20.54,16.1,18.37,16.95,17.63,20.09,19.64,22.03,22.59,22.85,23.33,23.94,23.29,22.84,22.62,22.78,22.82,22.86,25.08,23.06,24.39,23.3,24.21,23.38,24.78,23.92,23.83,24.4,23.57,26.12,23.74,23.99]},"dmc/random":{"x":[100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000],"y":[201.1,210.0,221.9,240.2,218.6,222.7,232.0,241.1,233.4,221.0],"e":[5.79,4.113,5.373,4.793,4.067,5.149,6.239,5.648,6.937,4.924]},"dmc/grounding":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[199.3,221.4,234.0,248.4,258.0,269.2,269.7,276.2,279.8,284.0,284.5,287.1,287.4,288.3,283.8,285.0,283.9,283.3,286.6,288.5,291.1,289.0,286.7,287.5,289.5,284.7,290.1,291.7,292.0,293.7,294.2,293.3,294.9,291.4,294.4,295.1,295.9,295.6,292.1,295.2],"e":[6.112,3.318,3.039,4.045,3.402,2.878,2.222,2.803,2.245,2.457,2.147,2.014,2.344,2.584,2.325,2.346,2.303,2.499,2.15,3.378,3.044,2.769,1.945,1.555,2.281,2.068,2.626,2.119,2.244,2.086,2.136,2.586,2.152,2.122,2.029,2.202,2.28,2.59,2.263,2.773]},"ogbench/mirror_oracle":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[0.37,0.585,0.655,0.705,0.7875,0.825,0.8675,0.9125,0.87,0.9325,0.915,0.89,0.9075,0.9075,0.915,0.9025,0.92,0.9125,0.915,0.9325,0.915,0.9075,0.925,0.93,0.92,0.9075,0.9325,0.9225,0.93,0.915,0.93,0.915,0.925,0.93,0.935,0.9125,0.93,0.925,0.9275,0.9325],"e":[0.04579,0.0258,0.01381,0.01945,0.02963,0.02634,0.02305,0.01186,0.02332,0.01275,0.01311,0.01611,0.01458,0.01425,0.01403,0.0163,0.01403,0.01551,0.01323,0.0125,0.01199,0.01335,0.01262,0.008839,0.01479,0.008292,0.01335,0.01705,0.01287,0.01275,0.01335,0.01132,0.00952,0.0162,0.01186,0.01287,0.01,0.02031,0.01741,0.02646]},"ogbench/mirror":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[0.3775,0.4925,0.57,0.5775,0.655,0.79,0.8275,0.8575,0.8825,0.8875,0.8875,0.8825,0.915,0.875,0.925,0.8725,0.8875,0.8725,0.915,0.865,0.9,0.9025,0.89,0.8975,0.9075,0.9075,0.895,0.8975,0.935,0.9175,0.91,0.91,0.9,0.91,0.9,0.885,0.8825,0.9225,0.9225,0.915],"e":[0.03687,0.03202,0.02229,0.02828,0.02129,0.02284,0.02915,0.02358,0.01992,0.02693,0.01046,0.0149,0.01705,0.01829,0.01591,0.01639,0.01969,0.01668,0.01237,0.02284,0.01759,0.01392,0.02069,0.02077,0.01212,0.02449,0.01414,0.01658,0.01346,0.01104,0.01403,0.01723,0.0125,0.01346,0.01649,0.01323,0.01658,0.01335,0.009354,0.01159]},"ogbench/bco":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[0.0,0.025,0.0475,0.02,0.04,0.0475,0.055,0.06,0.0575,0.04,0.05,0.0575,0.04,0.0575,0.075,0.0525,0.0625,0.0625,0.055,0.0575,0.0575,0.05,0.06,0.06,0.0625,0.0525,0.05,0.0475,0.06,0.06,0.055,0.0575,0.0475,0.04,0.0375,0.035,0.0525,0.055,0.05,0.065],"e":[0.0,0.01521,0.03331,0.01479,0.02411,0.02767,0.02795,0.0301,0.03127,0.02172,0.02391,0.02704,0.02243,0.02932,0.03312,0.0261,0.03368,0.03414,0.02663,0.0361,0.03808,0.02845,0.02883,0.02767,0.04035,0.02744,0.02519,0.02404,0.02856,0.02878,0.02264,0.02926,0.03,0.02129,0.02143,0.02023,0.02456,0.02462,0.02215,0.0326]},"ogbench/laifo":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[0.0,0.0025,0.0025,0.08,0.1925,0.1925,0.1625,0.25,0.2825,0.3125,0.2875,0.22,0.23,0.24,0.1875,0.24,0.17,0.2725,0.1825,0.2875,0.265,0.3075,0.26,0.335,0.355,0.34,0.4775,0.4725,0.535,0.5025,0.5725,0.5375,0.5325,0.575,0.6225,0.585,0.575,0.555,0.5975,0.6325],"e":[0.0,0.0025,0.0025,0.03082,0.05417,0.05766,0.06519,0.06996,0.06098,0.0621,0.06676,0.07155,0.07401,0.07665,0.06215,0.05844,0.05937,0.06576,0.05961,0.06862,0.06942,0.06257,0.0643,0.0595,0.06519,0.05982,0.05698,0.07886,0.07963,0.07408,0.0746,0.07471,0.0807,0.078,0.07587,0.07293,0.07327,0.07494,0.0599,0.06734]},"ogbench/random":{"x":[100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000],"y":[0.3625,0.3425,0.405,0.3325,0.3525,0.3425,0.3075,0.3575,0.295,0.3175],"e":[0.04548,0.02121,0.0364,0.03057,0.02883,0.02789,0.01896,0.03107,0.04119,0.02773]},"ogbench/grounding":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[0.0275,0.045,0.06,0.0725,0.0775,0.0875,0.08,0.095,0.115,0.1275,0.1225,0.115,0.11,0.1175,0.11,0.1125,0.1025,0.075,0.095,0.115,0.115,0.105,0.1125,0.115,0.095,0.09,0.105,0.09,0.12,0.1025,0.1075,0.1125,0.0925,0.1,0.1025,0.1125,0.0975,0.105,0.1,0.105],"e":[0.01447,0.01403,0.0225,0.02512,0.02562,0.02,0.0162,0.01369,0.01741,0.02143,0.02568,0.01992,0.01785,0.0225,0.02417,0.02926,0.02318,0.02229,0.0255,0.02727,0.03588,0.03487,0.03107,0.02592,0.03368,0.02861,0.03274,0.02574,0.02243,0.0398,0.02905,0.03391,0.0334,0.03396,0.03478,0.03787,0.02739,0.03231,0.03893,0.02867]},"atari/mirror_oracle":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[58.93,71.64,72.72,77.07,82.07,83.92,82.84,85.09,87.53,85.39,87.2,87.17,89.23,92.22,91.48,91.37,89.78,92.19,93.1,95.05,93.74,93.31,94.84,95.64,95.81,93.99,94.3,96.8,97.23,96.79,94.73,97.14,94.4,98.01,95.11,99.87,97.14,99.4,97.73,98.76],"e":[2.748,2.08,1.346,1.148,1.318,1.141,0.9606,1.099,0.6956,0.9583,1.219,1.53,1.146,1.5,1.625,1.397,1.492,1.415,1.534,1.353,1.374,1.727,1.333,1.531,0.7687,1.301,0.9921,0.8455,1.021,0.9919,1.266,0.9761,1.328,1.233,1.133,1.128,1.224,1.273,1.393,0.9697]},"atari/mirror":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[41.55,49.05,50.85,53.65,55.65,57.21,58.39,58.75,56.67,56.91,57.27,60.5,60.09,59.54,59.13,59.32,58.62,59.26,58.44,60.21,58.18,59.36,58.29,59.28,58.34,59.33,59.28,59.09,60.04,59.07,59.91,60.49,61.04,61.67,62.65,60.26,60.94,60.77,59.35,61.54],"e":[1.175,1.02,0.8986,1.297,1.652,1.159,1.303,1.21,1.438,1.199,1.335,1.901,1.856,2.061,1.222,1.704,1.499,1.294,1.602,1.395,1.07,1.508,1.38,1.105,1.342,1.278,1.191,1.167,1.325,1.175,1.404,2.022,1.488,1.669,1.668,1.445,1.254,1.785,1.493,2.006]},"atari/bco":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[2.27,9.944,13.96,14.43,16.35,17.61,18.11,19.91,17.76,17.33,16.66,20.35,20.73,20.54,18.91,20.18,20.74,20.25,19.34,21.26,21.3,21.51,22.37,22.61,21.93,21.48,21.71,23.24,21.95,22.11,21.77,20.47,20.28,20.59,23.16,23.21,23.26,22.68,22.21,22.34],"e":[2.718,2.29,1.136,1.808,0.9979,1.487,2.229,0.9164,1.114,1.439,1.201,1.61,0.9826,1.422,1.42,1.156,0.9771,0.7882,1.651,1.805,1.149,1.351,1.368,1.523,1.313,1.249,1.354,0.6571,1.478,1.155,1.262,2.242,2.255,2.215,0.6338,0.5957,0.5822,0.9694,1.06,1.012]},"atari/laifo":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[-13.41,-15.86,-12.06,-8.279,-4.194,-1.627,-0.08811,3.017,5.766,6.785,7.208,9.432,9.16,8.862,12.01,10.42,10.91,10.27,8.236,11.14,9.335,11.37,9.391,11.02,9.452,9.162,7.849,9.7,7.25,10.49,9.39,8.128,8.422,10.64,9.041,9.801,8.174,11.8,10.11,8.644],"e":[1.419,0.568,1.382,1.86,0.9891,1.094,1.143,1.138,1.211,1.314,1.303,1.986,2.305,2.124,1.91,1.979,1.595,1.825,2.735,2.079,2.167,1.845,2.127,2.351,2.018,2.088,2.367,1.903,1.719,1.747,1.682,1.728,2.687,1.45,1.864,1.506,1.646,1.316,1.769,2.303]},"atari/random":{"x":[100000,200000,300000,400000,500000,600000,700000,800000,900000,1000000],"y":[34.81,41.82,39.27,37.7,38.43,41.57,36.46,41.7,38.87,41.22],"e":[3.093,3.053,3.029,3.133,3.066,2.219,2.747,2.425,2.776,2.924]},"atari/grounding":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[15.69,19.56,22.32,24.45,26.47,29.77,29.11,30.11,29.96,31.63,32.9,33.53,32.19,34.14,33.62,34.07,34.1,35.09,34.42,35.22,36.31,34.87,36.01,35.6,34.29,37.05,36.76,35.64,37.06,34.96,37.02,36.16,35.61,36.53,35.48,35.66,35.63,35.22,33.82,34.97],"e":[1.986,2.269,2.523,2.637,2.517,2.664,2.419,2.379,2.219,2.17,2.202,2.458,2.214,2.084,2.069,1.86,1.986,2.497,1.967,1.738,1.821,2.249,2.354,2.382,1.695,2.207,1.69,2.041,1.606,1.312,1.348,1.538,1.227,1.432,1.621,1.675,1.617,1.615,1.736,1.695]},"atari/viper":{"x":[25000,50000,75000,100000,125000,150000,175000,200000,225000,250000,275000,300000,325000,350000,375000,400000,425000,450000,475000,500000,525000,550000,575000,600000,625000,650000,675000,700000,725000,750000,775000,800000,825000,850000,875000,900000,925000,950000,975000,1000000],"y":[-17.48,-17.43,-17.38,-17.33,-17.28,-17.23,-17.18,-17.13,-17.08,-17.03,-16.89,-16.74,-16.59,-16.44,-16.29,-16.15,-16.0,-15.85,-15.7,-15.55,-15.45,-15.36,-15.26,-15.16,-15.06,-14.96,-14.86,-14.76,-14.66,-14.57,-14.52,-14.47,-14.42,-14.37,-14.32,-14.27,-14.22,-14.17,-14.12,-14.07],"e":null}},"table":[["Oracle VP",[["mirror_oracle","Mirror",["788 \u00b1 15","0.93 \u00b1 0.03","99 \u00b1 1"],[1,1,1]],["random_oracle","Random-V2A",["227 \u00b1 5","0.38 \u00b1 0.02","63 \u00b1 3"],[0,0,0]],["grounding_oracle","Grounding",["317 \u00b1 4","0.28 \u00b1 0.03","44 \u00b1 1"],[0,0,0]]]],["Generative VP",[["mirror","Mirror",["745 \u00b1 15","0.92 \u00b1 0.01","62 \u00b1 2"],[0,1,0]],["random","Random-V2A",["221 \u00b1 5","0.32 \u00b1 0.03","41 \u00b1 3"],[0,0,0]],["grounding","Grounding",["295 \u00b1 3","0.11 \u00b1 0.03","35 \u00b1 2"],[0,0,0]]]],["Baselines",[["bco","BCO",["205 \u00b1 6","0.07 \u00b1 0.03","22 \u00b1 1"],[0,0,0]],["laifo","LAIfO",["745 \u00b1 24","0.63 \u00b1 0.07","9 \u00b1 2"],[0,0,0]]]]],"expert_row":["903","0.99","100"]};
+const CLIPS = {"dmc": {"src": "media/suites_dmc.mp4", "poster": "media/suites_dmc_poster.jpg"}, "ogbench": {"src": "media/suites_ogbench.mp4", "poster": "media/suites_ogbench_poster.jpg"}, "atari": {"src": "media/suites_atari.mp4", "poster": "media/suites_atari_poster.jpg"}};
+const W = PORTRAIT ? PORTRAIT.W : 1920, H = PORTRAIT ? PORTRAIT.H : 1080;
+const SHOOT = new URLSearchParams(location.search).has("shoot");
+const EMBEDDED = window.top !== window;
+const $ = id => document.getElementById(id);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, u) => a + (b - a) * u;
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+  if (parent) parent.append(e);
+  return e;
+}
+const INK = "#1c1b1a", MUTED = "#6e6b67", BLUE = "#3e6fd8";
+function text(parent, str, x, y, { size = 20, anchor = "start", fill = INK, weight = 400, style = "normal",
+                                   base = "alphabetic", id = null } = {}) {
+  const t = el("text", { x, y, "font-size": size * PS, "text-anchor": anchor, fill, "font-weight": weight, "font-style": style,
+                         "dominant-baseline": base }, parent);
+  if (id) t.id = id;
+  t.textContent = str;
+  return t;
+}
+
+// ---------------------------------------------------------------- methods
+// Mirror takes the deck's blue (the self-improving V2A model of the intro); the baselines keep the paper's hues
+// where they do not clash with it (LAIfO was the paper's blue, VIPER its purple).
+const M = {
+  bco:           { name: "BCO",          color: "#e8833f", width: 3 },
+  laifo:         { name: "LAIfO",        color: "#8e6cc0", width: 3 },
+  viper:         { name: "VIPER (est.)", color: "#9e9d9c", width: 3 },
+  grounding:     { name: "Grounding",    color: "#2e7d32", width: 3 },
+  random:        { name: "Random-V2A",   color: "#8c613c", width: 3 },
+  mirror:        { name: "Mirror",       color: BLUE,      width: 5 },
+  mirror_oracle: { name: "Mirror",       color: BLUE,      width: 4.5, dash: "12 9", suffix: " (oracle VP)" },
+};
+const ORDER = ["bco", "laifo", "viper", "grounding", "random", "mirror_oracle", "mirror"];   // z order, bottom first
+const BASELINES = ["bco", "laifo", "viper", "grounding", "random"];
+
+// ---------------------------------------------------------------- geometry (plot space; the summary camera scales it)
+const PW = PORTRAIT ? PORTRAIT.PW : 380, PH = PORTRAIT ? PORTRAIT.PH : 440, PT = 424;   // plot width, height, top
+const PTS = PORTRAIT ? PORTRAIT.PT : [PT, PT, PT];   // each plot's top (portrait: stacked)
+let PS = PORTRAIT ? PORTRAIT.TEXT : 1;                // type scale (portrait: the table sets its own)
+const PX = PORTRAIT ? PORTRAIT.PX : [190, 730, 1270];                   // plot left edge per suite
+const CX = [460, 960, 1460];                   // intro: tile centres
+const SUITES = DATA.suites;
+const sx = step => PW * step / 1e6;
+const sy = (s, v) => PH * (1 - (v - s.lo) / (s.hi - s.lo));
+// intro: big tiles with the suite name below; header: small tile with the name beside it
+const TILE_INTRO = i => [CX[i] - 200, 330, 1];
+const TILE_HEAD = i => PORTRAIT ? PORTRAIT.TILE_HEAD(i) : [PX[i] - 64, 236, .25];
+const NAME_SIZE = 40, SUB_SIZE = 30;
+const CAM_SUMMARY = PORTRAIT ? PORTRAIT.CAM_SUMMARY : { s: .6, tx: 40, ty: 250 };
+
+// ---------------------------------------------------------------- build the scene
+const defs = $("defs"), cam = $("cam"), labels = $("labels"), table = $("table");
+const CLIPR = {};   // reveal rects: id -> { rect, w } (width at p = 1)
+function clipRect(id, x, y, w, h) {
+  const cp = el("clipPath", { id: "k_" + id }, defs);
+  CLIPR[id] = { rect: el("rect", { x, y, width: 0, height: h }, cp), w };
+  return `url(#k_${id})`;
+}
+const NODES = {};   // id -> svg/html element whose look the state drives
+const CURVES = {};  // id -> { pts, tip, line }
+SUITES.forEach((s, i) => {
+  const g = el("g", { transform: `translate(${PX[i]},${PTS[i]})` },
+                 PORTRAIT ? (NODES["pan_" + s.key] = el("g", {}, cam)) : cam);   // portrait: moves into the summary row
+  // light horizontal grid, revealed left to right; the zero line a little darker
+  const grid = el("g", { "clip-path": clipRect("grid_" + s.key, -2, -10, PW + 4, PH + 20) }, g);
+  for (const t of s.ticks) {
+    el("line", { x1: 0, x2: PW, y1: sy(s, t), y2: sy(s, t), stroke: t === 0 ? "#cccbca" : "#e0e0df",
+                 "stroke-width": t === 0 ? 2 : 1.5 }, grid);
+  }
+  NODES["grid_" + s.key] = grid;
+  const ticks = el("g", {}, g);
+  s.ticks.forEach((t, j) => text(ticks, s.fmt[j], -14, sy(s, t), { size: 20, anchor: "end", fill: MUTED, base: "central" }));
+  [[0, "0"], [5e5, "0.5M"], [1e6, "1M"]].forEach(([v, l]) => text(ticks, l, sx(v), PH + 36, { size: 20, anchor: "middle", fill: MUTED }));
+  NODES["ticks_" + s.key] = ticks;
+  NODES["metric_" + s.key] = text(g, s.metric, ...(PORTRAIT ? [PORTRAIT.YLABEL, PH / 2] : [-64, -30]),
+                                { size: 22, fill: MUTED, ...(PORTRAIT ? { anchor: "middle" } : {}) });
+  if (PORTRAIT) NODES["metric_" + s.key].setAttribute("transform", `rotate(-90 ${PORTRAIT.YLABEL} ${PH / 2})`);
+  // expert: dashed reference line, labelled at its left end
+  const ye = sy(s, s.expert);
+  NODES["expert_" + s.key] = el("g", { "clip-path": clipRect("expert_" + s.key, -2, ye - 10, PW + 4, 20) }, g);
+  el("line", { x1: 0, x2: PW, y1: ye, y2: ye, stroke: MUTED, "stroke-width": 2, "stroke-dasharray": "7 6" }, NODES["expert_" + s.key]);
+  NODES["explab_" + s.key] = text(g, "Expert", 2, ye - 9, { size: 20, fill: MUTED });
+  // curves: band + line, revealed left to right behind a clip; a dot rides the leading edge while drawing
+  for (const m of ORDER) {
+    const c = DATA.curves[`${s.key}/${m}`];
+    if (!c) continue;
+    const id = `c_${s.key}_${m}`, sty = M[m];
+    const grp = el("g", {}, g);
+    const clipped = el("g", { "clip-path": clipRect(id, -12, -40, PW + 24, PH + 80) }, grp);
+    const pts = c.x.map((x, j) => [sx(x), sy(s, c.y[j])]);
+    if (c.e) {
+      const up = c.x.map((x, j) => [sx(x), sy(s, c.y[j] + c.e[j])]);
+      const lo = c.x.map((x, j) => [sx(x), sy(s, c.y[j] - c.e[j])]).reverse();
+      el("path", { d: "M" + up.concat(lo).map(p => p.map(v => v.toFixed(1)).join(",")).join(" L") + " Z",
+                   fill: sty.color, "fill-opacity": m.startsWith("mirror") ? .16 : .13 }, clipped);
+    }
+    const line = el("path", { class: "line", d: "M" + pts.map(p => p.map(v => v.toFixed(1)).join(",")).join(" L"),
+                              stroke: sty.color, "stroke-width": sty.width }, clipped);
+    if (sty.dash) line.setAttribute("stroke-dasharray", sty.dash);
+    const tip = el("circle", { r: m.startsWith("mirror") ? 7 : 5.5, fill: sty.color, opacity: 0 }, grp);
+    NODES[id] = grp;
+    CURVES[id] = { pts, tip };
+  }
+});
+// the suite names: intro (centred under the big tile) -> header (beside the small tile)
+SUITES.forEach(s => {
+  NODES["name_" + s.key] = text(cam, s.name, 0, 0, { size: NAME_SIZE, weight: 500 });
+  NODES["sub_" + s.key] = text(cam, s.sub, 0, 0, { size: SUB_SIZE, fill: MUTED });
+});
+NODES.caption = text(cam, "Mirror rollouts after 1M environment steps", 960, 942, { size: 28, anchor: "middle", fill: MUTED });
+NODES.xlabel = text(PORTRAIT ? (NODES.pan_xlabel = el("g", {}, cam)) : cam, "Environment steps",
+                     ...(PORTRAIT ? PORTRAIT.XLABEL : [PX[1] + PW / 2, PT + PH + 92]), { size: 24, anchor: "middle", fill: MUTED });
+
+// tiles (HTML: video)
+SUITES.forEach(s => {
+  const d = document.createElement("div");
+  d.className = "tile";
+  d.id = "tile_" + s.key;
+  const v = document.createElement("video");
+  v.muted = true; v.loop = true; v.playsInline = true; v.preload = "auto";
+  v.setAttribute("muted", ""); v.setAttribute("playsinline", "");
+  v.poster = CLIPS[s.key].poster;
+  v.src = CLIPS[s.key].src;
+  if (!SHOOT) { v.autoplay = true; v.play().catch(() => {}); }
+  d.append(v);
+  $("stage").append(d);
+  NODES["tile_" + s.key] = d;
+});
+
+// ---------------------------------------------------------------- labels at the right end of the Atari curves
+// Fixed positions (computed once, with every label) so a label never moves when others arrive.
+const LAB = ["mirror_oracle", "mirror", "random", "grounding", "bco", "laifo", "viper"];
+const ATARI = SUITES[2];
+const LAB_Y = {};
+{
+  const ys = LAB.map(m => { const c = DATA.curves[`atari/${m}`]; return [m, sy(ATARI, c.y[c.y.length - 1])]; });
+  ys.sort((a, b) => a[1] - b[1]);
+  const gap = 29 * PS;
+  for (let it = 0; it < 50; it++) {
+    for (let j = 1; j < ys.length; j++) {
+      const d = ys[j][1] - ys[j - 1][1];
+      if (d < gap) { ys[j - 1][1] -= (gap - d) / 2; ys[j][1] += (gap - d) / 2; }
+    }
+  }
+  for (const [m, y] of ys) LAB_Y[m] = y;
+}
+for (const m of LAB) {
+  const t = text(labels, M[m].name, 0, 0, { size: 24, fill: M[m].color, weight: m.startsWith("mirror") ? 600 : 500,
+                                             base: "central" });
+  if (M[m].suffix) {
+    const sp = el("tspan", { "font-weight": 500 }, t);
+    sp.textContent = M[m].suffix;
+    t.suffix = sp;
+  }
+  NODES["lab_" + m] = t;
+}
+const SLAB = [];
+if (PORTRAIT) SUITES.slice(0, 2).forEach((s, i) => {
+  const g = el("g", { transform: `translate(${PX[i] + PW + 16},${PTS[i]})` }, NODES["pan_" + s.key]);
+  const ys = LAB.filter(m => DATA.curves[`${s.key}/${m}`])
+    .map(m => { const c = DATA.curves[`${s.key}/${m}`]; return [m, sy(s, c.y[c.y.length - 1])]; });
+  ys.sort((a, b) => a[1] - b[1]);
+  for (let it = 0; it < 50; it++) for (let j = 1; j < ys.length; j++) {
+    const d = ys[j][1] - ys[j - 1][1];
+    if (d < 29 * PS) { ys[j - 1][1] -= (29 * PS - d) / 2; ys[j][1] += (29 * PS - d) / 2; }
+  }
+  for (const [m, y] of ys) {
+    const t = text(g, M[m].name, 0, y, { size: 24, fill: M[m].color, weight: m.startsWith("mirror") ? 600 : 500,
+                                         base: "central" });
+    if (M[m].suffix) el("tspan", { "font-weight": 500 }, t).textContent = M[m].suffix;
+    const id = `slab_${s.key}_${m}`;
+    NODES[id] = t;
+    SLAB.push(id);
+  }
+});
+
+// ---------------------------------------------------------------- summary table (stage space)
+if (PORTRAIT) PS = PORTRAIT.TABLE.TEXT;
+const SUBHEAD = PORTRAIT ? PORTRAIT.TABLE.SUBHEAD * PS : 0;   // portrait: each group's name heads its rows
+const { TL, TR, TCOL } = PORTRAIT ? PORTRAIT.TABLE
+  : { TL: 1110, TR: 1822, TCOL: { method: 1268, dmc: 1515, ogbench: 1655, atari: 1776 } };
+const ROWS = [];    // [group, key, name, values, bold]
+for (const [group, rows] of DATA.table) for (const r of rows) ROWS.push([group, ...r]);
+const TY = { top: PORTRAIT ? PORTRAIT.TABLE.top : 352 };
+TY.headRule = TY.top + 88 * PS;
+const ROW_H = 40 * PS, GROUP_GAP = 14 * PS;
+const TAB = {};    // key -> y (row centre)
+{
+  let y = TY.headRule + 8, last = null;
+  ROWS.forEach(([group, key]) => {
+    if (last !== null && group !== last) y += GROUP_GAP;
+    if (group !== last) y += SUBHEAD;
+    TAB[key] = y + ROW_H / 2;
+    y += ROW_H;
+    last = group;
+  });
+  TY.expert = y + GROUP_GAP + ROW_H / 2;
+  TY.bottom = TY.expert + ROW_H / 2 + 6;
+}
+{
+  if (PORTRAIT) NODES.pan_table = table;
+  const rules = el("g", { "clip-path": clipRect("rules", TL - 2, TY.top - 10, TR - TL + 4, TY.bottom - TY.top + 20) }, table);
+  NODES.rules = rules;
+  const rule = (y, w) => el("line", { x1: TL, x2: TR, y1: y, y2: y, stroke: INK, "stroke-width": w }, rules);
+  rule(TY.top, 2.5); rule(TY.headRule, 1.5); rule(TY.bottom, 2.5);
+  let last = null;
+  ROWS.forEach(([group, key]) => {
+    if (last !== null && group !== last) rule(TAB[key] - ROW_H / 2 - SUBHEAD - GROUP_GAP / 2, 1.2);
+    last = group;
+  });
+  rule(TY.expert - ROW_H / 2 - GROUP_GAP / 2, 1.2);
+  const head = el("g", {}, table);
+  NODES.thead = head;
+  for (const [k, name, unit] of [["dmc", "DMC", "return"], ["ogbench", "OGBench", "success"], ["atari", "Atari", "% expert"]]) {
+    text(head, name, TCOL[k], TY.top + 42 * PS, { size: 24, weight: 600, anchor: "middle" });
+    text(head, unit, TCOL[k], TY.top + 72 * PS, { size: 20, anchor: "middle", fill: MUTED });
+  }
+  last = null;
+  ROWS.forEach(([group, key, name, vals, bold], j) => {
+    if (group !== last) {
+      NODES["tgroup_" + j] = text(table, group, TL, TAB[key] - (SUBHEAD ? ROW_H / 2 + SUBHEAD / 2 : 0), { size: 22, style: "italic", fill: MUTED, base: "central" });
+      last = group;
+    }
+    const g = el("g", {}, table);
+    if (!NODES["lab_" + key]) {   // rows without a flying label get their name here
+      const base = key.replace("_oracle", "");
+      text(g, name, TCOL.method, TAB[key], { size: 24, fill: M[base].color, weight: 500, base: "central" });
+    }
+    ["dmc", "ogbench", "atari"].forEach((k, c) => text(g, vals[c], TCOL[k], TAB[key],
+      { size: 24, anchor: "middle", base: "central", weight: bold[c] ? 700 : 400 }));
+    NODES["trow_" + key] = g;
+  });
+  const g = el("g", {}, table);
+  text(g, "Expert", TL, TY.expert, { size: 24, base: "central" });
+  DATA.expert_row.forEach((v, c) => text(g, v, TCOL[["dmc", "ogbench", "atari"][c]], TY.expert,
+                                         { size: 24, anchor: "middle", base: "central" }));
+  NODES.trow_expert = g;
+}
+
+// ---------------------------------------------------------------- timeline
+const E = {
+  lin: u => u,
+  io: u => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2,
+  out: u => 1 - Math.pow(1 - u, 3),
+  back: u => { const c1 = 1.7, c3 = c1 + 1; return 1 + c3 * Math.pow(u - 1, 3) + c1 * Math.pow(u - 1, 2); },
+};
+const fade = (id, to, at = 0, dur = .5, ease = "io") => [id, "o", to, at, dur, ease];
+const move = (id, prop, to, at, dur, ease = "io") => [id, prop, to, at, dur, ease];
+const swap = (out, inn, at = 0, d = .45) => [fade(out, 0, at, d * .8), fade(inn, 1, at + d * .5, d)];
+const place = (id, [x, y, s], at, dur) => [move(id, "x", x, at, dur), move(id, "y", y, at, dur), move(id, "s", s, at, dur)];
+const reveal = (id, at, dur) => [fade(id, 1, at, .01, "lin"), move(id, "p", 1, at, dur)];
+const has = (s, m) => !!DATA.curves[`${s.key}/${m}`];
+
+// Every beat plays SPEED times faster than its listed times (holds and tween times are in beat seconds).
+const SPEED = 1.4;
+let INIT, STEPS, LAYOUT;
+function build() {
+  // text widths, for the centred intro layout of the suite names
+  const wid = id => NODES[id].getComputedTextLength();
+  LAYOUT = { intro: {}, head: {} };
+  SUITES.forEach((s, i) => {
+    LAYOUT.intro["tile_" + s.key] = TILE_INTRO(i);
+    LAYOUT.intro["name_" + s.key] = [CX[i] - wid("name_" + s.key) / 2, 784, 1];
+    LAYOUT.intro["sub_" + s.key] = [CX[i] - wid("sub_" + s.key) / 2, 828, 1];
+    if (PORTRAIT) Object.assign(LAYOUT.intro, PORTRAIT.intro(i, s.key));
+    const [tx, ty] = TILE_HEAD(i);
+    LAYOUT.head["tile_" + s.key] = TILE_HEAD(i);
+    LAYOUT.head["name_" + s.key] = [tx + 122, ty + 44, 34 / NAME_SIZE];
+    LAYOUT.head["sub_" + s.key] = [tx + 122, ty + 82, 24 / SUB_SIZE];
+    if (PORTRAIT) Object.assign(LAYOUT.head, PORTRAIT.head(i, s.key, NAME_SIZE, SUB_SIZE));
+  });
+  INIT = { t0: { o: 1 }, caption: { o: 0 }, cam: { s: 1, tx: 0, ty: 0 } };   // caption under the rollouts: hidden
+  for (const id in LAYOUT.intro) { const [x, y, s] = LAYOUT.intro[id]; INIT[id] = { x, y, s, o: 1 }; }
+  for (const m of LAB) INIT["lab_" + m] = { dx: -16 };
+  for (const id of SLAB) INIT[id] = { dx: -16 };
+  for (const key in TAB) INIT["trow_" + key] = { dy: 10 };
+  INIT.trow_expert = { dy: 10 };
+  if (PORTRAIT) Object.assign(INIT, PORTRAIT.INIT);
+
+  // curves of methods ms grow in every suite, staggered by panel; their labels arrive as the Atari curve lands
+  const grow = (ms, at, dur = 1.7, pulse = false) => {
+    const tw = [];
+    SUITES.forEach((s, i) => ms.forEach(m => { if (has(s, m)) tw.push(...reveal(`c_${s.key}_${m}`, at + .14 * i, dur)); }));
+    const land = at + .28 + dur - .3;
+    ms.forEach((m, j) => tw.push(fade("lab_" + m, 1, land + .07 * j, .45), move("lab_" + m, "dx", 0, land + .07 * j, .6, "out")));
+    SUITES.slice(0, 2).forEach((s, i) => ms.forEach((m, j) => {
+      const id = `slab_${s.key}_${m}`, t = at + .14 * i + dur - .3 + .07 * j;
+      if (NODES[id]) tw.push(fade(id, 1, t, .45), move(id, "dx", 0, t, .6, "out"));
+    }));
+    if (pulse) for (const m of ms) tw.push(move("lab_" + m, "s", 1.12, land + .35, .22, "out"), move("lab_" + m, "s", 1, land + .6, .35));
+    return tw;
+  };
+  const curvesOf = ms => SUITES.flatMap(s => ms.filter(m => has(s, m)).map(m => `c_${s.key}_${m}`));
+  const DIM = .38, LAB_DIM = .55;
+  // labels fly top to bottom in the order they sit at the curve ends; the table rows are in that order too
+  const FLY_ORDER = ["mirror_oracle", "mirror", "random", "grounding", "bco", "laifo"], FLY_AT = .2, FLY_GAP = .08, FLY_DUR = 1.3;
+  const FLY = Object.fromEntries(FLY_ORDER.map((m, j) => [m, FLY_AT + FLY_GAP * j]));
+  const landAt = key => FLY[key.replace("_oracle", "")] ?? FLY_AT;   // rows without a label follow their group's
+
+  STEPS = [
+    // on entry: the three suites, each with a Mirror rollout
+    { name: "intro", hold: 2, tw: [] },
+    // the rollouts shrink into panel headers and the axes draw in, with the expert line
+    { name: "axes", hold: 2.5, tw: [
+      ...swap("t0", "t1"), fade("caption", 0, 0, .35),
+      ...SUITES.flatMap((s, i) => [
+        // the tile leads and the text follows, so the text never passes under the shrinking video
+        ...place("tile_" + s.key, LAYOUT.head["tile_" + s.key], .05 + .06 * i, 1.0),
+        ...place("name_" + s.key, LAYOUT.head["name_" + s.key], .3 + .06 * i, 1.05),
+        ...place("sub_" + s.key, LAYOUT.head["sub_" + s.key], .36 + .06 * i, 1.05),
+        fade("metric_" + s.key, 1, .95 + .12 * i, .5),
+        ...reveal("grid_" + s.key, .8 + .12 * i, .8), fade("ticks_" + s.key, 1, .9 + .12 * i, .5),
+        ...reveal("expert_" + s.key, 1.35 + .12 * i, .75), fade("explab_" + s.key, 1, 1.85 + .12 * i, .45)]),
+      fade("xlabel", 1, 1.2, .5)] },
+    // prior imitation-from-observation methods
+    { name: "prior", hold: 3, tw: [...swap("t1", "t2"), ...grow(["bco", "laifo", "viper", "grounding"], .35)] },
+    // the same video planner with other ways of getting actions
+    { name: "vp", hold: 3, tw: [...swap("t2", "t3"), ...grow(["random"], .35)] },
+    // Mirror: the baselines step back, Mirror draws
+    { name: "mirror", hold: 3.5, tw: [...swap("t3", "t4"),
+      ...curvesOf(BASELINES).map(id => fade(id, DIM, .1, .7)), ...BASELINES.map(m => fade("lab_" + m, LAB_DIM, .1, .7)),
+      ...SLAB.filter(id => BASELINES.some(m => id.endsWith("_" + m))).map(id => fade(id, LAB_DIM, .1, .7)),
+      ...grow(["mirror"], .55, 1.9, true)] },
+    // with an oracle planner
+    { name: "oracle", hold: 3.5, tw: [...swap("t4", "t5"), ...grow(["mirror_oracle"], .4, 1.9, true)] },
+    // summary: the plots step back, the labels fly into the table rows
+    { name: "table", hold: 4, tw: [...swap("t5", "t6"),
+      move("cam", "s", CAM_SUMMARY.s, .1, 1.3), move("cam", "tx", CAM_SUMMARY.tx, .1, 1.3), move("cam", "ty", CAM_SUMMARY.ty, .1, 1.3),
+      ...(PORTRAIT ? PORTRAIT.SUMMARY(LAYOUT).map(([id, prop, to]) => move(id, prop, to, .1, 1.3)) : []),
+      ...(PORTRAIT ? Object.entries(FLY).map(([m, at]) => move("lab_" + m, "s", PORTRAIT.TABLE.TEXT / PORTRAIT.TEXT, at, FLY_DUR)) : []),
+      ...curvesOf(BASELINES).map(id => fade(id, 1, .4, .8)),
+      fade("lab_viper", 0, .05, .35), ...SLAB.map(id => fade(id, 0, .05, .35)),
+      ...Object.entries(FLY).flatMap(([m, at]) => [fade("lab_" + m, 1, .15, .5), move("lab_" + m, "u", 1, at, FLY_DUR)]),
+      move("lab_mirror_oracle", "so", 0, .15, .45),
+      ...reveal("rules", .75, .75), fade("thead", 1, .85, .5),
+      ...Object.keys(NODES).filter(id => id.startsWith("tgroup_")).map((id, j) => fade(id, 1, 1.1 + .12 * j, .45)),
+      ...Object.keys(TAB).concat(["expert"]).flatMap(key => {
+        const at = (key === "expert" ? FLY_AT + FLY_GAP * FLY_ORDER.length : landAt(key)) + FLY_DUR * .7;
+        return [fade("trow_" + key, 1, at, .5), move("trow_" + key, "dy", 0, at, .6, "out")];
+      })] },
+  ];
+}
+
+// ---------------------------------------------------------------- state
+// Fused clicks: a chained beat hands over to the next one partway through (HANDOVER, a fraction of its hold)
+// and keeps playing underneath it. The axes hand over once they and the expert lines have drawn.
+const CHAIN_NAMES = ["axes"], HANDOVER = { axes: 1 };
+const chained = k => CHAIN_NAMES.includes(STEPS[k] && STEPS[k].name);
+const chainEnd = k => { while (chained(k)) k++; return k; };
+const stops = () => { const out = [0]; for (let k = 1; k < STEPS.length; k++) if (!chained(k - 1)) out.push(k); return out; };
+// Each beat keeps its own clock (BT: start times of beats played in this run).
+let BT = [];
+const tauOf = (i, k, tau) => i === k ? tau : BT[i] != null ? (performance.now() - BT[i]) / 1000 * SPEED : 1e9;
+const DEF = { o: 0, p: 0, x: 0, y: 0, s: 1, tx: 0, ty: 0, u: 0, dx: 0, dy: 0, so: 1 };
+let IDS;
+function stateAt(k, tau) {
+  const st = {};
+  for (const id of IDS) st[id] = Object.assign({}, DEF, INIT[id] || {});
+  for (let i = 0; i <= k; i++) {
+    for (const [id, prop, to, at, dur, ease] of STEPS[i].tw) {
+      const ti = tauOf(i, k, tau);
+      if (ti < at) continue;
+      const u = clamp((ti - at) / Math.max(dur, 1e-6), 0, 1);
+      st[id][prop] = st[id][prop] + (to - st[id][prop]) * E[ease](u);
+    }
+  }
+  return st;
+}
+// Every per-frame write goes through put/putA, which skip values that have not changed (the page used to rewrite
+// every clip rect, label and dot each frame, so the whole plot SVG was re-rasterised 60 times a second at rest).
+const WR = new WeakMap();
+const memo = el => { let m = WR.get(el); if (!m) WR.set(el, m = {}); return m; };
+function put(el, k, v) { const m = memo(el); if (m[k] !== v) { m[k] = v; el.style[k] = v; } }
+function putA(el, k, v) { const m = memo(el), key = "@" + k; if (m[key] !== v) { m[key] = v; el.setAttribute(k, v); } }
+const f2 = v => (+v).toFixed(2), r3 = v => String(Math.round(v * 1000) / 1000);
+const vis = (n, o) => { put(n, "opacity", r3(o)); put(n, "visibility", o < .002 ? "hidden" : "visible"); };
+function apply(st) {
+  const C = st.cam;
+  putA($("cam"), "transform", `matrix(${r3(C.s)},0,0,${r3(C.s)},${f2(C.tx)},${f2(C.ty)})`);
+  for (const id of IDS) {
+    const n = NODES[id], p = st[id];
+    if (!n || id === "cam") continue;
+    if (id.startsWith("pan_")) { putA(n, "transform", `translate(${f2(p.x)},${f2(p.y)})`); continue; }
+    if (id.startsWith("t") && /^t\d$/.test(id)) { vis(n, p.o); continue; }
+    if (id.startsWith("tile_")) {
+      const z = C.s * p.s, X = C.tx + C.s * p.x, Y = C.ty + C.s * p.y;
+      put(n, "zoom", String(z));
+      put(n, "transform", `translate(${f2(X / z)}px,${f2(Y / z)}px)`);
+      put(n, "borderRadius", f2((10 + 12 * clamp((p.s - .25) / .75, 0, 1)) / p.s) + "px");
+      vis(n, p.o);
+      continue;
+    }
+    if (id.startsWith("name_") || id.startsWith("sub_")) {
+      putA(n, "transform", `translate(${f2(p.x)},${f2(p.y)}) scale(${(+p.s).toFixed(4)})`);
+      vis(n, p.o);
+      continue;
+    }
+    if (id.startsWith("slab_")) { putA(n, "transform", `translate(${f2(p.dx)},0)`); vis(n, p.o); continue; }
+    if (id.startsWith("lab_")) {
+      const m = id.slice(4);
+      // the label leaves the curve end where it was drawn (the camera is still at rest there) and flies straight
+      const ax = PX[2] + PW + 16 + p.dx, ay = PTS[2] + LAB_Y[m];
+      const x = lerp(ax, TCOL.method, p.u), y = lerp(ay, TAB[m] ?? ay, p.u);
+      putA(n, "transform", `translate(${f2(x)},${f2(y)}) scale(${(+p.s).toFixed(4)})`);
+      if (n.suffix) put(n.suffix, "opacity", r3(p.so));
+      vis(n, p.o);
+      continue;
+    }
+    if (id.startsWith("trow_")) { putA(n, "transform", `translate(0,${f2(p.dy)})`); vis(n, p.o); continue; }
+    if (CLIPR[id]) {
+      // a curve's clip edge sits exactly at the riding dot; the end cap is let in only as it lands
+      const w = CURVES[id] ? 12 + PW * p.p + 12 * clamp((p.p - .96) / .04, 0, 1) : CLIPR[id].w * p.p;
+      putA(CLIPR[id].rect, "width", f2(w));
+    }
+    if (CURVES[id]) {
+      const { pts, tip } = CURVES[id], xe = PW * p.p;
+      let y = null;
+      for (let j = 1; j < pts.length; j++) {
+        if (pts[j][0] >= xe) {
+          if (pts[j - 1][0] <= xe) y = lerp(pts[j - 1][1], pts[j][1], (xe - pts[j - 1][0]) / (pts[j][0] - pts[j - 1][0]));
+          break;
+        }
+      }
+      const on = y !== null && p.p > 0 && p.p < 1;
+      putA(tip, "cx", f2(xe)); putA(tip, "cy", f2(y ?? 0));
+      putA(tip, "opacity", on ? r3(clamp((1 - p.p) / .06, 0, 1) * clamp(p.p / .05, 0, 1)) : "0");
+    }
+    vis(n, p.o);
+  }
+}
+
+// ---------------------------------------------------------------- presentation
+let K = 0, T0 = performance.now(), INSTANT = false;
+function go(k, instant = false) {
+  K = clamp(k, 0, STEPS.length - 1);
+  T0 = performance.now();
+  INSTANT = instant;
+  if (instant) BT = []; else BT[K] = T0;
+  $("hud").textContent = `${K} / ${STEPS.length - 1}  ${STEPS[K].name}`;
+  if (!EMBEDDED) try { localStorage.setItem("mirror_suites_step", String(K)); } catch (e) {}
+}
+function loop() {
+  const tau = INSTANT ? 1e9 : (performance.now() - T0) / 1000 * SPEED;
+  apply(stateAt(K, tau));
+  if (!INSTANT && chained(K) && tau >= STEPS[K].hold * (HANDOVER[STEPS[K].name] ?? .5)) go(K + 1);
+  requestAnimationFrame(loop);
+}
+function fit() { $("stage").style.zoom = Math.min(innerWidth / W, innerHeight / H); }
+// one shared title size: the largest at which every title fits on one line (measured in the real font)
+function fitTitles() {
+  const titles = [...document.querySelectorAll(".title")], max = 49, room = 1680;   // 49px: the deck's slide titles
+  titles.forEach(t => t.style.fontSize = max + "px");
+  const widest = Math.max(...titles.map(t => t.firstElementChild.scrollWidth));
+  const size = Math.min(max, Math.floor(max * room / widest));
+  titles.forEach(t => t.style.fontSize = size + "px");
+}
+
+// wait for every face the page uses (system fonts on the presenting machine resolve at once)
+const FACES = ['400 20px \"Source Sans 3\"', '500 20px \"Source Sans 3\"', '600 20px \"Source Sans 3\"', '700 20px \"Source Sans 3\"',
+               'italic 400 20px \"Source Sans 3\"', '700 49px \"Source Sans 3\"'];
+const ready = Promise.all(FACES.map(f => document.fonts.load(f).catch(() => null))).then(() => document.fonts.ready).then(() => {
+  fitTitles();
+  build();
+  IDS = new Set(["cam", ...Object.keys(NODES), ...Object.keys(INIT)]);
+  for (const st of STEPS) for (const t of st.tw) IDS.add(t[0]);
+  for (const id of IDS) if (id !== "cam" && !NODES[id]) {
+    const n = $(id);
+    if (n) NODES[id] = n; else console.error("missing node", id);
+  }
+});
+if (window.deckwerk) window.deckwerk.ready(ready);
+
+// render mode (frame checks): window.renderAt(step, seconds into that step)
+window.renderAt = (k, tau) => apply(stateAt(k, tau));
+window.STEP_NAMES = () => STEPS.map(s => [s.name, s.hold]);
+
+if (SHOOT) {
+  ready.then(() => { apply(stateAt(0, 1e9)); window.READY = true; });
+} else {
+  fit();
+  addEventListener("resize", fit);
+  if (!EMBEDDED) addEventListener("keydown", e => {
+    const k = e.key;
+    if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"].includes(k)) { go(K + 1); e.preventDefault(); }
+    else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(k)) { go(chainEnd(stops().filter(b => chainEnd(b) < K).pop() ?? 0), true); e.preventDefault(); }
+    else if (k === "r" || k === "R") go(K);
+    else if (k === "Home") go(0, true);
+    else if (k === "End") go(STEPS.length - 1, true);
+    else if (k === "f" || k === "F") {
+      if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
+    }
+  });
+  // a click advances: here directly, in the deck through the slide's own build steps
+  addEventListener("click", () => { if (!EMBEDDED) go(K + 1); else if (window.deckwerk) window.deckwerk.next(); });
+  let hideT = null;
+  addEventListener("mousemove", () => {
+    document.body.classList.add("cursor");
+    clearTimeout(hideT);
+    hideT = setTimeout(() => document.body.classList.remove("cursor"), 1500);
+  });
+  // In a DeckWerk web element the slide owns the clicker: build step s of the slide is beat s here.
+  // Stepping forward by one plays that beat; any other jump (back, or entering mid-slide) lands on it settled.
+  // DeckWerk re-sends the current step/active notice whenever it re-renders the slide; acting on a repeat
+  // would snap the running beat to its end, so only a change of step does anything.
+  let started = false, pendingStep = null, lastStep = null, slideActive = false;
+  // Build steps map onto stops(): a fused click plays its chained beats.
+  const toStep = (s, animate) => {
+    if (!started) { pendingStep = s; return; }
+    if (s === lastStep) return;
+    lastStep = s;
+    const S = stops(), b = S[Math.min(s, S.length - 1)];
+    if (animate && b === chainEnd(S[Math.max(s - 1, 0)]) + 1 && K < b) go(b); else go(chainEnd(b), true);
+  };
+  if (EMBEDDED && window.deckwerk) {
+    window.deckwerk.onActive(({ step }) => { if (!slideActive) { slideActive = true; lastStep = null; } toStep(step || 0, false); });
+    window.deckwerk.onInactive(() => { slideActive = false; });
+    window.deckwerk.onStep(({ step }) => toStep(step || 0, true));
+  }
+  ready.then(() => {
+    let k0 = 0;
+    if (!EMBEDDED) {
+      try { k0 = parseInt(localStorage.getItem("mirror_suites_step") || "0", 10) || 0; } catch (e) {}
+    }
+    started = true;
+    if (pendingStep != null) { lastStep = pendingStep; const S = stops(); go(chainEnd(S[Math.min(pendingStep, S.length - 1)]), true); }
+    else go(k0, true);
+    loop();
+  });
+}
+</script>
+<script src="scene-adapter.js"></script>
+<script>SceneAdapter.init("suites");</script>
+</body>
+</html>

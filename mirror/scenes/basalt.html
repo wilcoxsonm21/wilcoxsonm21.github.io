@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="en">
+<head>
+<link rel="stylesheet" href="scene-fonts.css">
+<script>
+// mirror: with ?scroll the parent page renders every frame (scene-adapter.js), so the page's own
+// presentation loop is never scheduled; without it the page works as in the deck (click or arrow keys to step).
+window.SCENE_SCROLL = /[?&]scroll\b/.test(location.search);
+if (window.SCENE_SCROLL) {
+  const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = cb => (cb && cb.name === "loop" ? 0 : raf(cb));
+  document.documentElement.classList.add("scene-scroll");
+}
+// start loading the website's face (scene-fonts.css) before the page measures any text (its document.fonts.ready
+// then waits for it)
+['400 20px "Source Sans 3"', '500 20px "Source Sans 3"', '600 20px "Source Sans 3"', '700 20px "Source Sans 3"',
+ 'italic 400 20px "Source Sans 3"'].forEach(f => document.fonts.load(f).catch(() => {}));
+</script>
+<script>
+window.SCENE_PORTRAIT = /[?&]portrait\b/.test(location.search);
+window.PORTRAIT = null;
+if (window.SCENE_PORTRAIT) document.documentElement.classList.add("portrait");
+</script>
+<script src="portrait/basalt.js"></script>
+<script>
+if (window.PORTRAIT) document.head.insertAdjacentHTML("beforeend", "<style>#stage{width:" + PORTRAIT.W + "px!important;" +
+  "height:" + PORTRAIT.H + "px!important}html.portrait .title,html.portrait #ptitle,html.portrait .callout" +
+  "{display:none!important}</style>");
+</script>
+
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mirror: BASALT</title>
+<style>
+:root { --bg: #f5f5f4; --ink: #1c1b1a; --muted: #6e6b67; --line: #1c1b1a;
+        --blue: #3e6fd8; --red: #dc4436; --violet: #3361c4; --violetF: rgba(62,111,216, 0.14);
+        --teal: #2a7db8; --tealF: rgba(74,163,224, 0.16); --key: #b8b8b7; }
+html, body { margin: 0; height: 100%; background: var(--bg); overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; cursor: none; }
+body.cursor { cursor: default; }
+#stage { position: relative; width: 1920px; height: 1080px; flex: none; background: var(--bg);
+         font-family: "Source Sans 3", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 400;
+         color: var(--ink); overflow: hidden; }
+.layer { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; pointer-events: none; }
+b { font-weight: 600; }
+.red { color: var(--red); }
+.violet { color: var(--violet); }
+.teal { color: var(--teal); }
+.title { position: absolute; left: 120px; width: 1680px; top: 58px; height: 142px; display: flex; align-items: center;
+         font-family: "Source Sans 3", "Helvetica Neue", Helvetica, Arial, sans-serif; font-weight: 700;
+         font-size: 49px; line-height: 1.08; letter-spacing: -0.02em; }
+.title b { font-weight: 700; }
+.title > div { white-space: nowrap; }
+
+/* nodes: drawn at native size, placed by centre + scale (CSS zoom keeps text sharp) */
+.node { position: absolute; left: 0; top: 0; }
+.box { position: absolute; left: 0; top: 0; box-sizing: border-box; border: 3px solid var(--line);
+       border-radius: 40px; background: var(--bg); display: flex; align-items: center; justify-content: center;
+       text-align: center; line-height: 1.12; }
+.label { position: absolute; left: -200px; right: -200px; text-align: center; font-size: 36px; color: var(--muted);
+         white-space: nowrap; }
+.vid { position: absolute; left: 0; top: 0; border-radius: 18px; overflow: hidden; background: #1b2233; }
+.vid video, .vid canvas, .vid img { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: block;
+                                    object-fit: cover; }
+svg.layer path.shaft { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.badge { position: absolute; width: 76px; height: 76px; transform-origin: 50% 50%; }
+.alabel { position: absolute; left: 0; top: 0; font-size: 30px; color: var(--muted); white-space: nowrap; }
+
+/* the task description: fuzzy words get a red underline that draws in */
+.quote { width: 100%; }
+.fz { position: relative; white-space: nowrap; }
+.ul { position: absolute; left: -2px; right: -2px; bottom: 1px; height: 4px; border-radius: 2px; background: var(--red);
+      transform-origin: 0 50%; transform: scaleX(0); }
+
+/* keyboard / mouse glyph of the executed action */
+.key { position: absolute; box-sizing: border-box; border: 2px solid var(--key); border-radius: 6px; overflow: hidden;
+       font-size: 15px; font-weight: 600; color: #a8a5a0; display: flex; align-items: center; justify-content: center; }
+.key .fill { position: absolute; inset: 0; background: var(--ink); opacity: 0; }
+.key span { position: relative; }
+.mouse { position: absolute; box-sizing: border-box; border: 2px solid var(--key); border-radius: 22px; overflow: hidden; }
+.mouse .btn { position: absolute; top: 0; height: 26px; background: var(--ink); opacity: 0; }
+.mouse .seam { position: absolute; background: var(--key); }
+
+/* timeline of the episode */
+#tl .base { position: absolute; left: 0; top: 61px; width: 1680px; height: 3px; border-radius: 2px; background: #d6d5d4; }
+#tl .prog { position: absolute; left: 0; top: 60px; height: 5px; border-radius: 3px; background: var(--ink); width: 0; }
+#tl .tick { position: absolute; top: 55px; width: 2px; height: 15px; background: #c8c7c6; margin-left: -1px; }
+#tl .tick.on { background: #898988; }
+#tl .head { position: absolute; top: 53px; width: 19px; height: 19px; margin-left: -9.5px; border-radius: 50%;
+            background: var(--ink); }
+#tl .stage { position: absolute; top: 4px; font-size: 27px; color: var(--muted); white-space: nowrap;
+             transform: translateX(-50%); opacity: 0; }
+#tl .tlab { position: absolute; top: 80px; font-size: 22px; color: var(--muted); }
+
+/* results table */
+#tbl .c { position: absolute; display: flex; align-items: center; justify-content: center; text-align: center;
+          white-space: nowrap; }
+#tbl .rule { position: absolute; background: var(--ink); }
+#tbl .grp { font-size: 24px; font-weight: 600; }
+#tbl .hd { font-size: 24px; font-weight: 500; line-height: 1.15; align-items: flex-end; }
+#tbl .cell { font-size: 28px; }
+#tbl .dag { color: #878685; }
+#tbl .tint { position: absolute; border-radius: 10px; }
+#hud { position: fixed; right: 14px; bottom: 10px; font: 13px/1.3 system-ui, sans-serif; color: #989897;
+       opacity: 0; transition: opacity .3s; pointer-events: none; }
+body.cursor #hud { opacity: 1; }
+</style>
+<!-- mirror theme (tools/theme.py) -->
+<style>
+/* website theme (tools/theme.py): captions in Source Sans 3; a key claim in the page's gold, problems red, plans green */
+.title, #ptitle { font-weight: 600 !important; letter-spacing: -0.012em; }
+.title b { font-weight: 700; }
+.title .blue, .title .violet, .title .teal { background: linear-gradient(90deg, #d49a00, #b98000); -webkit-background-clip: text; background-clip: text;
+                                           color: transparent; -webkit-text-fill-color: transparent; }
+.title .red { color: #dc4436; }
+.title .green { color: #23804d; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="title" id="t0"><div>Some tasks are <b class="red">hard to specify</b> with rewards</div></div>
+  <div class="title" id="t1"><div>But they are easy for humans to demonstrate</div></div>
+  <div class="title" id="t2"><div>Mirror&rsquo;s video model learns the task from these videos alone</div></div>
+  <div class="title" id="t3"><div>A V2A model trained by <b class="violet">self-play</b> executes the plan</div></div>
+  <div class="title" id="t4"><div>Mirror builds diverse waterfalls and finds caves</div></div>
+  <div class="title" id="t5"><div>Prior methods struggle, even with action labels</div></div>
+  <div class="title" id="t6"><div><b class="violet">Without action labels</b>, Mirror beats every learned baseline</div></div>
+  <div class="title" id="t7"><div><b class="teal">Action labels</b> help further, but Mirror does not need them</div></div>
+
+  <svg class="layer" id="svg" viewBox="0 0 1920 1080"></svg>
+  <div class="alabel" id="lab_ft">fine-tune</div>
+  <div class="alabel" id="lab_replan">new plan every 0.8 s</div>
+
+  <div class="node" id="task" style="width:1240px;height:330px">
+    <div class="box" style="width:1240px;height:330px;border-radius:36px;padding:0 64px;font-size:44px;font-style:italic;
+         line-height:1.4;text-align:left;justify-content:flex-start">
+      <div class="quote">&ldquo;Place a water bucket to make a <span class="fz" id="fz0">beautiful<i class="ul" id="ul0"></i></span>
+        waterfall. Then take an <span class="fz" id="fz1">aesthetic<i class="ul" id="ul1"></i></span> picture of it by
+        moving to a good location, positioning the player to have a
+        <span class="fz" id="fz2">nice<i class="ul" id="ul2"></i></span> view of the waterfall.&rdquo;</div>
+    </div>
+    <div class="label" style="top:348px">MakeWaterfall task (MineRL BASALT)</div>
+  </div>
+
+  <div class="node" id="demo0" style="width:500px;height:234px"><div class="vid" id="slot_demo0" style="width:500px;height:234px"></div></div>
+  <div class="node" id="demo1" style="width:500px;height:234px"><div class="vid" id="slot_demo1" style="width:500px;height:234px"></div>
+    <div class="label" style="top:250px">human demonstrations</div></div>
+  <div class="node" id="demo2" style="width:500px;height:234px"><div class="vid" id="slot_demo2" style="width:500px;height:234px"></div></div>
+
+  <div class="node" id="plan" style="width:540px;height:253px">
+    <div class="vid" id="slot_plan" style="width:540px;height:253px"></div>
+    <div class="label" style="top:268px">video plan</div>
+  </div>
+  <div class="node" id="vm" style="width:320px;height:150px">
+    <div class="box" style="width:320px;height:150px;font-size:46px">Video Model</div>
+  </div>
+  <div class="node" id="v2a" style="width:250px;height:150px">
+    <div class="box" style="width:250px;height:150px;border-color:var(--violet);background:var(--violetF)"></div>
+    <div class="layer" style="width:250px;height:150px;top:20px;display:flex;align-items:center;justify-content:center;
+         font-size:40px">V2A Model</div>
+    <div class="layer violet" style="width:250px;top:22px;height:auto;text-align:center;font-size:29px;font-weight:600">Self-Improving</div>
+  </div>
+  <div class="node" id="acts" style="width:150px;height:86px">
+    <div id="kb" style="position:absolute;left:0;top:0;width:150px;height:86px"></div>
+    <div class="label" style="top:112px;font-size:30px">actions</div>
+  </div>
+  <div class="node" id="env" style="width:540px;height:253px">
+    <div class="vid" id="slot_env" style="width:540px;height:253px"></div>
+    <div class="label" id="env_lab" style="top:268px;left:-80px;right:-80px">environment</div>
+    <div class="badge" id="badge_c" style="left:502px;top:-38px"></div>
+  </div>
+  <div class="node" id="tl" style="width:1680px;height:110px"></div>
+
+  <div class="node" id="g_wf0" style="width:500px;height:234px"><div class="vid" style="width:500px;height:234px"><img data-still="wf0" alt=""></div></div>
+  <div class="node" id="g_wf1" style="width:500px;height:234px"><div class="vid" style="width:500px;height:234px"><img data-still="wf1" alt=""></div></div>
+  <div class="node" id="g_wf2" style="width:500px;height:234px"><div class="vid" style="width:500px;height:234px"><img data-still="wf2" alt=""></div></div>
+  <div class="node" id="g_cave0" style="width:500px;height:234px"><div class="vid" style="width:500px;height:234px"><img data-still="cave0" alt=""></div></div>
+  <div class="node" id="g_cave1" style="width:500px;height:234px"><div class="vid" style="width:500px;height:234px"><img data-still="cave1" alt=""></div></div>
+  <div class="node" id="g_cave2" style="width:500px;height:234px"><div class="vid" style="width:500px;height:234px"><img data-still="cave2" alt=""></div></div>
+  <div class="node" id="lab_wf" style="width:500px;height:44px"><div class="label" style="top:0">MakeWaterfall</div></div>
+  <div class="node" id="lab_cave" style="width:500px;height:44px"><div class="label" style="top:0">FindCave</div></div>
+
+  <div class="node" id="tbl" style="width:1680px;height:410px"></div>
+</div>
+<div id="hud"></div>
+
+<script>
+window.CLIPS = {"ep5_pov": {"src": "media/basalt_ep5_pov_g.mp4", "frames": 648, "fps": 20, "w": 640, "h": 300}, "ep5_plan": {"src": "media/basalt_ep5_plan_g.mp4", "frames": 648, "fps": 20, "w": 640, "h": 300}, "demo0": {"src": "media/basalt_demo0_g.mp4", "frames": 160, "fps": 20, "w": 640, "h": 300}, "demo1": {"src": "media/basalt_demo1_g.mp4", "frames": 160, "fps": 20, "w": 640, "h": 300}, "demo2": {"src": "media/basalt_demo2_g.mp4", "frames": 160, "fps": 20, "w": 640, "h": 300}};
+window.ACTIONS = [[0,0,0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.01,-0.02],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.03,0.13],[66,0.0,0.0],[66,0.0,0.0],[66,2.18,-0.11],[66,1.02,0.03],[66,1.37,0.27],[66,2.52,0.31],[32,7.32,2.71],[32,9.82,6.47],[32,5.2,4.11],[32,3.06,4.16],[32,6.25,10.0],[32,3.69,10.0],[32,4.4,9.97],[32,2.7,6.46],[64,-1.26,6.07],[64,-0.59,3.26],[64,0.0,0.0],[64,-0.43,-0.24],[64,0.0,0.0],[64,0.0,0.0],[64,-0.54,0.2],[64,-0.63,0.24],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.33,4.27],[72,-0.37,2.17],[72,-0.44,1.27],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[328,0.0,0.0],[328,0.0,0.0],[328,0.0,0.0],[328,0.0,0.0],[328,0.0,0.0],[328,0.0,0.0],[329,0.0,0.0],[329,0.0,0.0],[329,0.0,0.0],[329,0.0,0.0],[329,0.01,-0.21],[73,-0.59,-1.52],[73,1.98,-10.0],[89,-0.28,-1.3],[73,-5.24,-2.93],[73,1.38,-1.15],[273,0.69,-0.76],[273,-0.59,-2.32],[273,-5.13,-6.11],[273,-2.07,-1.24],[273,-0.75,-0.6],[273,-0.63,-1.04],[273,-0.99,-1.04],[273,0.11,-1.36],[273,1.65,-2.13],[260,0.0,0.0],[260,0.03,-0.63],[320,-0.99,-7.44],[336,-1.68,0.22],[336,-3.85,0.75],[336,0.0,0.0],[64,-0.53,-0.49],[25,-1.62,-0.75],[25,-1.28,-1.55],[25,0.0,0.0],[25,0.0,0.0],[25,-0.25,0.64],[25,0.0,0.0],[25,0.0,0.0],[9,0.0,0.0],[9,0.0,0.0],[9,-0.09,-2.69],[9,1.12,-1.49],[9,0.68,-1.22],[9,1.76,-0.91],[9,1.38,-1.09],[9,0.93,-0.04],[9,0.0,0.0],[8,0.47,-0.43],[8,1.14,-0.51],[8,2.39,0.1],[8,2.92,-4.09],[8,-0.79,-1.52],[8,-0.5,-1.27],[8,-0.82,-3.46],[8,-1.61,5.72],[8,0.0,0.0],[8,-0.06,-0.49],[8,-0.41,2.25],[8,0.0,0.0],[8,-0.16,0.83],[8,-0.15,0.56],[8,0.01,-1.05],[8,0.1,-0.48],[24,0.46,-1.82],[24,-0.1,-6.17],[24,-0.22,-7.16],[24,-0.53,-7.81],[24,-1.06,-2.78],[24,-0.76,-0.56],[24,-2.14,-2.43],[0,0.0,0.0],[1,0.08,-1.63],[1,0.82,-3.39],[1,0.63,-2.08],[1,1.88,-3.67],[9,2.87,-6.12],[9,1.1,-3.63],[9,0.36,-2.18],[9,0.8,-5.76],[344,0.32,-2.11],[344,0.0,0.0],[344,0.03,-0.87],[344,0.0,0.0],[344,0.0,0.0],[344,0.0,0.0],[328,0.0,0.0],[328,0.0,0.0],[328,0.3,-0.02],[328,2.33,-1.34],[264,0.59,-1.53],[264,0.27,-1.38],[328,0.08,-0.43],[328,-0.22,-0.78],[328,0.0,0.0],[322,0.0,0.0],[8,0.0,0.0],[0,0.0,0.0],[1,0.0,0.0],[1,0.0,0.0],[1,0.0,0.0],[1,0.0,0.0],[1,-0.16,-0.52],[1,0.0,0.0],[0,0.0,0.0],[0,-2.51,1.92],[0,-0.52,1.03],[0,0.0,0.0],[0,0.0,0.0],[0,0.12,-1.45],[0,0.0,0.0],[0,-1.63,1.56],[3,-1.27,5.28],[3,0.45,8.35],[3,0.12,9.99],[3,0.3,4.26],[3,0.11,1.34],[3,0.78,1.55],[3,0.5,7.17],[3,2.16,10.0],[3,-0.55,1.42],[3,-3.42,9.86],[9,0.0,0.0],[9,0.0,0.0],[3,-0.5,-0.0],[3,0.0,0.0],[3,0.0,0.0],[3,-0.36,1.45],[136,-0.34,7.01],[128,-0.17,3.69],[128,-0.43,1.9],[128,-0.4,3.39],[128,-0.73,4.27],[128,-3.75,5.52],[128,-4.07,2.98],[128,1.85,0.15],[136,0.0,0.0],[136,0.31,0.32],[136,0.0,0.0],[136,0.0,0.0],[152,1.24,-0.09],[28,0.44,1.1],[28,1.19,-1.27],[28,1.54,-1.51],[156,1.46,-0.98],[156,1.64,-3.54],[28,0.9,-3.11],[28,-2.74,-0.19],[12,-4.43,0.39],[8,-5.04,-3.37],[8,-3.35,-1.02],[8,-1.35,0.15],[12,0.0,0.0],[12,-2.06,-0.46],[12,-0.65,-1.27],[268,-1.15,-0.74],[12,0.0,0.0],[12,-1.53,-0.01],[12,-2.73,-0.01],[268,-0.63,3.42],[72,1.6,3.23],[72,6.34,4.1],[72,3.8,1.35],[72,0.0,0.0],[72,0.0,0.0],[72,-0.34,0.39],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[64,-0.41,-0.1],[64,-0.25,0.19],[64,0.0,0.0],[64,0.0,0.0],[64,0.0,0.0],[66,-0.09,-0.34],[32,-1.35,-3.56],[32,-0.47,-2.53],[32,0.0,0.0],[32,0.0,0.0],[32,-0.17,-0.34],[32,-0.42,-0.16],[32,-0.38,0.04],[32,0.0,0.0],[32,0.0,0.0],[0,0.0,0.0],[0,-0.79,0.64],[0,0.0,0.0],[0,1.88,-4.04],[0,4.21,-3.42],[0,1.54,-7.51],[0,0.21,-6.05],[34,1.3,-4.68],[34,0.0,0.0],[34,0.0,0.0],[32,-1.56,0.1],[32,-1.62,-0.09],[32,0.0,0.0],[32,0.02,0.11],[32,0.0,0.0],[32,0.28,0.64],[0,0.0,0.0],[0,1.23,0.99],[0,3.65,1.42],[0,-0.12,1.34],[0,-1.49,1.4],[0,0.0,0.0],[0,0.31,-0.64],[33,0.59,-0.06],[33,1.27,0.04],[33,-0.59,0.72],[33,-0.66,1.7],[33,1.61,0.74],[33,2.89,1.06],[33,1.05,0.79],[33,1.8,0.48],[33,4.35,-2.03],[33,0.57,-0.32],[32,0.0,0.0],[32,0.43,-1.17],[32,2.34,-1.49],[32,6.44,-1.94],[32,4.9,-1.07],[32,9.33,-3.52],[289,9.76,-7.3],[289,4.69,-2.4],[289,0.0,0.0],[289,0.0,0.0],[289,0.0,0.0],[289,0.0,0.0],[289,0.0,0.0],[289,0.0,0.0],[288,0.0,0.0],[288,0.25,-0.38],[288,0.0,0.0],[40,0.0,0.0],[41,0.0,0.0],[35,0.0,0.0],[35,0.0,0.0],[34,0.0,0.0],[288,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,-0.41,0.31],[32,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[0,0.17,0.29],[0,-0.27,0.46],[0,0.0,0.0],[0,0.0,0.0],[0,0.0,0.0],[33,0.0,0.0],[33,0.14,0.25],[33,0.0,0.0],[33,0.0,0.0],[289,0.18,0.15],[289,0.06,-0.17],[289,0.19,0.2],[289,0.43,0.32],[289,0.0,0.0],[289,0.0,0.0],[33,-0.08,0.31],[33,1.03,-0.18],[35,-0.87,0.02],[34,0.0,0.0],[34,0.14,-0.59],[34,0.0,0.0],[35,0.0,0.0],[35,0.0,0.0],[35,0.0,0.0],[35,0.65,-0.3],[34,0.0,0.0],[66,-0.43,-0.11],[64,0.0,0.0],[64,0.0,0.0],[64,8.64,1.63],[64,8.92,3.19],[64,1.34,2.31],[64,0.0,0.0],[64,0.52,-0.06],[64,0.0,0.0],[192,0.0,0.0],[192,0.02,0.5],[65,0.0,0.0],[65,0.3,0.31],[65,0.45,0.44],[65,0.99,0.41],[65,1.4,0.32],[65,0.0,0.0],[1,-2.42,0.32],[17,-0.95,-0.59],[17,-4.5,0.57],[17,-2.53,-2.07],[145,-5.35,-0.55],[145,-1.61,0.33],[145,0.46,0.39],[145,1.14,2.73],[145,0.17,0.69],[384,-1.09,1.89],[403,-0.32,0.72],[147,-0.62,0.5],[147,-0.09,0.7],[147,0.07,1.55],[211,0.5,0.97],[211,0.17,0.36],[83,0.0,0.41],[83,-0.59,0.09],[83,-1.17,0.05],[83,-1.48,-0.28],[83,-2.12,-0.7],[83,-2.91,-6.1],[51,-0.34,1.58],[51,-1.94,1.7],[51,-3.24,3.21],[83,-3.89,3.43],[304,-1.36,2.18],[304,-0.45,0.36],[308,-0.87,0.18],[308,-5.96,4.1],[308,-2.66,1.09],[308,-0.86,-0.26],[52,1.84,-1.34],[49,0.31,0.13],[49,0.0,0.0],[81,0.0,0.0],[81,0.0,0.0],[81,-1.3,0.59],[83,-6.26,-1.28],[83,-10.0,-2.36],[83,-6.45,1.0],[83,0.0,0.0],[275,0.16,1.88],[275,-0.37,1.78],[275,0.0,0.0],[275,0.0,0.0],[259,0.0,0.0],[259,-0.21,0.83],[259,-0.41,0.42],[275,0.0,0.0],[275,0.0,0.0],[275,0.0,0.0],[273,0.0,0.0],[273,0.0,0.0],[257,0.0,0.0],[259,-0.26,0.33],[259,0.0,0.0],[259,0.15,-1.14],[307,-0.35,-3.13],[307,-0.81,-3.96],[310,-2.25,-1.75],[278,0.0,0.0],[257,-0.64,0.56],[257,-0.94,0.8],[257,-0.54,0.13],[259,-1.91,0.28],[265,-0.87,-0.71],[265,0.0,0.0],[265,-0.46,-0.01],[265,-0.8,0.24],[265,-0.46,0.51],[259,-1.12,2.59],[259,-1.26,3.47],[259,-0.89,1.45],[323,-0.57,0.85],[323,-0.48,1.22],[323,-2.05,2.06],[323,-1.5,1.88],[323,-1.57,1.99],[323,-1.52,2.37],[323,-0.56,1.78],[323,-0.14,2.5],[323,0.49,4.95],[323,0.33,4.8],[323,0.32,1.1],[323,0.0,0.0],[259,0.0,0.0],[259,0.49,0.17],[259,0.46,-0.14],[259,0.69,-0.01],[137,-0.08,0.49],[137,-0.24,0.58],[137,0.05,1.05],[137,-2.78,9.71],[137,-2.99,9.61],[137,-6.05,10.0],[137,-4.56,10.0],[137,-9.23,5.9],[137,-2.41,2.69],[131,-2.6,5.95],[130,-2.21,7.93],[3,-3.21,10.0],[19,-0.39,1.0],[3,-0.57,-0.39],[3,0.0,0.0],[3,0.0,0.0],[34,0.0,0.0],[34,0.0,0.0],[290,-0.27,-0.46],[290,-1.52,-0.31],[290,-3.84,-2.11],[290,-3.63,-1.38],[290,0.0,0.0],[290,0.0,0.0],[290,-0.15,-0.26],[290,0.0,0.0],[290,-0.41,-0.19],[290,0.0,0.0],[290,-0.27,-0.26],[290,0.0,0.0],[290,-0.01,0.65],[290,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.0,0.0],[32,0.21,-0.2],[32,0.03,0.57],[32,0.0,0.0],[32,0.0,0.0],[32,0.23,0.26],[32,0.19,0.33],[32,0.0,0.0],[34,0.0,0.0],[34,0.0,0.0],[50,0.0,0.0],[50,0.0,0.0],[50,0.0,0.0],[50,0.0,0.0],[50,0.0,0.0],[50,0.0,0.0],[50,0.0,0.0],[50,1.05,-0.19],[50,0.83,-0.13],[50,0.53,0.06],[50,0.25,-0.36],[50,0.64,-0.47],[50,0.2,-0.51],[50,0.0,0.0],[262,1.11,-0.46],[262,0.66,-1.5],[262,0.73,-0.73],[262,2.13,0.48],[259,2.92,1.56],[259,4.33,2.35],[259,3.0,0.73],[259,8.52,3.43],[259,8.64,5.03],[1,3.75,0.34],[0,1.96,-0.25],[0,0.94,0.79],[0,-1.46,1.42],[0,0.34,5.05],[256,1.14,5.44],[384,-0.31,2.05],[36,0.0,0.0],[36,0.0,0.0],[36,0.0,0.0],[36,0.0,0.0],[36,-9.64,3.46],[36,-3.99,-0.23],[52,-0.88,-0.07],[36,-2.42,1.57],[36,-10.0,3.6],[4,-10.0,-0.92],[4,-7.16,-2.89],[4,-1.12,-0.19],[4,-1.01,0.21],[4,-1.51,-0.18],[4,-0.96,-0.64],[4,-0.74,-0.4],[194,0.0,0.0],[66,0.36,0.03],[66,0.57,-0.56],[66,1.86,-0.46],[66,0.0,0.0],[66,-0.69,0.0],[66,-0.49,-0.31],[70,0.0,0.0],[70,2.23,0.25],[6,0.0,0.0],[2,0.0,0.0],[2,0.0,0.0],[2,-0.26,-0.13],[2,0.01,-0.16],[2,-0.1,-0.1],[2,-0.75,0.68],[66,-1.1,0.25],[66,0.0,0.0],[66,-0.41,-0.26],[66,0.3,-0.24],[66,2.07,-1.5],[66,1.3,-0.12],[66,2.28,0.77],[66,1.07,0.36],[66,0.0,0.0],[66,0.98,-0.11],[66,0.55,0.17],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,-2.0,0.25],[66,-1.88,-0.31],[66,-1.73,-0.25],[66,-0.86,0.03],[66,-1.29,1.3],[66,-3.98,2.83],[66,-1.46,-0.5],[66,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,-0.52,0.12],[66,0.0,0.0],[66,0.0,0.0],[66,0.31,2.3],[66,0.05,0.79],[66,0.0,0.0],[66,0.14,0.23],[66,0.0,0.0],[34,0.0,0.0],[34,0.37,0.1],[34,0.0,0.0],[40,0.84,0.12],[40,0.0,0.0],[40,0.0,0.0],[40,0.0,0.0],[34,0.0,0.0],[34,0.0,0.0],[34,0.0,0.0],[34,1.01,0.58],[34,0.0,0.0],[34,0.0,0.0],[34,0.0,0.0],[34,0.0,0.0],[34,0.0,0.0],[64,-0.47,0.68],[64,-0.32,-0.07],[64,0.0,0.0],[64,-0.51,-0.12],[64,0.0,0.0],[64,0.0,0.0],[64,0.0,0.0],[64,0.0,0.0],[64,0.0,0.0],[64,0.59,0.19],[64,0.0,0.0],[64,0.0,0.0],[64,0.0,0.0],[64,0.0,0.0],[64,0.0,0.0],[64,0.0,0.0],[328,0.0,0.0],[72,0.0,0.0],[72,0.4,0.19],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[72,-0.09,-0.0],[72,-0.06,-0.06],[72,0.0,0.0],[72,0.0,0.0],[72,0.0,0.0],[66,0.0,0.0],[66,0.0,0.0],[66,0.45,0.24],[66,0.18,0.31],[66,0.0,0.0],[66,0.51,-0.0],[66,6.33,0.98]];
+window.STILLS = {"cave0": "media/basalt_cave0.jpg", "cave1": "media/basalt_cave1.jpg", "cave2": "media/basalt_cave2.jpg", "wf0": "media/basalt_wf0.jpg", "wf1": "media/basalt_wf1.jpg", "wf2": "media/basalt_wf2.jpg"};
+</script>
+<script>
+"use strict";
+const FPS = 20, W = PORTRAIT ? PORTRAIT.W : 1920, H = PORTRAIT ? PORTRAIT.H : 1080;
+const SPEED = 1.35;   // global speed-up of tweens, holds and video playback (as on the intro slide)
+const RENDER = new URLSearchParams(location.search).has("render");
+const EMBEDDED = window.top !== window;
+const $ = id => document.getElementById(id);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const STILLS = window.STILLS || { wf0: "stills/wf0.jpg", wf1: "stills/wf1.jpg", wf2: "stills/wf2.jpg",
+                                  cave0: "stills/cave0.jpg", cave1: "stills/cave1.jpg", cave2: "stills/cave2.jpg" };
+document.querySelectorAll("img[data-still]").forEach(im => im.src = STILLS[im.dataset.still]);
+window.__errors = [];
+// local checking only: headless Firefox does not split the system Avenir Next .ttc into weights
+if (RENDER) document.head.insertAdjacentHTML("beforeend", "<style>" + [["Regular", 400, "normal"], ["Italic", 400, "italic"],
+  ["Medium", 500, "normal"], ["MediumItalic", 500, "italic"], ["DemiBold", 600, "normal"], ["DemiBoldItalic", 600, "italic"],
+  ["Bold", 700, "normal"], ["BoldItalic", 700, "italic"]].map(([n, w, s]) => `@font-face{font-family:"Avenir Next";` +
+  `src:url("../fonts/AvenirNext${n}.ttf");font-weight:${w};font-style:${s}}`).join("") + "</style>");
+addEventListener("error", e => window.__errors.push(String(e.message)));
+
+// ---------------------------------------------------------------- nodes
+const NODE = { task: [1240, 330], demo0: [500, 234], demo1: [500, 234], demo2: [500, 234], vm: [320, 150],
+               plan: [540, 253], v2a: [250, 150], acts: [150, 86], env: [540, 253], tl: [1680, 110],
+               g_wf0: [500, 234], g_wf1: [500, 234], g_wf2: [500, 234], g_cave0: [500, 234], g_cave1: [500, 234],
+               g_cave2: [500, 234], lab_wf: [500, 44], lab_cave: [500, 44], tbl: [1680, 410] };
+if (PORTRAIT) Object.assign(NODE, PORTRAIT.NODE);
+function geom(st, id) {
+  const p = st[id], [w, h] = NODE[id], s = p.sc * p.pul;
+  const cx = p.cx + p.dx, cy = p.cy + p.dy;
+  return { cx, cy, l: cx - s * w / 2, r: cx + s * w / 2, t: cy - s * h / 2, b: cy + s * h / 2, s };
+}
+
+// ---------------------------------------------------------------- arrows, recomputed every frame
+const ns = "http://www.w3.org/2000/svg";
+const ARROWS = {};
+function arrow(id, pts, { color = "#1c1b1a", width = 3.5 } = {}) {
+  const g = document.createElementNS(ns, "g");
+  g.id = id;
+  const shaft = document.createElementNS(ns, "path"), tip = document.createElementNS(ns, "path");
+  shaft.setAttribute("class", "shaft");
+  shaft.setAttribute("stroke", color);
+  shaft.setAttribute("stroke-width", width);
+  tip.setAttribute("fill", color);
+  g.append(shaft, tip);
+  $("svg").append(g);
+  ARROWS[id] = { g, shaft, tip, pts };
+}
+function polyLen(P) {
+  let L = 0;
+  for (let i = 1; i < P.length; i++) L += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
+  return L;
+}
+function drawArrow(a, P, d) {
+  const head = 17;
+  const [x1, y1] = P[P.length - 2], [x2, y2] = P[P.length - 1];
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1, ux = (x2 - x1) / len, uy = (y2 - y1) / len;
+  const body = P.slice(0, -1).concat([[x2 - ux * head * .8, y2 - uy * head * .8]]);
+  a.shaft.setAttribute("d", "M" + body.map(p => p.join(",")).join(" L"));
+  const hw = head * .42, bx = x2 - ux * head, by = y2 - uy * head;
+  a.tip.setAttribute("d", `M${x2},${y2} L${bx - uy * hw},${by + ux * hw} L${bx + uy * hw},${by - ux * hw} Z`);
+  const L = polyLen(body);
+  a.shaft.style.strokeDasharray = `${L} ${L}`;
+  a.shaft.style.strokeDashoffset = L * (1 - d);
+  a.tip.style.opacity = clamp((d - .82) / .18, 0, 1);
+}
+// polyline with its interior corners replaced by circular-ish arcs of radius R
+function rounded(P, R = 90, n = 14) {
+  const out = [P[0]];
+  for (let i = 1; i < P.length - 1; i++) {
+    const [a, b, c] = [P[i - 1], P[i], P[i + 1]];
+    const d1 = Math.hypot(b[0] - a[0], b[1] - a[1]), d2 = Math.hypot(c[0] - b[0], c[1] - b[1]);
+    const r = Math.min(R, d1 / 2, d2 / 2);
+    const p0 = [b[0] + (a[0] - b[0]) * r / d1, b[1] + (a[1] - b[1]) * r / d1];
+    const p1 = [b[0] + (c[0] - b[0]) * r / d2, b[1] + (c[1] - b[1]) * r / d2];
+    for (let k = 0; k <= n; k++) {
+      const u = k / n;
+      out.push([(1 - u) * (1 - u) * p0[0] + 2 * u * (1 - u) * b[0] + u * u * p1[0],
+                (1 - u) * (1 - u) * p0[1] + 2 * u * (1 - u) * b[1] + u * u * p1[1]]);
+    }
+  }
+  out.push(P[P.length - 1]);
+  return out;
+}
+function pointAt(P, f) {   // the point a fraction f along a polyline
+  const L = polyLen(P);
+  let d = clamp(f, 0, 1) * L;
+  for (let i = 1; i < P.length; i++) {
+    const l = Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
+    if (d <= l || i === P.length - 1) {
+      const u = l ? clamp(d / l, 0, 1) : 0;
+      return [P[i - 1][0] + (P[i][0] - P[i - 1][0]) * u, P[i - 1][1] + (P[i][1] - P[i - 1][1]) * u];
+    }
+    d -= l;
+  }
+}
+const GAP = 16;
+const h2 = (A, B) => PORTRAIT ? [[A.cx, A.b + GAP], [B.cx, B.t - GAP]] : [[A.r + GAP, A.cy], [B.l - GAP, B.cy]];
+// demonstrations -> video model: three branches joining into one trunk
+function fanIn(st, id) {
+  const D = geom(st, id), V = geom(st, "vm"), ym = (D.t + V.b) / 2 + 8;
+  if (PORTRAIT) return rounded([[D.r + GAP, D.cy], [PORTRAIT.FAN, D.cy], [PORTRAIT.FAN, V.cy], [V.r + GAP, V.cy]], 34);
+  if (Math.abs(D.cx - V.cx) < 1) return [[D.cx, D.t - GAP], [V.cx, V.b + GAP]];
+  return rounded([[D.cx, D.t - GAP], [D.cx, ym], [V.cx, ym], [V.cx, V.b + GAP]], 34);
+}
+arrow("a_d0_vm", st => fanIn(st, "demo0"));
+arrow("a_d2_vm", st => fanIn(st, "demo2"));
+arrow("a_d1_vm", st => fanIn(st, "demo1"));
+arrow("a_vm_plan", st => { const V = geom(st, "vm"), P = geom(st, "plan"); return [[P.cx, V.b + GAP], [P.cx, P.t - GAP]]; });
+arrow("a_plan_v2a", st => h2(geom(st, "plan"), geom(st, "v2a")));
+arrow("a_v2a_env", st => h2(geom(st, "v2a"), geom(st, "env")));
+// closed loop: the newest observation goes back to the video model, which replans from it
+const loopPts = st => { const E = geom(st, "env"), V = geom(st, "vm");
+  if (PORTRAIT) return rounded([[E.r + GAP, E.cy], [PORTRAIT.RAIL, E.cy], [PORTRAIT.RAIL, V.cy], [V.r + GAP, V.cy]], 60);
+  return rounded([[E.cx, E.t - GAP], [E.cx, V.cy], [V.r + GAP, V.cy]], 60); };
+arrow("a_loop", loopPts);
+// one dot per replan travels along the loop
+const DOTS = [];
+for (let i = 0; i < 2; i++) {
+  const c = document.createElementNS(ns, "circle");
+  c.setAttribute("r", 7.5);
+  c.setAttribute("fill", "#1c1b1a");
+  c.style.opacity = 0;
+  $("svg").append(c);
+  DOTS.push(c);
+}
+
+// ---------------------------------------------------------------- badge
+$("badge_c").innerHTML = `<svg viewBox="0 0 60 60" width="76" height="76"><circle cx="30" cy="30" r="27"
+  fill="#3e6fd8"/><path d="M17,31 L26,40 L43,21" fill="none" stroke="#fff" stroke-width="5.5"
+  stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+// ---------------------------------------------------------------- action glyph (keys lit by the executed action)
+// bits: forward, left, back, right, jump, sneak, sprint, attack, use
+const KEYS = [["W", 0, 32, 0, 26, 26], ["A", 1, 0, 30, 26, 26], ["S", 2, 32, 30, 26, 26], ["D", 3, 64, 30, 26, 26],
+              ["", 4, 0, 62, 90, 22]];
+const KB = {};
+for (const [lab, bit, x, y, w, h] of KEYS) {
+  const k = document.createElement("div");
+  k.className = "key";
+  Object.assign(k.style, { left: x + "px", top: y + "px", width: w + "px", height: h + "px" });
+  k.innerHTML = `<div class="fill"></div><span>${lab}</span>`;
+  $("kb").append(k);
+  KB[bit] = { fill: k.firstChild, txt: k.lastChild };
+}
+const mouse = document.createElement("div");
+mouse.className = "mouse";
+Object.assign(mouse.style, { left: "106px", top: "4px", width: "44px", height: "70px" });
+mouse.innerHTML = `<div class="btn" style="left:0;width:21px"></div><div class="btn" style="left:21px;width:21px"></div>
+  <div class="seam" style="left:20px;top:0;width:2px;height:26px"></div><div class="seam" style="left:0;top:25px;width:44px;height:2px"></div>`;
+$("kb").append(mouse);
+const BTN = mouse.querySelectorAll(".btn");
+// smoothed key intensities and camera per displayed frame (the raw actions flicker at 20 Hz)
+const NKEY = 9, NA = ACTIONS.length, KEYI = [], CAM = [];
+for (let f = 0; f < NA; f++) {
+  const v = new Array(NKEY).fill(0);
+  let n = 0, cp = 0, cy = 0, m = 0;
+  for (let j = f - 2; j <= f + 2; j++) {
+    if (j < 1 || j >= NA) continue;
+    n++;
+    for (let b = 0; b < NKEY; b++) if (ACTIONS[j][0] & (1 << b)) v[b]++;
+  }
+  for (let j = f - 4; j <= f + 4; j++) if (j >= 1 && j < NA) { cp += ACTIONS[j][1]; cy += ACTIONS[j][2]; m++; }
+  KEYI.push(v.map(x => n ? x / n : 0));
+  CAM.push(m ? [cp / m, cy / m] : [0, 0]);
+}
+const mixHex = (a, b, u) => { const h = s => [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16));
+  const A = h(a), B = h(b); return `rgb(${A.map((x, i) => Math.round(x + (B[i] - x) * u)).join(",")})`; };
+function setActions(f) {
+  const I = f == null ? new Array(NKEY).fill(0) : KEYI[clamp(f, 0, NA - 1)];
+  for (const bit in KB) {
+    KB[bit].fill.style.opacity = I[bit];
+    KB[bit].txt.style.color = mixHex("#a8a5a0", "#f5f5f4", I[bit]);
+  }
+  BTN[0].style.opacity = I[7];
+  BTN[1].style.opacity = I[8];
+  const [p, y] = f == null ? [0, 0] : CAM[clamp(f, 0, NA - 1)];
+  mouse.style.transform = `translate(${clamp(y * 2.2, -9, 9)}px,${clamp(p * 2.2, -7, 7)}px)`;
+}
+
+// ---------------------------------------------------------------- timeline of the episode
+const EP_FRAMES = CLIPS.ep5_pov.frames, CHUNK = 16;
+const STAGES = [["climbing up", 0, 196], ["placing bucket", 196, 262], ["climbing down", 262, 444],
+                ["looking up", 444, EP_FRAMES - 1]];
+const fx = f => (PORTRAIT ? PORTRAIT.NODE.tl[0] : 1680) * f / (EP_FRAMES - 1);
+const TL = { ticks: [], stages: [] };
+{
+  const tl = $("tl");
+  tl.insertAdjacentHTML("beforeend", `<div class="base"></div>`);
+  for (let f = 1; f < EP_FRAMES; f += CHUNK) {
+    const t = document.createElement("div");
+    t.className = "tick";
+    t.style.left = fx(f) + "px";
+    tl.append(t);
+    TL.ticks.push([f, t]);
+  }
+  tl.insertAdjacentHTML("beforeend", `<div class="prog"></div><div class="head"></div>
+    <div class="tlab" style="left:0">0 s</div><div class="tlab" style="right:0">${Math.round(EP_FRAMES / FPS)} s</div>`);
+  for (const [name, a, b] of STAGES) {
+    const s = document.createElement("div");
+    s.className = "stage";
+    s.textContent = name;
+    s.style.left = fx((a + b) / 2) + "px";
+    tl.append(s);
+    TL.stages.push([a, b, s]);
+  }
+  TL.prog = tl.querySelector(".prog");
+  TL.head = tl.querySelector(".head");
+}
+function setTimeline(f) {
+  const ff = f == null ? 0 : f;
+  TL.prog.style.width = fx(ff) + "px";
+  TL.head.style.left = fx(ff) + "px";
+  for (const [t0, el] of TL.ticks) el.classList.toggle("on", t0 <= ff);
+  for (const [a, b, el] of TL.stages) {
+    const on = ff >= a, cur = on && (ff < b || b === EP_FRAMES - 1);
+    el.style.opacity = on ? clamp((ff - a) / 6 + .001, 0, 1) : 0;
+    el.style.color = cur ? "#1c1b1a" : "#6e6b67";
+    el.style.fontWeight = cur ? 600 : 400;
+  }
+}
+// replan dots: a new plan every CHUNK frames, starting at frame 1; a dot rides the loop for 12 frames
+function setDots(st, f) {
+  const o = st.a_loop.o * (st.a_loop.draw > .99 ? 1 : 0);
+  DOTS.forEach(c => c.style.opacity = 0);
+  if (f == null || o < .01 || f >= EP_FRAMES - 1) return;
+  const P = loopPts(st);
+  let k = 0;
+  for (let r = 1; r <= f && k < DOTS.length; r += CHUNK) {
+    const u = (f - r) / 12;
+    if (u < 0 || u > 1) continue;
+    const [x, y] = pointAt(P, u);
+    DOTS[k].setAttribute("cx", x);
+    DOTS[k].setAttribute("cy", y);
+    DOTS[k].style.opacity = o * clamp(Math.min(u / .15, (1 - u) / .15), 0, 1);
+    k++;
+  }
+}
+
+// ---------------------------------------------------------------- results table (as in the paper)
+const TASKS = ["FindCave", "MakeWaterfall", "CreateAnimalPen", "BuildVillageHouse"];
+const COLS = [
+  ["Mirror<br>(Ours)", ["82", "36", "0", "0"], "m1"], ["VIPER", ["0", "0", "0", "0"]],
+  ["Mirror<br>(Ours)", ["91", "45", "0", "0"], "m2"], ["KAIROS", ["27", "0", "0", "0"]],
+  ["BC<br>(VPT-SFT)", ["27", "0", "0", "0"]], ["UniTeam", ["64", "0", "0", "0"]], ["STEVE-1", ["45", "0", "0", "0"]],
+  ["GROOT", ["45", "0", "0", "0"]], ["JARVIS-<br>VLA", ["36", "0", "0", "0"]], ["OpenHA", ["45", "0", "0", "0"]],
+  ["GoUp", ["36", "36†", "18†", "91†"]], ["Human", ["95", "100", "95", "100"]]];
+const GROUPS = [["No action labels", 0, 2], ["With action labels", 2, 6], ["Vision-language-action (VLA) models", 6, 10],
+                ["Heuristic", 10, 11], ["Human", 11, 12]];
+const TB = { TASK_W: 250, COL_W: 1430 / 12, Y_GRP: 4, Y_CMID: 50, Y_HEAD: 58, Y_MID: 138, Y_ROW: 142, ROW_H: 54 };
+TB.Y_BOT = TB.Y_ROW + 4 * TB.ROW_H + 4;
+const MIRROR = { m1: { vals: [82, 36, 0, 0], color: "var(--violet)", fill: "var(--violetF)" },
+                 m2: { vals: [91, 45, 0, 0], color: "var(--teal)", fill: "var(--tealF)" } };
+if (PORTRAIT) PORTRAIT.table($("tbl"), { TASKS, COLS, GROUPS, MIRROR });
+else {
+  const tb = $("tbl"), add = (html) => tb.insertAdjacentHTML("beforeend", html);
+  const rule = (x, y, w, h) => add(`<div class="rule" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"></div>`);
+  const cx = c => TB.TASK_W + c * TB.COL_W;
+  for (const m in MIRROR) {
+    const c = COLS.findIndex(col => col[2] === m);
+    add(`<div class="tint" id="tint_${m}" style="left:${cx(c) + 4}px;top:${TB.Y_HEAD - 2}px;width:${TB.COL_W - 8}px;
+         height:${TB.Y_BOT - TB.Y_HEAD}px;background:${MIRROR[m].fill}"></div>`);
+  }
+  rule(0, 0, 1680, 2.5);
+  for (const [name, a, b] of GROUPS) {
+    add(`<div class="c grp" style="left:${cx(a)}px;top:${TB.Y_GRP}px;width:${(b - a) * TB.COL_W}px;height:42px">${name}</div>`);
+    rule(cx(a) + 8, TB.Y_CMID, (b - a) * TB.COL_W - 16, 1.4);
+  }
+  add(`<div class="c hd" style="left:0;top:${TB.Y_HEAD}px;width:${TB.TASK_W}px;height:72px;justify-content:flex-start">Task</div>`);
+  rule(0, TB.Y_MID, 1680, 1.6);
+  TASKS.forEach((t, r) => add(`<div class="c cell" style="left:0;top:${TB.Y_ROW + r * TB.ROW_H}px;width:${TB.TASK_W}px;
+    height:${TB.ROW_H}px;justify-content:flex-start">${t}</div>`));
+  COLS.forEach(([head, vals, m], c) => {
+    const style = m ? `font-weight:700;color:${MIRROR[m].color}` : "";
+    add(`<div class="c hd" ${m ? `id="h_${m}"` : ""} style="left:${cx(c)}px;top:${TB.Y_HEAD}px;width:${TB.COL_W}px;
+         height:72px;${style}">${head}</div>`);
+    vals.forEach((v, r) => {
+      const dag = v.endsWith("†"), num = dag ? v.slice(0, -1) : v;
+      const bold = m && num !== "0" ? "font-weight:700;" : "";
+      add(`<div class="c cell${dag ? " dag" : ""}" ${m ? `id="${m}_${r}"` : ""} style="left:${cx(c)}px;
+           top:${TB.Y_ROW + r * TB.ROW_H}px;width:${TB.COL_W}px;height:${TB.ROW_H}px;${bold}">${num}%${dag ? "<sup>†</sup>" : ""}</div>`);
+    });
+  });
+  rule(0, TB.Y_BOT, 1680, 2.5);
+  add(`<div class="c" style="left:0;top:${TB.Y_BOT + 12}px;height:30px;font-size:20px;color:var(--muted);
+       justify-content:flex-start">† Obtained by pre-programmed action sequences rather than learned behavior.</div>`);
+}
+const MCELLS = { m1: [0, 1, 2, 3].map(r => $("m1_" + r)), m2: [0, 1, 2, 3].map(r => $("m2_" + r)) };
+
+// ---------------------------------------------------------------- video slots
+const SLOT_CLIPS = { demo0: ["demo0"], demo1: ["demo1"], demo2: ["demo2"], plan: ["ep5_plan"], env: ["ep5_pov"] };
+const VIDS = {}, CANV = {};
+const lastFrame = clip => CLIPS[clip].frames - 1;
+for (const slot in SLOT_CLIPS) {
+  const host = $("slot_" + slot);
+  if (RENDER) {
+    const c = document.createElement("canvas");
+    c.width = CLIPS[SLOT_CLIPS[slot][0]].w;
+    c.height = CLIPS[SLOT_CLIPS[slot][0]].h;
+    host.append(c);
+    CANV[slot] = c;
+  } else {
+    VIDS[slot] = {};
+    for (const clip of SLOT_CLIPS[slot]) {
+      const v = document.createElement("video");
+      v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = CLIPS[clip].src;
+      v.style.visibility = "hidden";
+      host.append(v);
+      VIDS[slot][clip] = v;
+    }
+  }
+}
+
+// ---------------------------------------------------------------- timeline helpers
+const E = {
+  lin: u => u,
+  io: u => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2,
+  out: u => 1 - Math.pow(1 - u, 3),
+  in2: u => u * u,
+  back: u => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * Math.pow(u - 1, 3) + c1 * Math.pow(u - 1, 2); },
+  early: u => E.io(clamp(u / .65, 0, 1)),          // done in the first 65% of the tween
+  late: u => E.io(clamp((u - .35) / .65, 0, 1)),   // starts after the first 35%
+};
+const fade = (id, to, at = 0, dur = .5, ease = "io") => [id, "o", to, at, dur, ease];
+const move = (id, prop, to, at, dur, ease = "io") => [id, prop, to, at, dur, ease];
+const draw = (id, at, dur = .4) => [[id, "o", 1, at, .01, "lin"], [id, "draw", 1, at, dur, "io"]];
+const play = (slot, clip, at, rate = 1, loop = false) => ({ slot, clip, at, mode: "play", rate, loop });
+const show = (slot, clip, at, frame = 0) => ({ slot, clip, at, mode: "show", frame });
+const swap = (out, inn, at = 0, d = .45) => [fade(out, 0, at, d * .8), fade(inn, 1, at + d * .5, d)];
+const pop = (id, at, from = .6) => [move(id, "pul", from, at, .01, "lin"), fade(id, 1, at, .25), move(id, "pul", 1, at, .6, "back")];
+
+// Camera: each layout gives nodes a centre, a scale and (optionally) an opacity.
+const LAYOUT = PORTRAIT ? PORTRAIT.LAYOUT : {
+  task:  { task: [960, 580, 1] },
+  demos: { task: [960, 372, .78], demo0: [420, 772, 1], demo1: [960, 772, 1], demo2: [1500, 772, 1] },
+  vm:    { task: [960, 300, .62], vm: [960, 420, 1] },
+  loop:  { vm: [390, 330, .93] },
+  gallery: { env: [1490, 420, 500 / 540], g_wf0: [430, 420, 1], g_wf1: [960, 420, 1], g_wf2: [1490, 420, 1],
+             g_cave0: [430, 760, 1], g_cave1: [960, 760, 1], g_cave2: [1490, 760, 1], lab_wf: [960, 590, 1],
+             lab_cave: [960, 930, 1] },
+  strip_wf: { g_wf0: [245, 318, .5], g_wf1: [531, 318, .5], g_wf2: [817, 318, .5], lab_wf: [531, 410, .8] },
+  strip_cave: { g_cave0: [1103, 318, .5], g_cave1: [1389, 318, .5], g_cave2: [1675, 318, .5], lab_cave: [1389, 410, .8] },
+};
+function layout(name, at = 0, dur = 1.0, ex = "io", ey = "io", es = "io") {
+  const L = LAYOUT[name], tw = [];
+  for (const id in L) {
+    const [cx, cy, sc] = L[id];
+    tw.push(move(id, "cx", cx, at, dur, ex), move(id, "cy", cy, at, dur, ey), move(id, "sc", sc, at, dur, es));
+  }
+  return tw;
+}
+
+// where nodes sit before they are first shown (they fade in there)
+const INIT = { t0: { o: 1 },
+  task: { cx: 960, cy: 580, sc: 1, o: 1 },
+  demo0: { cx: 420, cy: 772, sc: 1, dy: 34 }, demo1: { cx: 960, cy: 772, sc: 1, dy: 34 }, demo2: { cx: 1500, cy: 772, sc: 1, dy: 34 },
+  vm: { cx: 960, cy: 420, sc: 1 },
+  plan: { cx: 390, cy: 330, sc: .22 }, v2a: { cx: 890, cy: 652, sc: 1 }, acts: { cx: 1132, cy: 588, sc: 1.15 },
+  env: { cx: 1530, cy: 652, sc: 1, dy: 24 }, tl: { cx: 960, cy: 952, sc: 1, dy: 16 },
+  badge_c: { s: .4 },
+  g_wf0: { cx: 430, cy: 420, sc: 1 }, g_wf1: { cx: 960, cy: 420, sc: 1 }, g_wf2: { cx: 1490, cy: 420, sc: 1 },
+  g_cave0: { cx: 430, cy: 760, sc: 1 }, g_cave1: { cx: 960, cy: 760, sc: 1 }, g_cave2: { cx: 1490, cy: 760, sc: 1 },
+  lab_wf: { cx: 960, cy: 590, sc: 1 }, lab_cave: { cx: 960, cy: 930, sc: 1 },
+  tbl: { cx: 960, cy: 700, sc: 1, dy: 34 },
+  env_lab: { o: 1 },
+};
+if (PORTRAIT) for (const id in PORTRAIT.INIT) Object.assign(INIT[id], PORTRAIT.INIT[id]);
+
+const EP_RATE = 32.4 / 10 / SPEED, EP_T0 = 3.7, EP_END = EP_T0 + EP_FRAMES / FPS / EP_RATE;
+const DEMO_RATE = 1.4;
+const STEPS = [
+  // 0. the task description (the slide opens here)
+  { name: "task", hold: .8, tw: [], cues: [] },
+  // 1. its fuzzy words: what reward would score "beautiful"?
+  { name: "fuzzy", hold: 2.4, tw: [move("ul0", "draw", 1, .15, .45), move("fz0", "hl", 1, .15, .45),
+      move("ul1", "draw", 1, .5, .45), move("fz1", "hl", 1, .5, .45),
+      move("ul2", "draw", 1, .85, .45), move("fz2", "hl", 1, .85, .45)], cues: [] },
+  // 2. but people can show it: human demonstrations
+  { name: "demos", hold: 3.6, tw: [...swap("t0", "t1"), ...layout("demos", .1, 1.0),
+      fade("demo0", 1, .75, .5), move("demo0", "dy", 0, .75, .7, "out"),
+      fade("demo1", 1, .9, .5), move("demo1", "dy", 0, .9, .7, "out"),
+      fade("demo2", 1, 1.05, .5), move("demo2", "dy", 0, 1.05, .7, "out")],
+    cues: [play("demo0", "demo0", .75, DEMO_RATE), play("demo1", "demo1", .9, DEMO_RATE),
+           play("demo2", "demo2", 1.05, DEMO_RATE)] },
+  // 3. the video model is fine-tuned on those videos only
+  { name: "vm", hold: 3.2, tw: [...swap("t1", "t2"), fade("task", 0, .05, .5), ...layout("vm", .05, .8),
+      ...pop("vm", .55), ...draw("a_d0_vm", 1.0, .5), ...draw("a_d2_vm", 1.0, .5), ...draw("a_d1_vm", 1.2, .3),
+      fade("lab_ft", 1, 1.45, .4)], cues: [] },
+  // 4. closed loop: plan -> V2A -> environment -> back to the video model; one real episode plays
+  { name: "loop", hold: EP_END + 1.8, tw: [...swap("t2", "t3"),
+      fade("demo0", 0, .05, .45), fade("demo1", 0, .05, .45), fade("demo2", 0, .05, .45),
+      move("demo0", "dy", 30, .05, .5), move("demo1", "dy", 30, .05, .5), move("demo2", "dy", 30, .05, .5),
+      fade("a_d0_vm", 0, .05, .3), fade("a_d1_vm", 0, .05, .3), fade("a_d2_vm", 0, .05, .3), fade("lab_ft", 0, .05, .3),
+      ...layout("loop", .25, 1.0),
+      // the plan grows out of the video model
+      fade("plan", 1, 1.05, .35), move("plan", "cy", PORTRAIT ? PORTRAIT.PLAN[0] : 652, 1.0, .85), move("plan", "sc", PORTRAIT ? PORTRAIT.PLAN[1] : 1, 1.0, .85),
+      ...draw("a_vm_plan", 1.75, .3),
+      ...pop("v2a", 1.95), ...draw("a_plan_v2a", 2.15, .3),
+      fade("acts", 1, 2.35, .4), ...draw("a_v2a_env", 2.4, .3),
+      fade("env", 1, 2.5, .45), move("env", "dy", 0, 2.5, .6, "out"),
+      ...draw("a_loop", 2.85, .8), fade("lab_replan", 1, 3.35, .4),
+      fade("tl", 1, 3.0, .5), move("tl", "dy", 0, 3.0, .6, "out"),
+      fade("badge_c", 1, EP_END + .15, .25), move("badge_c", "s", 1, EP_END + .15, .45, "back")],
+    cues: [show("demo0", "demo0", .6, 0), show("demo1", "demo1", .6, 0), show("demo2", "demo2", .6, 0),  // stop the faded demos
+           show("plan", "ep5_plan", 1.0, 0), show("env", "ep5_pov", 2.5, 0),
+           play("plan", "ep5_plan", EP_T0, EP_RATE), play("env", "ep5_pov", EP_T0, EP_RATE)] },
+  // 5. results: the episode's last frame becomes one of the gallery's waterfalls
+  { name: "gallery", hold: 3.2, tw: [...swap("t3", "t4"),
+      ...["plan", "vm", "v2a", "acts", "tl", "a_vm_plan", "a_plan_v2a", "a_v2a_env", "a_loop", "lab_replan", "badge_c",
+          "env_lab"].map(id => fade(id, 0, .05, .4)),
+      ...layout("gallery", .25, 1.0),
+      fade("g_wf2", 1, 1.25, .01, "lin"), fade("env", 0, 1.27, .01, "lin"),
+      fade("g_wf0", 1, .15, .5), move("g_wf0", "pul", .94, .14, .01, "lin"), move("g_wf0", "pul", 1, .15, .6, "out"),
+      fade("g_wf1", 1, .28, .5), move("g_wf1", "pul", .94, .27, .01, "lin"), move("g_wf1", "pul", 1, .28, .6, "out"),
+      fade("lab_wf", 1, .85, .4),
+      ...["g_cave0", "g_cave1", "g_cave2"].flatMap((id, i) => [fade(id, 1, 1.45 + .15 * i, .5),
+          move(id, "pul", .94, 1.44 + .15 * i, .01, "lin"), move(id, "pul", 1, 1.45 + .15 * i, .6, "out")]),
+      fade("lab_cave", 1, 1.95, .4)], cues: [show("env", "ep5_pov", 0, EP_FRAMES - 1)] },
+  // 6. the table: baselines first
+  { name: "table", hold: 2.6, tw: [...swap("t4", "t5"), ...(PORTRAIT
+      ? [...["g_wf0", "g_wf1", "g_wf2", "g_cave0", "g_cave1", "g_cave2", "lab_wf", "lab_cave"]
+           .map(id => move(id, "dy", -PORTRAIT.PUSH, .35, 1.3)),
+         fade("tbl", 1, .35, .25), move("tbl", "dy", 0, .35, 1.3)]
+      : [...layout("strip_wf", .1, .9), ...layout("strip_cave", .3, 1.1, "io", "late", "early"),
+         fade("tbl", 1, .95, .5), move("tbl", "dy", 0, .95, .7, "out")])], cues: [] },
+  // 7. Mirror without action labels
+  { name: "mirror", hold: 2.4, tw: [...swap("t5", "t6"), fade("tint_m1", 1, .15, .4), fade("h_m1", 1, .25, .4),
+      ...MCELLS.m1.map((c, r) => fade("m1_" + r, 1, .35, .3)), move("cnt_m1", "u", 1, .35, .9, "out")], cues: [] },
+  // 8. Mirror with action labels
+  { name: "labels", hold: 2.4, tw: [...swap("t6", "t7"), fade("tint_m2", 1, .15, .4), fade("h_m2", 1, .25, .4),
+      ...MCELLS.m2.map((c, r) => fade("m2_" + r, 1, .35, .3)), move("cnt_m2", "u", 1, .35, .9, "out")], cues: [] },
+];
+
+// Fused clicks: a chained beat hands over to the next one halfway through and keeps playing underneath it.
+// "task" is chained too, so the fuzzy-word highlight plays by itself when the slide opens.
+const CHAIN = new Set(["task", "demos", "loop"].map(n => STEPS.findIndex(st => st.name === n)));
+// How far through a chained beat the next one starts: halfway, except the self-play episode, which plays out first.
+const HANDOVER = { loop: 1 };
+// Extra wall-clock seconds a chained beat waits before handing over (the demos get time on screen).
+const HANDOVER_DELAY = { demos: 4 };
+const chainEnd = k => { while (CHAIN.has(k)) k++; return k; };
+const STOPS = [0];   // click s of the slide starts beat STOPS[s] and ends on chainEnd(STOPS[s])
+for (let k = 1; k < STEPS.length; k++) if (!CHAIN.has(k - 1)) STOPS.push(k);
+// Each beat keeps its own clock (BT: start times of beats played in this run), so a chained beat
+// that starts before the previous one ends lets that one finish instead of snapping it to its end.
+let BT = [];
+const tauOf = (i, k, tau) => i === k ? tau : BT[i] != null ? (performance.now() - BT[i]) / 1000 * SPEED : 1e9;
+
+// ---------------------------------------------------------------- state
+const PSEUDO = new Set(["cnt_m1", "cnt_m2"]);
+const NODES = {};
+const ALL_IDS = new Set([...Object.keys(INIT), ...Object.keys(ARROWS), ...PSEUDO]);
+for (const st of STEPS) for (const t of st.tw) ALL_IDS.add(t[0]);
+for (const id of ALL_IDS) { if (PSEUDO.has(id)) continue; NODES[id] = $(id); if (!NODES[id]) console.error("missing node", id); }
+const BASE = { o: 0, dx: 0, dy: 0, s: 1, draw: 0, cx: 0, cy: 0, sc: 1, pul: 1, u: 0, hl: 0 };
+function stateAt(k, tau) {
+  const st = {};
+  for (const id of ALL_IDS) st[id] = Object.assign({}, BASE, INIT[id] || {});
+  for (let i = 0; i <= k; i++) {
+    for (const [id, prop, to, at, dur, ease] of STEPS[i].tw) {
+      const ti = tauOf(i, k, tau);
+      if (ti < at) continue;
+      const u = clamp((ti - at) / Math.max(dur, 1e-6), 0, 1);
+      st[id][prop] = st[id][prop] + (to - st[id][prop]) * E[ease](u);
+    }
+  }
+  return st;
+}
+function vis(n, o) { n.style.opacity = o; n.style.visibility = o < .002 ? "hidden" : ""; }   // "" inherits a hidden parent
+function apply(st) {
+  for (const id of ALL_IDS) {
+    const n = NODES[id], p = st[id];
+    if (PSEUDO.has(id)) {
+      const m = id.slice(4);
+      MCELLS[m].forEach((c, r) => c.firstChild.nodeValue = Math.round(MIRROR[m].vals[r] * p.u) + "%");
+      continue;
+    }
+    if (!n) continue;
+    if (ARROWS[id]) {
+      vis(ARROWS[id].g, p.o);
+      if (p.o > .002) drawArrow(ARROWS[id], ARROWS[id].pts(st), p.draw);
+      continue;
+    }
+    if (id.startsWith("ul")) { n.style.transform = `scaleX(${p.draw})`; continue; }
+    if (id.startsWith("fz")) { n.style.color = mixHex("#1c1b1a", "#dc4436", p.hl); continue; }
+    vis(n, p.o);
+    if (NODE[id]) {
+      const { l, t, s } = geom(st, id);
+      // zoom, not scale(): text is laid out at its on-screen size, so it stays sharp while moving
+      n.style.zoom = s; n.style.transform = `translate(${l / s}px,${t / s}px)`;
+    } else if (!id.startsWith("t") || id.startsWith("tint")) {
+      n.style.transform = (p.dx || p.dy ? `translate(${p.dx}px,${p.dy}px) ` : "") + (p.s !== 1 ? `scale(${p.s})` : "");
+    }
+  }
+  // labels that hang off arrows
+  const D = geom(st, "demo1"), V = geom(st, "vm");
+  NODES.lab_ft.style.transform = `translate(${PORTRAIT ? (V.r + GAP + PORTRAIT.FAN) / 2 : V.cx + 18}px,${PORTRAIT ? V.cy - 52 : V.b + 24}px)`;
+  const P = loopPts(st), Ev = geom(st, "env");
+  NODES.lab_replan.style.transform = `translate(${PORTRAIT ? (V.r + GAP + PORTRAIT.RAIL) / 2 : (V.r + Ev.cx) / 2 - 140}px,${V.cy - 52}px)`;
+}
+function slotsAt(k, tau) {
+  const out = {};
+  for (let i = 0; i <= k; i++) STEPS[i].cues.forEach((c, j) => {
+    const ti = tauOf(i, k, tau);
+    if (ti < c.at) return;
+    const t = c.mode === "show" ? null : (ti - c.at) * c.rate;
+    out[c.slot] = Object.assign({ key: `${i}:${j}`, t }, c);
+  });
+  return out;
+}
+function frameOf(w) {
+  if (w.mode === "show") return w.frame;
+  const n = CLIPS[w.clip].frames;
+  if (w.loop) return isFinite(w.t) ? Math.floor(w.t * FPS + 1e-6) % n : 0;
+  return clamp(Math.floor(w.t * FPS + 1e-6), 0, n - 1);
+}
+// the dynamic overlays follow the environment clip's frame
+function overlays(st, f) {
+  setActions(f);
+  setTimeline(f);
+  setDots(st, f);
+}
+
+// ---------------------------------------------------------------- presentation mode
+let K = 0, T0 = performance.now(), INSTANT = false;
+const ACTIVE = {};
+function syncVideos(k, tau) {
+  const want = slotsAt(k, tau);
+  for (const slot in SLOT_CLIPS) {
+    const w = want[slot];
+    for (const clip in VIDS[slot]) VIDS[slot][clip].style.visibility = w && w.clip === clip ? "visible" : "hidden";
+    if (!w) { ACTIVE[slot] = null; continue; }
+    if (ACTIVE[slot] === w.key) continue;
+    ACTIVE[slot] = w.key;
+    const v = VIDS[slot][w.clip], n = CLIPS[w.clip].frames, dur = n / FPS;
+    v.loop = !!w.loop;
+    if (w.mode === "show") { v.pause(); v.currentTime = (w.frame + .5) / FPS; }
+    else if (w.loop) { v.playbackRate = w.rate * SPEED; v.currentTime = isFinite(w.t) ? w.t % dur : 0; v.play().catch(() => {}); }
+    else if (w.t >= dur) { v.pause(); v.currentTime = (n - .5) / FPS; }
+    else { v.playbackRate = w.rate * SPEED; v.currentTime = w.t; v.play().catch(() => {}); }
+  }
+  return want;
+}
+function go(k, instant = false, replay = false) {
+  K = clamp(k, 0, STEPS.length - 1);
+  T0 = performance.now();
+  INSTANT = instant;
+  if (instant) BT = []; else BT[K] = T0;
+  if (replay) for (const s in ACTIVE) if (ACTIVE[s] && ACTIVE[s].startsWith(K + ":")) ACTIVE[s] = null;
+  $("hud").textContent = `${K} / ${STEPS.length - 1}  ${STEPS[K].name}`;
+  if (!EMBEDDED) try { localStorage.setItem("mirror_basalt_step", String(K)); } catch (e) {}
+}
+function loop() {
+  const tau = INSTANT ? 1e9 : (performance.now() - T0) / 1000 * SPEED;
+  const st = stateAt(K, tau);
+  apply(st);
+  const want = syncVideos(K, tau);
+  const w = want.env;
+  overlays(st, w ? (w.mode === "show" ? w.frame : clamp(Math.floor(VIDS.env.ep5_pov.currentTime * FPS), 0, EP_FRAMES - 1)) : null);
+  if (!INSTANT && CHAIN.has(K) && tau >= Math.max(1.0, STEPS[K].hold * (HANDOVER[STEPS[K].name] ?? .5)) + (HANDOVER_DELAY[STEPS[K].name] || 0) * SPEED) go(K + 1);
+  requestAnimationFrame(loop);
+}
+function fit() { $("stage").style.zoom = Math.min(innerWidth / W, innerHeight / H); }
+
+// ---------------------------------------------------------------- render mode (frame-exact stills for checking)
+const STARTS = [];
+{ let t = 0; for (const s of STEPS) { STARTS.push(t); t += s.hold / SPEED; } STARTS.push(t); }
+window.TOTAL = STARTS[STARTS.length - 1];
+window.STEP_TABLE = STEPS.map((st, i) => [st.name, STARTS[i], st.hold]);
+window.SPEED = SPEED;
+const FRAME_CACHE = new Map();
+function frameImage(clip, i) {
+  const key = clip + ":" + i;
+  if (!FRAME_CACHE.has(key)) {
+    const im = new Image();
+    im.src = `${CLIPS[clip].dir}/f_${String(i).padStart(4, "0")}.jpg`;
+    FRAME_CACHE.set(key, im.decode().then(() => im));
+    if (FRAME_CACHE.size > 400) FRAME_CACHE.delete(FRAME_CACHE.keys().next().value);
+  }
+  return FRAME_CACHE.get(key);
+}
+window.renderStep = async function (k, tau) {
+  const st = stateAt(k, tau);
+  apply(st);
+  const want = slotsAt(k, tau);
+  for (const slot in CANV) {
+    const w = want[slot], c = CANV[slot], ctx = c.getContext("2d");
+    if (!w) { ctx.clearRect(0, 0, c.width, c.height); continue; }
+    ctx.drawImage(await frameImage(w.clip, frameOf(w)), 0, 0, c.width, c.height);
+  }
+  overlays(st, want.env ? frameOf(want.env) : null);
+};
+
+if (RENDER) {
+  window.READY = false;
+  Promise.all([document.fonts.ready, ...[...document.images].map(im => im.decode().catch(() => {}))]).then(() => {
+    fitTitles(); window.renderStep(0, 0).then(() => { window.READY = true; });
+  });
+} else {
+  fit();
+  addEventListener("resize", fit);
+  if (!EMBEDDED) addEventListener("keydown", e => {
+    const k = e.key;
+    if (["ArrowRight", "ArrowDown", "PageDown", " ", "Enter"].includes(k)) { go(K + 1); e.preventDefault(); }
+    else if (["ArrowLeft", "ArrowUp", "PageUp", "Backspace"].includes(k)) {
+      go(chainEnd(STOPS.filter(b => chainEnd(b) < K).pop() ?? 0), true); e.preventDefault();
+    }
+    else if (k === "r" || k === "R") go(K, false, true);
+    else if (k === "Home") go(0, true);
+    else if (k === "End") go(STEPS.length - 1, true);
+    else if (k === "f" || k === "F") {
+      if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen();
+    }
+  });
+  if (!EMBEDDED) addEventListener("click", () => go(K + 1));
+  let hideT = null;
+  addEventListener("mousemove", () => {
+    document.body.classList.add("cursor");
+    clearTimeout(hideT);
+    hideT = setTimeout(() => document.body.classList.remove("cursor"), 1500);
+  });
+  // In a DeckWerk web element the slide owns the clicker: build step s of the slide is beat s here.
+  // Stepping forward by one plays that beat; any other jump (back, or entering mid-slide) lands on it settled.
+  // Build steps map onto STOPS: a fused click plays its chained beats. Opening the slide (step 0) plays
+  // the opening beats rather than landing on them settled.
+  // DeckWerk re-sends the current step/active notice whenever it re-renders the slide; acting on a repeat
+  // would snap the running beat (and its videos) to its end, so only a change of step does anything.
+  let started = false, pendingStep = null, lastStep = null;
+  const toStep = (s, animate, entering = false) => {
+    const b = STOPS[Math.min(s, STOPS.length - 1)];
+    if (!started) { pendingStep = s; return; }
+    if (!entering && s === lastStep) return;
+    lastStep = s;
+    if (s === 0 && entering) go(0);
+    else if (animate && b === chainEnd(STOPS[Math.max(s - 1, 0)]) + 1 && K < b) go(b);
+    else go(chainEnd(b), true);
+  };
+  if (EMBEDDED && window.deckwerk) {
+    // play the opening only on arriving at the slide, not on every repeated "active" notice
+    let slideActive = false;
+    window.deckwerk.onActive(({ step }) => { const entering = !slideActive; slideActive = true; toStep(step || 0, false, entering); });
+    window.deckwerk.onInactive(() => { slideActive = false; lastStep = null; });
+    window.deckwerk.onStep(({ step }) => toStep(step || 0, true));
+  }
+  document.fonts.ready.then(() => {
+    fitTitles();
+    let k0 = 0;
+    if (!EMBEDDED) {
+      try { k0 = parseInt(localStorage.getItem("mirror_basalt_step") || "0", 10) || 0; } catch (e) {}
+    }
+    started = true;
+    if (EMBEDDED) { lastStep = pendingStep || 0; if (pendingStep) go(chainEnd(STOPS[Math.min(pendingStep, STOPS.length - 1)]), true); else go(0); }
+    else go(k0, true);
+    loop();
+  });
+}
+// one shared title size: the largest at which every title fits on one line (measured in the real font)
+function fitTitles() {
+  const titles = [...document.querySelectorAll(".title")], max = 49, room = 1680;   // 49px: the deck's slide titles
+  titles.forEach(el => el.style.fontSize = max + "px");
+  const widest = Math.max(...titles.map(el => el.firstElementChild.scrollWidth));
+  const size = Math.min(max, Math.floor(max * room / widest));
+  titles.forEach(el => el.style.fontSize = size + "px");
+}
+</script>
+<script src="scene-adapter.js"></script>
+<script>SceneAdapter.init("basalt");</script>
+</body>
+</html>

@@ -1,0 +1,74 @@
+/* Mirror's theme ("Gold"): Apple's light product pages, with the gold of Levine's lecture slides as the product
+   colour. This file is the one source of truth for colour and type: css/site.css styles the page with these tokens,
+   and tools/build_scenes.py (through tools/theme.py) reads the hex values below and swaps them into the talk
+   animations, so the page and the animations always agree. */
+
+/* Source Sans 3 (SIL Open Font License), variable weight 200-900; latin, latin-ext and greek subsets */
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/sourcesans3-latin.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/sourcesans3-latin-italic.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: swap; unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/sourcesans3-latin-ext.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/sourcesans3-latin-ext-italic.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: swap; unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/sourcesans3-greek.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: swap; unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF; }
+@font-face { font-family: "Source Sans 3"; src: url("../fonts/sourcesans3-greek-italic.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: swap; unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF; }
+/* Until Source Sans 3 has loaded, Arial stands in, scaled to its widths and vertical metrics (measured in Chromium:
+   Arial runs 6% wider at 400 and 10.5% at 600; Source Sans 3 ascends 1.024 em and descends .4 em), so the swap
+   hardly moves a line break and shifts no layout */
+@font-face { font-family: "Source Sans 3 Fallback"; src: local("Arial"), local("ArialMT"), local("Liberation Sans"), local("Arimo"); font-weight: 200 500; size-adjust: 94.2%; ascent-override: 108.7%; descent-override: 42.5%; line-gap-override: 0%; }
+@font-face { font-family: "Source Sans 3 Fallback"; src: local("Arial Bold"), local("Arial-BoldMT"), local("Liberation Sans Bold"), local("Arimo Bold"); font-weight: 600 900; size-adjust: 89.5%; ascent-override: 114.4%; descent-override: 44.7%; line-gap-override: 0%; }
+
+:root {
+  /* surfaces */
+  --bg: #ffffff;              /* the page */
+  --bg-2: #f5f5f4;            /* tiles behind the animations, cards, bibtex, footer: a warm-neutral grey */
+  --card: #ffffff;            /* cards inside an animation's tile */
+  --dark: #0f0e0d;            /* the survival section, when the lights go down */
+  --on-dark: #f4f2ee;
+
+  /* text */
+  --ink: #1c1b1a;
+  --ink-2: #43413e;
+  --muted: #6e6b67;
+  --faint: #a8a5a0;
+  --line: rgba(28, 27, 26, .1);
+
+  /* gold: headline key phrases and the key-claim words in the animations' captions (large text only) */
+  --gold-1: #d49a00;
+  --gold-2: #b98000;          /* stays gold (hue 42-44), never orange */
+  --accent: #1c1b1a;          /* the label above a headline: ink, in sentence case (Apple's style); gold is for large text only */
+  --gold-dark-1: #ffd25c;     /* the same gradient on --dark */
+  --gold-dark-2: #f0b429;
+
+  /* roles: one colour per meaning, the same in every figure */
+  --mirror: #3e6fd8;          /* Mirror's rollouts, trajectories, bars and curves */
+  --mirror-text: #3361c4;
+  --mirror-tint: #e4ebfa;
+  --mirror-light: #b9ccf3;
+  --sup: #4aa3e0;             /* Mirror trained with action labels (supervised) */
+  --sup-text: #2a7db8;
+  --plan: #2e9a5e;            /* video plans, replans, oracle plans */
+  --plan-text: #23804d;
+  --fail: #dc4436;            /* failures, problems */
+  --crit: #e07b00;            /* the critical action */
+  --star: #f2a900;            /* goals */
+  --red: var(--fail);
+  --green: var(--plan-text);
+  --blue: var(--mirror-text);
+  --violet: var(--mirror-text);
+  --teal: var(--sup-text);
+
+  /* in-context learning: lives in drawing order, and the escape-rate curves */
+  --lava-1: #3e6fd8;
+  --lava-2: #2f94c8;
+  --lava-3: #2fa38c;
+  --lava-4: #8db33e;
+  --lava-5: #e3a21a;
+  --lava-ours: #3e6fd8;
+  --lava-ours-ind: #4aa3e0;
+  --lava-vpt: #6e6b67;
+  --lava-vpt-ind: #a8a5a0;
+
+  /* type */
+  --sans: "Source Sans 3", "Source Sans 3 Fallback", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --serif: var(--sans);       /* headlines; the page no longer uses a serif */
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

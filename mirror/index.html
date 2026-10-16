@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mirror: Self-Improving Video-to-Action Models</title>
+  <meta name="description"
+    content="Mirror solves embodied tasks without expert action labels or task rewards through repeated self-play with a large-scale video planner.">
+  <meta name="keywords"
+    content="Mirror, Video-to-Action, Inverse Dynamics, Video Generation, Embodied Agents, Self-Improvement, Minecraft">
+  <meta name="theme-color" content="#ffffff">
+  <!-- the text face starts loading with the page, so it is usually in before the first paint (no layout shift) -->
+  <link rel="preload" href="fonts/sourcesans3-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/theme.css">
+  <link rel="stylesheet" href="css/site.css">
+  <!-- the hero's letters wait for their face (at most 2.5 s): "Mirror" never shows in a fallback font -->
+  <script>
+    (function () {
+      var h = document.documentElement, done = function () { h.classList.remove("hero-wait"); };
+      if (!document.fonts || !document.fonts.load) return;
+      h.classList.add("hero-wait");
+      document.fonts.load('800 100px "Source Sans 3"', "Mirror").then(done, done);
+      setTimeout(done, 2500);
+    })();
+  </script>
+</head>
+
+<!--
+  Scroll-driven Mirror project page.
+  Each chapter pins a talk animation (scenes/*.html, built from the deck by tools/build_scenes.py). Scrolling brings
+  it into focus, and it then plays like a video, click by click; a tap pauses it and a swipe steps between clicks. js/site.js keeps the
+  animation's time; scenes/scene-adapter.js renders that time inside the scene.
+-->
+
+<body>
+  <div id="backdrop" aria-hidden="true"></div>
+
+  <!-- local nav, as on a product page -->
+  <nav class="localnav" aria-label="Sections">
+    <div class="localnav-inner">
+      <a class="localnav-mark" href="#top">Mirror</a>
+      <div class="localnav-links">
+        <a href="#idea">Method</a>
+        <a href="#minecraft">Minecraft</a>
+        <a href="#text">Text Conditioning</a>
+        <a href="#incontext">In-context Learning</a>
+        <a href="#benchmarks">Beyond Minecraft</a>
+        <a href="#videos">Videos</a>
+      </div>
+      <!-- TODO: point at the paper once it is public -->
+      <a class="pill pill-dark localnav-cta" href="#">Paper</a>
+    </div>
+    <div class="localnav-progress"><span></span></div>
+  </nav>
+
+  <main>
+    <!-- ======================================================== hero -->
+    <section class="hero" id="top">
+      <div class="hero-sticky">
+        <div class="hero-mark">
+          <div class="hero-video-clip">
+            <video class="hero-video" src="media/hero.mp4" poster="media/hero_poster.jpg" autoplay muted loop playsinline
+              aria-hidden="true"></video>
+            <!-- reduced motion: the montage holds its poster (site.js never starts it then) -->
+            <script>if (matchMedia("(prefers-reduced-motion: reduce)").matches) document.querySelector(".hero-video").removeAttribute("autoplay");</script>
+          </div>
+          <!-- the knockout needs no script: the rects fill the svg and css/site.css sizes the word (.hero-word), so the
+               first paint is already "Mirror" -->
+          <svg class="hero-knockout" aria-hidden="true">
+            <defs>
+              <mask id="hero-mask" maskUnits="userSpaceOnUse">
+                <rect class="hero-mask-bg" width="100%" height="100%" fill="#fff"></rect>
+                <text class="hero-word" x="50%" y="50%" dy=".345em" fill="#000" text-anchor="middle">Mirror</text>
+              </mask>
+            </defs>
+            <rect class="hero-veil" width="100%" height="100%" mask="url(#hero-mask)"></rect>
+          </svg>
+          <h1 class="visually-hidden">Mirror: Self-Improving Video-to-Action Models</h1>
+        </div>
+        <div class="hero-copy">
+          <p class="hero-sub"><span class="mk">Self-Improving</span> <span class="nobr">Video-to-Action</span> Models</p>
+          <p class="hero-authors">
+            <a href="https://tomato1mule.github.io">Hyunwoo Ryu*</a>
+            <a href="https://echen01.github.io/">Eric Ming Chen*</a>
+            <a href="https://wilcoxsonm21.github.io">Max Wilcoxson*</a>
+            <a href="https://www.vincentsitzmann.com">Vincent Sitzmann</a>
+          </p>
+          <p class="hero-affil">MIT <span>&middot;</span> *Equal contribution</p>
+          <!-- TODO: fill in links once the paper and code are public -->
+          <div class="hero-links">
+            <a class="pill pill-dark" href="#">Paper</a>
+            <a class="pill" href="#">arXiv</a>
+            <span class="pill pill-disabled" aria-disabled="true">Code (Coming Soon!)</span>
+          </div>
+        </div>
+        <div class="scroll-cue" aria-hidden="true"><span>Scroll</span><i></i></div>
+      </div>
+    </section>
+
+    <!-- ======================================================== TL;DR, revealed word by word -->
+    <section class="statement" id="tldr">
+      <div class="statement-sticky">
+        <p class="statement-text" data-words>Mirror solves embodied tasks <span class="mk">without expert action labels or task
+          rewards</span> through repeated self-play with a large-scale video planner.</p>
+      </div>
+      <div class="statement-spacer" aria-hidden="true"></div>
+    </section>
+
+    <!-- ======================================================== abstract -->
+    <section class="prose" id="abstract">
+      <p class="eyebrow reveal">Abstract</p>
+      <div class="prose-body reveal">
+        <p>
+          Video generative models are an emerging tool for embodied agents: they can serve as scalable visual
+          planners, generating videos that depict how to complete previously unseen tasks.
+          However, executing these plans typically requires a video-to-action or &ldquo;inverse dynamics&rdquo; model
+          trained on large, human-collected video-action datasets, severely limiting scalability.
+          We introduce Mirror, a self-supervised approach that learns video-to-action mappings through environment
+          interactions, without prior action data or hand-crafted rewards.
+          Mirror learns by attempting to follow a visual plan by executing its best guess of the underlying
+          actions in the environment. Mirror then trains on the resulting video-action pairs, incrementally
+          self-improving and following the visual planner more and more closely.
+          Across Atari, OGBench, and DeepMind Control, Mirror achieves overall performance comparable to leading
+          learning-from-observation methods with learned video plans, and near-expert performance with oracle
+          plans. On Minecraft BASALT and text-conditioned tasks, it outperforms methods with access to expert
+          actions or hand-engineered task knowledge. Using generated video plans, it surpasses VPT-BC in survival
+          mode, even though VPT-BC was trained on thousands of hours of action-labeled human gameplay. With oracle
+          video plans, it learns to acquire diamonds without task rewards, using an order of magnitude fewer
+          environment interactions than DreamerV3.
+          Our results suggest that advances in video models can translate into increasingly capable agents without
+          a corresponding need for hand-crafted rewards or large collections of expert action data.
+        </p>
+      </div>
+    </section>
+
+    <!-- ======================================================== chapters: one pinned talk animation each -->
+    <section class="chapter" id="idea" data-speed="1.25, 25.3:.4, 27.5:1.25" data-scene="intro" data-lead="0.6" data-segs="6.51,1.61,7.72,5.92,3.54,5.72,4.19"
+      data-read="7.0,4.2,9.2,8.0,6.5,8.0,">
+      <div class="chapter-sticky">
+        <header class="chapter-head">
+          <p class="eyebrow">The idea</p>
+          <h2>Learning to follow a video plan <span class="mk">without action labels</span></h2>
+          <p class="lede">Video models are scalable task planners, but executing a plan requires a video-to-action (V2A)
+            model, which prior work trains on expensive paired video&ndash;action data. Mirror learns this model <strong>from
+            its own repeated attempts to follow the video plan</strong>.</p>
+        </header>
+        <div class="stage">
+          <div class="stage-caption" aria-live="polite"></div>
+          <div class="stage-frame">
+            <iframe title="Animation: how Mirror learns a video-to-action model by following video plans"
+              data-src="scenes/intro.html?scroll" tabindex="-1"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter" id="exploration" data-speed="1.25, 9.69:1.8, 11.69:1.25" data-scene="exploration"
+      data-segs="0.50,4.89,1.28,2.85,2.02,4.50,1.63">
+      <div class="chapter-sticky">
+        <header class="chapter-head">
+          <p class="eyebrow">Why it works</p>
+          <h2>The video plan <span class="mk">guides exploration</span></h2>
+          <p class="lede">Random exploration rarely reaches the critical transitions in a task, like crafting a pickaxe
+            in Minecraft. Following a video plan keeps Mirror&rsquo;s rollouts <strong>at the frontier of what the V2A model can
+            currently do</strong>, so with each round of training it can follow more of the plan.</p>
+        </header>
+        <div class="stage">
+          <div class="stage-caption" aria-live="polite"></div>
+          <div class="stage-frame">
+            <iframe title="Animation: random exploration versus video-guided exploration"
+              data-src="scenes/exploration.html?scroll" tabindex="-1"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- closed-loop replanning: the paper's figure, drawn in the page and advanced by scrolling (js/replan.js) -->
+    <section class="chapter chapter-split" id="replanning" data-speed="1" data-scene="replan" data-inline data-head="none"
+      data-segs="2.40,1.45,3.79,6.25,6.60,2.60">
+      <div class="chapter-sticky">
+        <div class="stage split-stage">
+          <div class="split-copy">
+            <p class="eyebrow">Closed-loop replanning</p>
+            <h3><span class="mk">Replanning</span> helps the agent learn new milestones</h3>
+            <ol class="steps">
+              <li><i class="prog"></i><h4>The agent tries to follow the plan</h4>
+                <div class="step-body"><p>The video planner generates a plan, and the agent executes a short chunk of
+                  actions to follow it. We add noise to these actions so the agent can discover new behaviors.</p></div></li>
+              <li><i class="prog"></i><h4>The agent drifts off the plan</h4>
+                <div class="step-body"><p>Exploration noise and errors in the V2A model both push the agent away from
+                  the planned path.</p></div></li>
+              <li><i class="prog"></i><h4>The planner retries the milestone from the agent&rsquo;s new state</h4>
+                <div class="step-body"><p>After every chunk of actions, the video planner generates a new plan from the
+                  observation the agent actually reached, so errors don&rsquo;t accumulate.</p></div></li>
+              <li><i class="prog"></i><h4>Repeated attempts explore the area around the milestone</h4>
+                <div class="step-body"><p>Since the V2A model hasn&rsquo;t learned this transition yet, the first few
+                  attempts fail. Every attempt plays out a little differently, so together they give good coverage of the
+                  states around the milestone.</p></div></li>
+              <li><i class="prog"></i><h4>Eventually the agent discovers the critical action</h4>
+                <div class="step-body"><p>When an attempt includes the right action, <strong>the agent gets past the
+                  milestone</strong>. The transition goes into the replay buffer, and the V2A model learns it.</p></div></li>
+              <li><i class="prog"></i><h4>Plans only need to be accurate for a few steps</h4>
+                <div class="step-body"><p>Because the planner replans after every chunk, no plan has to be physically
+                  accurate over a long horizon.</p></div></li>
+            </ol>
+          </div>
+          <figure class="replan-figure">
+            <svg class="replan-svg" viewBox="-6 0 134 70" role="img"
+              aria-label="An agent following video plans toward a milestone: its noisy actions drift off each plan, it replans from where it is, fails to pass the milestone three times, and a critical action sampled once carries it through"></svg>
+            <figcaption class="replan-legend">
+              <span><svg viewBox="0 0 30 10" aria-hidden="true"><circle cx="4" cy="5" r="3" style="fill:var(--plan)"/><path d="M8 5H22" style="stroke:var(--plan)" stroke-width="2" stroke-dasharray="3 2.6"/><path d="M29 5L21 1.4L23.3 5L21 8.6Z" style="fill:var(--plan)"/></svg>Replan</span>
+              <span><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2L10 10M2 10L10 2" style="stroke:var(--fail)" stroke-width="2.4" stroke-linecap="round"/></svg>Failed attempt</span>
+              <span><svg viewBox="0 0 30 10" aria-hidden="true"><path d="M2 6C8 3 12 7 18 5S26 4 28 5" fill="none" style="stroke:var(--crit)" stroke-width="2.6" stroke-linecap="round"/></svg>Critical action</span>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter" id="minecraft" data-speed="1.8" data-scene="dreamer" data-lead="0.5" data-segs="0.50,2.12,1.71,2.04,1.71,2.20"
+      data-read="3.2,5.0,4.4,4.4,5.8,">
+      <div class="chapter-sticky">
+        <header class="chapter-head">
+          <p class="eyebrow">Minecraft</p>
+          <h2>Mirror crafts an <span class="mk">iron pickaxe</span> without rewards or action labels</h2>
+          <p class="lede">Mining a diamond in Minecraft is a long-horizon task. Starting from nothing, the agent first has
+            to collect wood, craft tools, and smelt iron, passing twelve milestones along the way.
+            The baselines learn from human action labels or from rewards, while Mirror learns <strong>only from self-play with a
+            video planner</strong>.</p>
+        </header>
+        <div class="stage">
+          <div class="stage-caption" aria-live="polite"></div>
+          <div class="stage-frame">
+            <iframe title="Animated chart: Minecraft milestone success rates of Mirror and baselines"
+              data-src="scenes/dreamer.html?scroll" tabindex="-1"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- survival-mode episodes: the lights go down -->
+    <section class="cinema" id="survival" data-dark>
+      <div class="cinema-head reveal">
+        <p class="eyebrow">Survival mode</p>
+        <h2>Watch Mirror mine <span class="mk">diamonds</span></h2>
+      </div>
+      <div class="segmented reveal" role="tablist" aria-label="Episode">
+        <button role="tab" aria-selected="true" data-episode="generated"
+          data-video="media/survival/survival_iron_pickaxe_generated.mp4" data-ar="1280 / 360"
+          data-portrait-video="media/survival/survival_iron_pickaxe_generated_portrait.mp4" data-portrait-ar="640 / 720"
+          data-caption="<strong>From spawn to an iron pickaxe with generated plans.</strong> The generated video plan (<span class='wide-only'>left</span><span class='tall-only'>top</span>) and Mirror&rsquo;s execution (<span class='wide-only'>right</span><span class='tall-only'>bottom</span>). Shown at 1&times; the first time the agent collects, crafts, or places something new, and at up to 32&times; otherwise. Green flashes mark the plan re-syncing to the real observation.">Iron pickaxe<span class="seg-sep">
+          &middot; </span><span class="seg-sub">generated plans</span></button>
+        <button role="tab" aria-selected="false" data-episode="oracle"
+          data-video="media/survival/survival_diamond_oracle.mp4" data-ar="1280 / 360"
+          data-portrait-video="media/survival/survival_diamond_oracle_portrait.mp4" data-portrait-ar="640 / 720"
+          data-caption="<strong>Mining diamonds with an oracle video planner.</strong> Shown at 1&times; the first time the agent obtains or crafts something new, and at up to 32&times; otherwise. The agent dies once early on and restarts from a new spawn.">Diamond<span class="seg-sep">
+          &middot; </span><span class="seg-sub">oracle plans</span></button>
+      </div>
+      <figure class="cinema-figure">
+        <div class="cinema-screen" data-snap-near=".2">
+          <!-- the clip is plan | execution (plan above execution when stacked); hiding the plan crops the screen to the
+               execution, and every label is the page's own text over the clip (js/survival.js) -->
+          <div class="sv-film">
+            <video class="cinema-video" muted playsinline preload="none"
+              poster="" aria-label="Mirror playing Minecraft survival mode: the video plan beside the execution"></video>
+            <div class="sv-pane sv-plan" aria-hidden="true"><span class="sv-tag">Video plan</span></div>
+            <div class="sv-pane sv-exec" aria-hidden="true"><span class="sv-tag">Execution<span class="sv-speed"></span></span>
+              <span class="sv-toast"></span></div>
+          </div>
+        </div>
+        <div class="sv-strip">
+          <p class="sv-goal" aria-live="off"></p>
+          <ol class="sv-milestones" aria-label="Milestones reached"></ol>
+          <button class="sv-toggle" type="button" aria-pressed="false"><svg viewBox="0 0 20 14" aria-hidden="true">
+            <rect class="sv-toggle-plan" x="1" y="1" width="8" height="12" rx="2"/><rect x="11" y="1" width="8" height="12" rx="2"/></svg><span>Hide plan</span></button>
+        </div>
+        <figcaption class="cinema-caption"></figcaption>
+      </figure>
+      <!-- every evaluation episode of the paper's Diamond Challenge figure, with a timeline: eval/, opened as a modal (js/modal.js) -->
+      <p class="cinema-more reveal"><a class="more-link" href="eval/" data-modal="diamond-episodes"><span>Watch all 384 evaluation episodes</span><svg class="more-plus" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12"/><path d="M12 7v10M7 12h10"/></svg></a></p>
+    </section>
+
+    <section class="chapter" id="basalt" data-speed="1.8" data-scene="basalt" data-lead="0.7" data-segs="2.20,7.20,16.31,1.72,1.43,1.43"
+      data-read="7.5,9.4,17.5,5.0,4.5,4.5">
+      <div class="chapter-sticky">
+        <header class="chapter-head">
+          <p class="eyebrow">MineRL BASALT</p>
+          <h2>Solving tasks that are <span class="mk">hard to specify</span></h2>
+          <p class="lede">BASALT tasks have fuzzy, hard-to-verify goals, like making a <em>beautiful</em> waterfall and
+            then taking an <em>aesthetic</em> picture of it. Mirror finetunes its video planner on human demonstrations
+            of each task and trains its V2A model from scratch <strong>with only five hours of self-play</strong>.</p>
+          <!-- every BASALT evaluation episode: basalt/, opened as a modal (js/modal.js) -->
+          <p class="chapter-more"><a class="more-link" href="basalt/" data-modal="basalt-episodes"><span>Watch all 44 evaluation episodes</span><svg class="more-plus" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12"/><path d="M12 7v10M7 12h10"/></svg></a></p>
+        </header>
+        <div class="stage">
+          <div class="stage-caption" aria-live="polite"></div>
+          <div class="stage-frame">
+            <iframe title="Animation: Mirror on the MineRL BASALT tasks"
+              data-src="scenes/basalt.html?scroll" tabindex="-1"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter" id="text" data-speed="1.8" data-scene="textcond" data-segs="3.35,2.13,1.31,2.06,1.39"
+      data-read="5.0,6.3,2.5,3.2,3.0">
+      <div class="chapter-sticky">
+        <header class="chapter-head">
+          <p class="eyebrow">Generalization</p>
+          <h2>Following text instructions in <span class="mk">unseen worlds</span></h2>
+          <p class="lede">We test the agent in two worlds it has never seen, giving it each task only as a text prompt
+            such as &ldquo;Chop tree&rdquo; or &ldquo;Dig ground.&rdquo; Without any expert demonstrations or
+            task-specific finetuning, Mirror&rsquo;s self-improving V2A model is <strong>competitive with a V2A model supervised
+            on expert actions</strong>.</p>
+        </header>
+        <div class="stage">
+          <div class="stage-caption" aria-live="polite"></div>
+          <div class="stage-frame">
+            <iframe title="Animation: text-conditioned tasks in unseen Minecraft worlds"
+              data-src="scenes/textcond.html?scroll" tabindex="-1"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- in-context learning: the paper's lava escape figure, drawn in the page and advanced by scrolling (js/lava.js) -->
+    <section class="chapter chapter-split chapter-lava" id="incontext" data-speed="1.3" data-scene="lava" data-inline data-head="none"
+      data-segs="1.50,4.40,4.30,3.50,3.50">
+      <div class="chapter-sticky">
+        <div class="stage split-stage">
+          <div class="split-copy">
+            <p class="eyebrow">In-context learning</p>
+            <h3>Learning from <span class="mk">past failures</span></h3>
+            <ol class="steps">
+              <li><i class="prog"></i><h4>The agent has to escape a lava lake</h4>
+                <div class="step-body"><p>We place the agent in a lava lake without any finetuning. Each time it falls
+                  in, it respawns where it started and tries again.</p></div></li>
+              <li><i class="prog"></i><h4>Shared history biases the agent&rsquo;s direction</h4>
+                <div class="step-body"><p>When the video context is kept between lives, the trajectories share a clear
+                  directional bias, showing that past attempts shape where the agent goes next.</p></div></li>
+              <li><i class="prog"></i><h4>Resetting the history removes the bias</h4>
+                <div class="step-body"><p>When the history is reset after every death, the agent moves in roughly
+                  uniform directions around the spawn point.</p></div></li>
+              <li><i class="prog"></i><h4>Shared history raises the escape rate</h4>
+                <div class="step-body"><p>By learning from its failures in context, Mirror reaches a cumulative escape
+                  rate of <strong>76% over 30 lives</strong>, compared with 46% when the history is reset.</p></div></li>
+              <li><i class="prog"></i><h4>VPT BC doesn&rsquo;t improve with shared history</h4>
+                <div class="step-body"><p>Keeping VPT BC&rsquo;s recurrent state between lives gives no comparable
+                  benefit, and may even lower its escape rate.</p></div></li>
+            </ol>
+          </div>
+          <figure class="lava-figure" data-step="0">
+            <div class="lava-grid">
+              <div class="lava-cell" data-plot="shared"><p class="lava-title">Shared history</p>
+                <svg class="lava-svg" role="img" aria-label="Trajectories of 100 lives with shared history: most head the same way, mean displacement 4.4 blocks"></svg></div>
+              <div class="lava-cell" data-plot="independent"><p class="lava-title">Independent lives</p>
+                <svg class="lava-svg" role="img" aria-label="Trajectories of 99 independent lives, spread in all directions, mean displacement 1.9 blocks"></svg></div>
+              <div class="lava-cell" data-plot="ours"><p class="lava-title">Ours</p>
+                <svg class="lava-svg" role="img" aria-label="Mirror's cumulative escape rate over 30 lives: 76% with shared history, 46% with independent lives"></svg></div>
+              <div class="lava-cell" data-plot="vpt"><p class="lava-title">VPT BC</p>
+                <svg class="lava-svg" role="img" aria-label="VPT BC's cumulative escape rate over 30 lives: 56% with shared history, 64% with independent lives"></svg></div>
+            </div>
+            <div class="lava-shot"><img src="media/lava_challenge.jpg" alt="The lava escape challenge in Minecraft: the agent stands in a lake of lava"></div>
+            <figcaption class="lava-legend">
+              <span><svg viewBox="-6 -6 12 12" aria-hidden="true"><path d="M0,-5.2L1.4,-1.8L5,-1.6L2.2,0.7L3.1,4.2L0,2.3L-3.1,4.2L-2.2,0.7L-5,-1.6L-1.4,-1.8Z" style="fill:var(--bg);stroke:var(--ink)" stroke-width="1.1"/></svg>Spawn</span>
+              <span><svg viewBox="-6 -6 12 12" aria-hidden="true"><path d="M-3.4,-3.4L3.4,3.4M-3.4,3.4L3.4,-3.4" style="stroke:var(--muted)" stroke-width="1.6"/></svg>Death</span>
+              <span><svg viewBox="-6 -6 12 12" aria-hidden="true"><path d="M0,-5L5,0L0,5L-5,0Z" style="fill:var(--plan)"/></svg>Escape</span>
+              <span><svg viewBox="0 0 22 10" aria-hidden="true"><path d="M2,5H20" style="stroke:var(--ink)" stroke-width="2.6" stroke-linecap="round"/></svg>Mean displacement</span>
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="chapter" id="benchmarks" data-speed="1.8, 0.5:1, 4.3:1.8" data-scene="suites" data-segs="0.50,6.11,2.38,2.91,2.81,2.06"
+      data-read="3.0,9.2,3.9,4.1,4.6,10.5">
+      <div class="chapter-sticky">
+        <header class="chapter-head">
+          <p class="eyebrow">Beyond Minecraft</p>
+          <h2>Solving <span class="mk">robotics tasks and video games</span></h2>
+          <p class="lede">We also evaluate Mirror on <strong>24 tasks from DeepMind Control, OGBench, and Atari</strong>, where every
+            method learns from expert videos without actions or rewards. We run Mirror with both a generative video
+            planner and an oracle planner that supplies frames from an RL expert.</p>
+        </header>
+        <div class="stage">
+          <div class="stage-caption" aria-live="polite"></div>
+          <div class="stage-frame">
+            <iframe title="Animated charts: DeepMind Control, OGBench and Atari results"
+              data-src="scenes/suites.html?scroll" tabindex="-1"></iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================== closing statement -->
+    <section class="closing" id="closing">
+      <div class="closing-sticky">
+        <p class="closing-text" data-words>As video planners improve, Mirror can turn their plans into actions <span class="mk">without any
+          expert action data or hand-crafted rewards</span>.</p>
+      </div>
+      <div class="closing-spacer" aria-hidden="true"></div>
+    </section>
+
+    <!-- ======================================================== more results: a highlights gallery -->
+    <section class="results" id="videos">
+      <div class="results-head reveal">
+        <h2>Video gallery</h2>
+      </div>
+      <div class="gallery" data-gallery>
+        <div class="gallery-track">
+          <div class="gallery-row">
+            <article class="card card-has-more card-wide" style="--ar: 3.216; --par: .792">
+              <div class="card-media"><video class="lazy" data-src="static/videos/basalt/waterfall_combined/waterfall_ep5.mp4"
+                  data-portrait-src="static/videos/basalt/waterfall_combined/waterfall_ep5_portrait.mp4"
+                  muted loop playsinline></video></div>
+              <h3>A full MakeWaterfall episode</h3>
+              <p>The video plan is <span class="wide-only">on the left</span><span class="tall-only">on top</span> and Mirror&rsquo;s execution is <span class="wide-only">on the right</span><span class="tall-only">below it</span>. Green borders mark where the
+                plan re-syncs to the real observation.</p>
+              <a class="card-more" href="basalt/#waterfall" data-modal="basalt-episodes" data-modal-hash="waterfall"
+                aria-label="Watch all MakeWaterfall evaluation episodes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12"/><path d="M12 7v10M7 12h10"/></svg></a>
+            </article>
+            <article class="card card-has-more card-wide" style="--ar: 2.133; --par: .908">
+              <div class="card-media"><video class="lazy" data-src="static/videos/basalt/basalt_findcave_comparison_resync.webm"
+                  data-portrait-src="static/videos/basalt/basalt_findcave_comparison_resync_portrait.mp4"
+                  muted loop playsinline></video></div>
+              <h3>FindCave over training</h3>
+              <p>FindCave episodes after 0, 15, and 30 minutes of self-play, from random actions to the first success.</p>
+              <a class="card-more" href="basalt/#findcave" data-modal="basalt-episodes" data-modal-hash="findcave"
+                aria-label="Watch all FindCave evaluation episodes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12"/><path d="M12 7v10M7 12h10"/></svg></a>
+            </article>
+            <article class="card" style="--par: .448">
+              <div class="card-media card-media-env"><video class="lazy" data-src="static/videos/c10m/antmaze_large_mirror_c10m_s3_ep8.mp4"
+                  data-portrait-src="static/videos/c10m/antmaze_large_mirror_c10m_s3_ep8_portrait.mp4"
+                  muted loop playsinline></video></div>
+              <h3>OGBench: AntMaze Large</h3>
+              <p>Mirror after 1M environment steps.</p>
+            </article>
+            <article class="card" style="--par: .448">
+              <div class="card-media card-media-env"><video class="lazy" data-src="static/videos/c10m/cube_double_mirror_c10m_s5_ep1.mp4"
+                  data-portrait-src="static/videos/c10m/cube_double_mirror_c10m_s5_ep1_portrait.mp4"
+                  muted loop playsinline></video></div>
+              <h3>OGBench: Cube Double</h3>
+              <p>Mirror after 1M environment steps.</p>
+            </article>
+          </div>
+          <div class="gallery-row">
+            <article class="card card-wide" style="--ar: 3.122; --par: .769">
+              <div class="card-media"><video class="lazy" data-src="static/videos/lava_escape/icl_escape.mp4"
+                  data-portrait-src="static/videos/lava_escape/icl_escape_portrait.mp4"
+                  muted loop playsinline></video></div>
+              <h3>Escaping the lava</h3>
+              <p>The agent keeps its past lives in the video planner&rsquo;s context and eventually escapes the
+                lava.</p>
+            </article>
+            <article class="card" style="--par: .448">
+              <div class="card-media card-media-env"><video class="lazy" data-src="static/videos/c10m/walker-walk_mirror_c10m_s6_ep19.mp4"
+                  data-portrait-src="static/videos/c10m/walker-walk_mirror_c10m_s6_ep19_portrait.mp4"
+                  muted loop playsinline></video></div>
+              <h3>DeepMind Control: Walker Walk</h3>
+              <p>Mirror after 1M environment steps.</p>
+            </article>
+            <article class="card" style="--par: .448">
+              <div class="card-media card-media-env"><video class="lazy" data-src="static/videos/c10m/pong_mirror_c10m_s7_ep0.mp4"
+                  data-portrait-src="static/videos/c10m/pong_mirror_c10m_s7_ep0_portrait.mp4"
+                  muted loop playsinline></video></div>
+              <h3>Atari: Pong</h3>
+              <p>Mirror after 1M environment steps.</p>
+            </article>
+            <article class="card card-has-more card-wide" style="--ar: 3.2; --par: .788">
+              <div class="card-media"><video class="lazy" data-src="static/videos/basalt/waterfall_combined/waterfall_ep1_failure.mp4"
+                  data-portrait-src="static/videos/basalt/waterfall_combined/waterfall_ep1_failure_portrait.mp4"
+                  muted loop playsinline preload="none"></video></div>
+              <h3>A failure case</h3>
+              <p>An unsuccessful MakeWaterfall episode, with the plan <span class="wide-only">on the left and the execution on the right</span><span class="tall-only">on top and the execution below it</span>.</p>
+              <a class="card-more" href="basalt/#waterfall" data-modal="basalt-episodes" data-modal-hash="waterfall"
+                aria-label="Watch all MakeWaterfall evaluation episodes"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="12"/><path d="M12 7v10M7 12h10"/></svg></a>
+            </article>
+          </div>
+        </div>
+        <div class="gallery-paddles">
+          <button class="paddle" data-dir="-1" aria-label="Previous">&#8249;</button>
+          <button class="paddle" data-dir="1" aria-label="Next">&#8250;</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======================================================== citation -->
+    <section class="prose" id="bibtex">
+      <p class="eyebrow reveal">BibTeX</p>
+      <!-- TODO: replace with the final citation once the paper is public -->
+      <div class="bibtex reveal">
+        <button class="bibtex-copy" type="button">Copy</button>
+        <pre><code><span>@article{ryu2026mirror,
+</span><span>  title={Self-Improving Video-to-Action Models},
+</span><span>  author={Ryu, Hyunwoo and
+</span><span>          Chen, Eric Ming and
+</span><span>          Wilcoxson, Max and
+</span><span>          Sitzmann, Vincent},
+</span><span>  year={2026},
+</span><span>}</span></code></pre>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <p class="footer-mark">Mirror</p>
+      <p>Hyunwoo Ryu, Eric Ming Chen, Max Wilcoxson, Vincent Sitzmann &middot; MIT</p>
+      <p><a href="#top">Back to top</a></p>
+    </div>
+  </footer>
+
+  <script src="js/replan-geometry.js"></script>
+  <script src="js/replan.js"></script>
+  <script src="js/lava-data.js"></script>
+  <script src="js/lava.js"></script>
+  <script src="js/survival-data.js"></script>
+  <script src="js/modal.js"></script>
+  <script src="js/site.js"></script>
+  <script src="js/split.js"></script>
+  <script src="js/controls.js"></script>
+  <script src="js/survival.js"></script>
+  <script>if (/[?&]debug\b/.test(location.search)) document.write('<script src="js/debug.js"><\/script>')</script>
+</body>
+
+</html>

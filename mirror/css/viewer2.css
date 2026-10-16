@@ -1,0 +1,369 @@
+/* The redesigned episode viewers (eval/v2.html, basalt/v2.html) and their player (js/player.js), in three looks
+   (js/design.js sets html[data-design]): grid (the default), cinema (dark) and list. Colours and type come from
+   css/theme.css; the nav and footer from css/site.css. In the project page's modal (?embed, js/embed.js) html has
+   .ev-embed: the nav and footer go, and the content clears the modal's round close button (top right, 18 px in). */
+:root {
+  --v2-w: min(1180px, calc(100vw - 2 * var(--gutter)));
+  --v2-card: #fff;
+  --v2-track: color-mix(in srgb, var(--ink) 7%, transparent);
+  --v2-hover: color-mix(in srgb, var(--ink) 4%, var(--v2-card));
+  --v2-ease: cubic-bezier(.22, .61, .36, 1);
+  --v2-radius: 12px;
+  /* the episode's column: as wide as the video at its height limit, so the title, video, controls and the line under
+     them share their edges */
+  --pl-maxh: calc(100vh - 300px);
+  --v2-col: min(100%, calc(var(--pl-maxh) * 16 / 9));
+}
+html[data-design="cinema"] {
+  color-scheme: dark;
+  --bg: #000;
+  --bg-2: #000;
+  --v2-card: #1c1c1e;
+  --ink: #f5f5f7;
+  --ink-2: #d2d2d7;
+  --muted: #8e8e93;
+  --faint: #48484a;
+  --line: rgba(255, 255, 255, .12);
+  --mirror-text: #6e9dff;
+  --mirror-tint: rgba(62, 111, 216, .28);
+  --plan-text: #4cc782;
+  --v2-track: rgba(255, 255, 255, .1);
+  --v2-hover: #2c2c2e;
+  --pl-maxh: calc(100vh - 262px);
+}
+html[data-design="cinema"] .mk { background-image: linear-gradient(90deg, var(--gold-dark-1), var(--gold-dark-2)); }
+body { background: var(--bg-2); color: var(--ink); }
+.v2 { width: var(--v2-w); margin: 0 auto; padding: calc(var(--nav-h) + 56px) 0 96px; }
+.v2 [hidden] { display: none !important; }
+html.ev-embed .localnav, html.ev-embed .footer { display: none; }
+html.ev-embed .v2 { padding: 18px 0 72px; }
+html[data-design="cinema"] .localnav { background: rgba(0, 0, 0, .7); }
+
+/* ------------------------------------------------------------------ the list's head */
+.v2-head { padding-right: 56px; }
+html.ev-embed .v2-head { padding-top: 40px; }
+.v2-eyebrow { margin: 0 0 8px; font: 600 clamp(16px, 1.3vw, 19px)/1.2 var(--sans); color: var(--ink); }
+.v2-head h1 { margin: 0; font: 700 clamp(32px, 3.8vw, 56px)/1.05 var(--sans); letter-spacing: -.028em; text-wrap: balance; }
+.v2-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin: 30px 0 12px; }
+.v2-note { margin: 0; max-width: 48em; font-size: 16px; line-height: 1.45; color: var(--muted); }
+.v2-note strong { color: var(--ink); font-weight: 600; }
+.v2-note-small { margin-top: 6px; font-size: 14.5px; }
+
+/* a segmented control: a white thumb on a grey track, as Apple's */
+.v2-seg, .pl-views { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: var(--v2-track); max-width: 100%; }
+.v2-seg button, .pl-views button {
+  appearance: none; border: 0; margin: 0; border-radius: 999px; background: transparent; color: var(--ink-2);
+  font: 600 15px/1.2 var(--sans); padding: 9px clamp(14px, 1.6vw, 22px); cursor: pointer; white-space: nowrap;
+}
+html.v2-ready .v2-seg button, html.v2-ready .pl-views button { transition: background .25s, color .25s, box-shadow .25s; }
+.v2-seg button[aria-selected="true"], .v2-seg button[aria-checked="true"], .pl-views button[aria-selected="true"] {
+  background: var(--v2-card); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .1), 0 2px 10px rgba(0, 0, 0, .06);
+}
+@media (hover: hover) {
+  .v2-seg button:not([aria-selected="true"]):not([aria-checked="true"]):hover, .pl-views button:not([aria-selected="true"]):hover { color: var(--ink); }
+}
+.v2-seg-small button, .pl-views button { font-size: 13.5px; padding: 7px 13px; }
+.v2-seg button small { font-weight: 500; color: var(--muted); margin-left: 4px; font-variant-numeric: tabular-nums; }
+:is(.v2-seg, .pl-views) button:focus-visible { outline: 2px solid var(--mirror); outline-offset: 2px; }
+
+/* how many got how far: the six milestones, an icon and a count each */
+.v2-funnel { list-style: none; margin: 26px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 18px clamp(22px, 3.4vw, 48px); }
+.v2-funnel li { display: grid; grid-template-columns: auto auto; grid-template-areas: "img n" "name name"; align-items: center; column-gap: 8px; row-gap: 3px; }
+.v2-funnel img { grid-area: img; width: 26px; height: 26px; image-rendering: pixelated; }
+.v2-funnel-n { grid-area: n; font: 700 24px/1 var(--sans); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.v2-funnel-name { grid-area: name; font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+.v2-funnel .v2-diamond .v2-funnel-n { color: var(--mirror-text); }
+.v2-stat { margin: 14px 0 0; font-size: 17px; color: var(--ink-2); }
+.v2-stat:empty, html:not([data-design="cinema"]) .v2-stat { display: none; }
+
+/* ------------------------------------------------------------------ the episodes: a grid of stills */
+.v2-grid { list-style: none; margin: 40px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 30px 18px; }
+.v2-card { appearance: none; border: 0; margin: 0; padding: 0; width: 100%; background: none; color: inherit; font: inherit; text-align: left;
+           display: flex; flex-direction: column; gap: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.v2-thumb { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: var(--v2-radius); overflow: hidden; background: var(--v2-track); flex: none;
+            transform: translateZ(0); }
+.v2-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .6s var(--v2-ease), filter .3s; }
+@media (hover: hover) {
+  .v2-card:hover .v2-thumb img { transform: scale(1.045); }
+  .v2-card:hover .v2-card-title { color: var(--mirror-text); }
+}
+.v2-card:active .v2-thumb { transform: scale(.98); transition: transform .15s; }
+.v2-card:focus-visible { outline: none; }
+.v2-card:focus-visible .v2-thumb { outline: 3px solid var(--mirror); outline-offset: 3px; }
+.v2-card-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.v2-card-title { font: 600 16px/1.25 var(--sans); transition: color .2s; }
+.v2-card-sub { display: flex; align-items: center; gap: 6px; font-size: 14.5px; line-height: 1.25; color: var(--muted); min-width: 0; }
+.v2-card-sub span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v2-card-sub img { width: 16px; height: 16px; image-rendering: pixelated; flex: none; }
+.v2-card-sub .v2-glyph { font-weight: 700; }
+.v2-won .v2-card-sub, .v2-success .v2-card-sub { color: var(--mirror-text); font-weight: 600; }
+.v2-success .v2-card-sub { color: var(--plan-text); }
+.v2-path, .v2-row-time, .v2-chev { display: none; }
+.v2-empty { color: var(--muted); }
+
+/* ------------------------------------------------------------------ one episode */
+.v2-episode > * { width: var(--v2-col); margin-left: auto; margin-right: auto; }
+.v2-episode:focus { outline: none; }
+html.v2-ready .v2-episode { animation: v2-push .45s var(--v2-ease) both; }
+html.v2-ready .v2-list { animation: v2-fade .35s var(--v2-ease) both; }
+@keyframes v2-push { from { opacity: 0; transform: translateX(28px); } }
+@keyframes v2-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { html.v2-ready .v2-episode, html.v2-ready .v2-list { animation: none; } }
+
+/* the top row: back to the list, and the previous and next episode (in the modal, left of its close button) */
+.v2-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 36px; }
+html.ev-embed .v2-topbar { width: 100%; padding-right: 54px; }
+.v2-back { appearance: none; border: 0; background: none; padding: 6px 0; margin: 0 0 0 -4px; display: inline-flex; align-items: center; gap: 2px;
+           font: 400 17px/1.2 var(--sans); color: var(--mirror-text); cursor: pointer; }
+.v2-back::before { content: ""; width: 10px; height: 10px; margin: 0 4px 0 6px; border: solid currentColor; border-width: 0 0 2.2px 2.2px; transform: rotate(45deg); }
+@media (hover: hover) { .v2-back:hover { opacity: .7; } }
+.v2-stepper { display: flex; gap: 8px; }
+.v2-round { width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: var(--v2-track); display: grid; place-items: center; cursor: pointer;
+            color: var(--ink); transition: background .2s, opacity .2s; }
+.v2-round svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover: hover) { .v2-round:not(:disabled):hover { background: color-mix(in srgb, var(--ink) 13%, transparent); } }
+.v2-round:disabled { opacity: .3; cursor: default; }
+:is(.v2-back, .v2-round):focus-visible { outline: 2px solid var(--mirror); outline-offset: 2px; border-radius: 999px; }
+
+.v2-ep-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; margin-top: 18px; margin-bottom: 16px; }
+.v2-ep-kicker { margin: 0 0 3px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.v2-ep-head h2 { margin: 0; font: 700 clamp(26px, 2.5vw, 34px)/1.1 var(--sans); letter-spacing: -.022em; }
+.v2-ep-outcome { margin: 6px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; font-size: 17px; line-height: 1.3; }
+.v2-ep-outcome > span { display: inline-flex; align-items: center; gap: 7px; }
+.v2-ep-outcome img { width: 20px; height: 20px; image-rendering: pixelated; }
+.v2-ep-outcome .v2-deaths { color: var(--muted); white-space: pre; }
+.v2-win { color: var(--mirror-text); font-weight: 600; }
+.v2-ok { color: var(--plan-text); font-weight: 600; }
+.v2-ep-side { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* what the agent is doing: under the video */
+.v2-now { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-top: 12px; min-height: 26px; font-size: 16px; line-height: 1.35; }
+.v2-now-what { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.v2-now-what img { width: 20px; height: 20px; image-rendering: pixelated; }
+.v2-now-label { font-size: 13px; font-weight: 600; color: var(--muted); }
+.v2-now-prompt { color: var(--muted); font-size: 15px; }
+.v2-now-alert { color: var(--fail); font-weight: 600; }
+.v2-now-goal { color: var(--ink-2); }
+.v2-mark-ok { color: var(--plan-text); font-weight: 700; }
+.v2-mark-no { color: var(--fail); font-weight: 700; }
+
+/* the list look's disclosure: the subgoals and the deaths, each entry a jump */
+.v2-details { display: none; margin-top: 26px; }
+.v2-details summary { display: inline-flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; font: 600 16px/1.2 var(--sans); color: var(--mirror-text); }
+.v2-details summary::-webkit-details-marker { display: none; }
+.v2-details summary::after { content: ""; width: 7px; height: 7px; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg) translateY(-2px);
+                             transition: transform .25s var(--v2-ease); }
+.v2-details[open] summary::after { transform: rotate(-135deg) translateY(-2px); }
+.v2-lists { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; margin-top: 14px; }
+.v2-lists h3 { margin: 0 0 6px 4px; font: 600 13px/1.2 var(--sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.v2-lists ol { list-style: none; margin: 0; padding: 4px; background: var(--v2-card); border-radius: 14px; max-height: 288px; overflow-y: auto; }
+.v2-lists li button { width: 100%; display: flex; align-items: center; gap: 9px; padding: 7px 10px; border: 0; border-radius: 9px; background: none; color: var(--ink);
+                      font: 15px/1.3 var(--sans); text-align: left; cursor: pointer; }
+@media (hover: hover) { .v2-lists li button:hover { background: var(--v2-track); } }
+.v2-lists li.v2-current button { background: var(--mirror-tint); font-weight: 600; }
+.v2-lists img { width: 18px; height: 18px; image-rendering: pixelated; flex: none; }
+.v2-t { min-width: 3.6em; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+.v2-lists .v2-empty { padding: 8px 10px; font-size: 15px; }
+
+/* ------------------------------------------------------------------ the player (js/player.js) */
+.pl { position: relative; }
+.pl-screen { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: 14px; overflow: hidden; cursor: pointer; transform: translateZ(0);
+             -webkit-tap-highlight-color: transparent; }
+.pl-screen:fullscreen { border-radius: 0; }
+.pl-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.pl-video.pl-back { opacity: 0; pointer-events: none; }
+.pl-bigplay { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; padding: 0; border: 0; border-radius: 50%;
+              display: grid; place-items: center; cursor: pointer; background: rgba(30, 30, 30, .38); -webkit-backdrop-filter: blur(16px) saturate(160%);
+              backdrop-filter: blur(16px) saturate(160%); box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .25); transition: opacity .25s, transform .25s var(--v2-ease); }
+.pl-bigplay svg { width: 32px; height: 32px; fill: #fff; margin-left: 4px; }
+.pl.pl-playing .pl-bigplay, .pl-screen.pl-waiting .pl-bigplay { opacity: 0; transform: scale(.88); pointer-events: none; }
+.pl-spinner { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, .22);
+              border-top-color: rgba(255, 255, 255, .9); animation: pl-spin .8s linear infinite; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.pl-screen.pl-waiting .pl-spinner { opacity: 1; transition-delay: .35s; }
+@keyframes pl-spin { to { transform: rotate(1turn); } }
+/* the playback rate while it isn't 1x (Skim races between subgoals at 16x) */
+.pl-screen[data-rate]::after { content: attr(data-rate); position: absolute; right: 12px; bottom: 12px; padding: 4px 8px; border-radius: 8px;
+                               font: 700 12.5px/1 var(--sans); color: #fff; background: rgba(0, 0, 0, .5); font-variant-numeric: tabular-nums;
+                               -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); pointer-events: none; }
+.pl-overlay { display: none; }
+
+/* one row under the video: play, elapsed, the scrubber, total, playback, full screen. Everything sits on the rail's
+   line; the scrubber's top 22 px hold the moments' icons */
+.pl-bar { display: flex; align-items: flex-end; gap: 10px; margin-top: 6px; }
+.pl-bar > :not(.pl-scrub) { height: 32px; flex: none; }
+.pl-icon { width: 32px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink); display: grid; place-items: center; cursor: pointer; }
+.pl-icon svg { width: 22px; height: 22px; fill: currentColor; }
+.pl-icon svg.pl-stroke { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover: hover) { .pl-icon:hover { background: var(--v2-track); } }
+.pl-play { margin-left: -6px; }
+.pl-time { display: flex; align-items: center; font: 600 13px/1 var(--sans); color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.8em; }
+.pl-total { justify-content: flex-end; }
+.pl-scrub { position: relative; flex: 1; min-width: 0; height: 54px; cursor: pointer; touch-action: none; -webkit-tap-highlight-color: transparent; outline: none; }
+.pl-marks { position: absolute; left: 0; right: 0; top: 0; height: 24px; }
+.pl-rail { position: absolute; left: 0; right: 0; top: 38px; height: 4px; margin-top: -2px; border-radius: 3px;
+           background: color-mix(in srgb, var(--ink) 15%, transparent); transition: height .15s, margin .15s; }
+.pl-scrub:hover .pl-rail, .pl-dragging .pl-rail, .pl-scrub:focus-visible .pl-rail { height: 6px; margin-top: -3px; }
+.pl-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: var(--ink); }
+.pl-bands, .pl-ticks { position: absolute; inset: 0; }
+.pl-band { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+.pl-band.pl-done { background: color-mix(in srgb, var(--plan) 55%, transparent); }
+.pl-band.pl-failed { background: color-mix(in srgb, var(--fail) 40%, transparent); }
+.pl-tick { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; }
+.pl-tick.pl-death { background: var(--fail); opacity: .8; top: -2px; bottom: -2px; width: 1.5px; }
+.pl-tick.pl-success { background: var(--plan); top: -6px; bottom: -4px; }
+.pl-tick.pl-end { background: var(--ink-2); top: -6px; bottom: -4px; }
+.pl-knob { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+           transform: translate(-50%, -50%) scale(0); transition: transform .15s var(--v2-ease); }
+.pl-scrub:hover .pl-knob, .pl-dragging .pl-knob, .pl-scrub:focus-visible .pl-knob { transform: translate(-50%, -50%) scale(1); }
+@media (hover: none) { .pl-knob { transform: translate(-50%, -50%) scale(.85); } }
+.pl-hover { position: absolute; bottom: calc(100% + 2px); padding: 4px 7px; border-radius: 7px; transform: translateX(-50%); background: var(--ink); color: var(--bg);
+            font: 600 12px/1 var(--sans); font-variant-numeric: tabular-nums; opacity: 0; pointer-events: none; transition: opacity .15s; white-space: nowrap; }
+@media (hover: hover) { .pl-scrub:hover .pl-hover { opacity: 1; } }
+.pl-mark { position: absolute; bottom: 2px; padding: 0; border: 0; background: none; cursor: pointer; transform: translateX(-50%); }
+.pl-item img { display: block; width: 18px; height: 18px; image-rendering: pixelated; transition: transform .15s var(--v2-ease); }
+@media (hover: hover) { .pl-item:hover img { transform: translateY(-2px) scale(1.3); } }
+.pl-flag { padding: 4px 8px; border-radius: 999px; font: 600 12px/1 var(--sans); white-space: nowrap; font-variant-numeric: tabular-nums;
+           color: var(--plan-text); background: color-mix(in srgb, var(--plan) 16%, var(--bg-2)); }
+.pl-flag.pl-end { color: var(--ink-2); background: var(--v2-track); }
+.pl-flag-start { transform: translateX(-10px); }
+.pl-flag-end { transform: translateX(calc(-100% + 10px)); }
+@media (hover: hover) { .pl-flag:hover { filter: brightness(.95); } }
+:is(.pl-mark, .pl-icon, .pl-bigplay, .pl-rate):focus-visible { outline: 2px solid var(--mirror); outline-offset: 2px; border-radius: 6px; }
+.pl-scrub:focus-visible .pl-knob { box-shadow: 0 0 0 3px var(--mirror); }
+
+/* playback: a speed, or Skim (16x between the key moments), from a small menu */
+.pl-menu-wrap { position: relative; }
+.pl-rate { height: 32px; min-width: 46px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--v2-track); color: var(--ink);
+           display: inline-flex; align-items: center; justify-content: center; gap: 5px; font: 600 13.5px/1 var(--sans); font-variant-numeric: tabular-nums; cursor: pointer; }
+.pl-rate.pl-on { background: var(--mirror-tint); color: var(--mirror-text); }
+.pl-rate svg { width: 15px; height: 15px; fill: currentColor; }
+@media (hover: hover) { .pl-rate:hover { filter: brightness(.96); } }
+.pl-menu { position: absolute; right: 0; bottom: calc(100% + 8px); z-index: 20; min-width: 228px; padding: 5px; border-radius: 13px;
+           background: color-mix(in srgb, var(--v2-card) 88%, transparent); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%);
+           box-shadow: 0 12px 40px rgba(0, 0, 0, .2), 0 0 0 .5px color-mix(in srgb, var(--ink) 18%, transparent); transform-origin: bottom right;
+           animation: pl-pop .18s var(--v2-ease); }
+@keyframes pl-pop { from { opacity: 0; transform: scale(.94); } }
+.pl-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 10px 7px 8px; border: 0; border-radius: 8px; background: none; color: var(--ink);
+                  font: 500 15px/1.25 var(--sans); text-align: left; cursor: pointer; font-variant-numeric: tabular-nums; outline: none; }
+.pl-menu button:hover, .pl-menu button:focus-visible { background: var(--mirror); color: #fff; }
+.pl-menu button:hover small, .pl-menu button:focus-visible small { color: rgba(255, 255, 255, .8); }
+.pl-menu strong { font-weight: 600; }
+.pl-menu small { display: block; font-size: 12.5px; color: var(--muted); }
+.pl-check { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; visibility: hidden; }
+.pl-menu [aria-checked="true"] .pl-check { visibility: visible; }
+.pl-menu hr { margin: 5px 8px; border: 0; border-top: 1px solid var(--line); }
+
+/* ------------------------------------------------------------------ cinema: dark, larger stills with the outcome on
+   them, and on a large enough video the subgoal sits on it instead of under it */
+html[data-design="cinema"] .v2-funnel { display: none; }
+html[data-design="cinema"] .v2-grid { grid-template-columns: repeat(auto-fill, minmax(276px, 1fr)); gap: 20px 16px; margin-top: 32px; }
+html[data-design="cinema"] .v2-card { position: relative; }
+html[data-design="cinema"] .v2-thumb { border-radius: 14px; }
+html[data-design="cinema"] .v2-thumb::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1); pointer-events: none; }
+html[data-design="cinema"] .v2-card-text { position: absolute; left: 0; right: 0; bottom: 0; padding: 44px 14px 12px; border-radius: 0 0 14px 14px; pointer-events: none;
+                                            background: linear-gradient(rgba(0, 0, 0, 0), rgba(0, 0, 0, .78)); }
+html[data-design="cinema"] .v2-card-title { color: #fff; font-size: 16.5px; }
+html[data-design="cinema"] .v2-card-sub { color: rgba(255, 255, 255, .72); }
+html[data-design="cinema"] .v2-won .v2-card-sub { color: #8db4ff; }
+html[data-design="cinema"] .v2-success .v2-card-sub { color: #6fe0a0; }
+@media (hover: hover) {
+  html[data-design="cinema"] .v2-card:hover .v2-card-title { color: #fff; }
+  html[data-design="cinema"] .v2-card:hover .v2-thumb { box-shadow: 0 0 0 2px rgba(255, 255, 255, .85); }
+}
+html[data-design="cinema"] .pl-screen { border-radius: 10px; }
+html[data-design="cinema"] .pl-bigplay { background: rgba(255, 255, 255, .16); }
+html[data-design="cinema"] .pl-flag { background: rgba(76, 199, 130, .16); }
+html[data-design="cinema"] .pl-menu button:hover, html[data-design="cinema"] .pl-menu button:focus-visible { background: #0a84ff; }
+html[data-design="cinema"] .v2-seg button[aria-selected="true"], html[data-design="cinema"] .v2-seg button[aria-checked="true"],
+html[data-design="cinema"] .pl-views button[aria-selected="true"] { background: #636366; color: #fff; box-shadow: none; }
+@media (min-width: 700px) {
+  html[data-design="cinema"] .v2-now { display: none; }
+  html[data-design="cinema"] .pl-overlay:not(:empty) {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; position: absolute; left: 14px; top: 14px; max-width: calc(100% - 28px);
+    padding: 7px 12px; border-radius: 10px; color: #fff; background: rgba(0, 0, 0, .5); -webkit-backdrop-filter: blur(14px) saturate(150%);
+    backdrop-filter: blur(14px) saturate(150%); font-size: 14.5px; pointer-events: none;
+  }
+  html[data-design="cinema"] .pl-overlay .v2-now-label { color: rgba(255, 255, 255, .6); }
+  html[data-design="cinema"] .pl-overlay img { width: 18px; height: 18px; }
+  html[data-design="cinema"] .pl-overlay.v2-now-dead { background: rgba(160, 30, 20, .62); }
+  html[data-design="cinema"] .pl-overlay .v2-now-alert { color: #fff; }
+}
+
+/* ------------------------------------------------------------------ list: a grouped list with a small still per row,
+   how far each got, and its time; an episode adds the planner's prompt and the subgoals and deaths */
+html[data-design="list"] .v2-grid { display: block; margin-top: 30px; background: var(--v2-card); border-radius: 18px; overflow: hidden; }
+html[data-design="list"] .v2-grid li { position: relative; }
+html[data-design="list"] .v2-grid li + li::before { content: ""; position: absolute; top: 0; left: 144px; right: 0; border-top: 1px solid var(--line); }
+html[data-design="list"] .v2-card { flex-direction: row; align-items: center; gap: 16px; padding: 10px 16px; transition: background .2s; }
+@media (hover: hover) { html[data-design="list"] .v2-card:hover { background: var(--v2-hover); } html[data-design="list"] .v2-card:hover .v2-thumb img { transform: none; } }
+html[data-design="list"] .v2-thumb { width: 112px; border-radius: 7px; }
+html[data-design="list"] .v2-card-text { flex: 1; }
+html[data-design="list"] .v2-path { display: flex; gap: 4px; flex: none; }
+html[data-design="list"] .v2-path img { width: 20px; height: 20px; image-rendering: pixelated; opacity: .16; filter: grayscale(1); }
+html[data-design="list"] .v2-path img.v2-on { opacity: 1; filter: none; }
+html[data-design="list"] .v2-row-time { display: block; width: 4.4em; flex: none; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--mirror-text); }
+html[data-design="list"] .v2-chev { display: block; width: 16px; height: 16px; flex: none; fill: none; stroke: var(--faint); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+html[data-design="list"] .v2-details { display: block; }
+html[data-design="list"] .v2-card:focus-visible { box-shadow: inset 0 0 0 2px var(--mirror); }
+html[data-design="list"] .v2-card:focus-visible .v2-thumb { outline: none; }
+html:not([data-design="list"]) .v2-sort { display: none; }
+
+/* ------------------------------------------------------------------ smaller screens */
+@media (max-width: 900px) {
+  .localnav-links { display: none; }
+}
+@media (max-width: 699px) {
+  :root { --v2-w: calc(100vw - 40px); --pl-maxh: 100vh; }
+  html.ev-embed .v2 { padding: 14px 0 calc(110px + env(safe-area-inset-bottom)); }   /* (clears Safari's floating toolbar) */
+  html.ev-embed .v2-head { padding-top: 34px; }
+  .v2-head { padding-right: 0; }
+  .v2-controls { margin-top: 24px; }
+  .v2-seg { display: flex; width: 100%; }
+  .v2-seg button { flex: 1 1 0; padding: 9px 6px; font-size: 14.5px; }
+  .v2-note { font-size: 15px; }
+  .v2-funnel { display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; margin-top: 22px; }
+  .v2-funnel li { grid-template-columns: 1fr; grid-template-areas: "img" "n"; justify-items: center; row-gap: 6px; }
+  .v2-funnel img { width: 24px; height: 24px; }
+  .v2-funnel-n { font-size: 18px; }
+  .v2-funnel-name { display: none; }
+  .v2-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px 12px; margin-top: 30px; }
+  .v2-card { gap: 8px; }
+  .v2-card-title { font-size: 15px; }
+  .v2-card-sub { font-size: 13.5px; }
+  .v2-thumb { border-radius: 10px; }
+  html[data-design="cinema"] .v2-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 10px; }
+  html[data-design="cinema"] .v2-card-text { padding: 30px 10px 9px; }
+  html[data-design="cinema"] .v2-card-title { font-size: 14.5px; }
+  html[data-design="cinema"] .v2-card-sub { font-size: 12.5px; }
+  html[data-design="list"] .v2-path { display: none; }
+  html[data-design="list"] .v2-card { gap: 12px; padding: 9px 12px; }
+  html[data-design="list"] .v2-thumb { width: 92px; }
+  html[data-design="list"] .v2-grid li + li::before { left: 116px; }
+  html[data-design="list"] .v2-row-time { width: auto; }
+  .v2-ep-head { margin-top: 14px; }
+  .v2-ep-head h2 { font-size: 26px; }
+  .v2-ep-outcome { font-size: 16px; }
+  .v2-ep-side { width: 100%; }
+  .v2-ep-side .pl-views, .v2-ep-side .v2-seg { display: flex; width: 100%; }
+  .v2-ep-side .pl-views button, .v2-ep-side .v2-seg button { flex: 1 1 0; }
+  .pl-screen { border-radius: 10px; }
+  /* the scrubber gets the full width, with play, the times and playback under it, as iOS players */
+  .pl-bar { display: grid; grid-template-columns: auto auto auto 1fr auto; grid-template-areas: "scrub scrub scrub scrub scrub" "play el tot . rate";
+            align-items: center; gap: 0 2px; margin-top: 0; }
+  .pl-scrub { grid-area: scrub; height: 48px; }
+  .pl-play { grid-area: play; }
+  .pl-elapsed { grid-area: el; min-width: 0; padding-left: 2px; }
+  .pl-total { grid-area: tot; justify-content: flex-start; min-width: 0; }
+  .pl-total::before { content: "/"; margin: 0 4px; color: var(--faint); }
+  .pl-menu-wrap { grid-area: rate; }
+  html:not([data-design="cinema"]) .v2-sort, .v2-sort { display: inline-flex; width: auto; }
+  .v2-sort button { flex: none; padding: 7px 12px; font-size: 13.5px; }
+  html:not([data-design="list"]) .v2-sort { display: none; }
+  .pl-full { display: none !important; }   /* (an iPhone's video goes full screen by turning the phone; the button would cost the scrubber room) */
+  .pl-time { font-size: 13px; }
+  .pl-bigplay { width: 60px; height: 60px; margin: -30px 0 0 -30px; }
+  .pl-bigplay svg { width: 26px; height: 26px; }
+  .pl-rate { padding: 0 10px; min-width: 40px; }
+  .v2-now { font-size: 15px; }
+  .v2-now-prompt { font-size: 14px; }
+}

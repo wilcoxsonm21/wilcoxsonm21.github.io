@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mirror: MineRL Diamond Challenge Episodes</title>
+  <meta name="description"
+    content="Hour-long MineRL Diamond Challenge episodes of Mirror: watch the agent, with its video plan.">
+  <meta name="theme-color" content="#f5f5f7">
+  <link rel="stylesheet" href="../css/theme.css">
+  <link rel="stylesheet" href="../css/site.css">
+  <link rel="stylesheet" href="../css/viewer2.css">
+  <script src="../js/embed.js"></script>
+  <script src="../js/design.js"></script>
+</head>
+
+<body>
+  <nav class="localnav" aria-label="Sections">
+    <div class="localnav-inner">
+      <a class="localnav-mark" href="../">Mirror</a>
+      <div class="localnav-links">
+        <a href="../#minecraft">Minecraft</a>
+        <a href="../#videos">Videos</a>
+      </div>
+      <a class="pill pill-dark localnav-cta" href="#">Paper</a>
+    </div>
+  </nav>
+
+  <main class="v2">
+    <!-- all episodes -->
+    <section class="v2-list" id="list" aria-label="Episodes">
+      <header class="v2-head">
+        <p class="v2-eyebrow">MineRL Diamond Challenge</p>
+        <h1>All 384 <span class="mk">evaluation episodes</span></h1>
+      </header>
+      <div class="v2-controls">
+        <div class="v2-seg" id="tabs" role="tablist" aria-label="Setting">
+          <button role="tab" type="button" data-tab="offline" aria-selected="true">Offline</button>
+          <button role="tab" type="button" data-tab="online" aria-selected="false">Online</button>
+          <button role="tab" type="button" data-tab="oracle" aria-selected="false">Oracle VP</button>
+        </div>
+        <div class="v2-seg v2-seg-small v2-sort" id="sort" role="radiogroup" aria-label="Order">
+          <button role="radio" type="button" data-sort="progress" aria-checked="true">Furthest first</button>
+          <button role="radio" type="button" data-sort="number" aria-checked="false">By number</button>
+        </div>
+      </div>
+      <p class="v2-note" id="arm-note"></p>
+      <ol class="v2-funnel" id="funnel" aria-label="Episodes that reached each milestone"></ol>
+      <p class="v2-stat" id="stat"></p>
+      <ul class="v2-grid" id="episodes"></ul>
+    </section>
+
+    <!-- one episode: a view pushed over the list -->
+    <section class="v2-episode" id="episode" aria-labelledby="ep-title" tabindex="-1" hidden>
+      <div class="v2-topbar">
+        <button class="v2-back" id="back" type="button">All episodes</button>
+        <div class="v2-stepper">
+          <button class="v2-round" id="ep-prev" type="button" aria-label="Previous episode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+          <button class="v2-round" id="ep-next" type="button" aria-label="Next episode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></button>
+        </div>
+      </div>
+      <header class="v2-ep-head">
+        <div class="v2-ep-titles">
+          <p class="v2-ep-kicker" id="ep-setting"></p>
+          <h2 id="ep-title">Episode</h2>
+          <p class="v2-ep-outcome" id="ep-outcome"></p>
+        </div>
+        <div class="v2-ep-side" id="ep-side"></div>
+      </header>
+      <div id="player"></div>
+      <div class="v2-now" id="now" aria-live="off"></div>
+      <details class="v2-details" id="details">
+        <summary>Subgoals and deaths</summary>
+        <div class="v2-lists">
+          <section id="section-stages"><h3>Subgoals</h3><ol id="list-stages"></ol></section>
+          <section><h3>Deaths</h3><ol id="list-deaths"></ol></section>
+        </div>
+      </details>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <p class="footer-mark">Mirror</p>
+      <p>Hyunwoo Ryu, Eric Ming Chen, Max Wilcoxson, Vincent Sitzmann &middot; MIT</p>
+      <p><a href="../">Back to the project page</a></p>
+    </div>
+  </footer>
+
+  <script src="../js/player.js"></script>
+  <script src="v2.js"></script>
+</body>
+
+</html>

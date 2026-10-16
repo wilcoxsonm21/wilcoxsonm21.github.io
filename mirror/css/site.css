@@ -1,0 +1,1033 @@
+/* Mirror, scroll-driven page. Colours and type come from css/theme.css (the "Gold" theme, shared with the talk
+   animations); this file only lays the page out. */
+:root {
+  --nav-h: 52px;
+  --gutter: clamp(20px, 4vw, 64px);
+  --ease: cubic-bezier(.22, .61, .36, 1);
+  /* the animations' frame: as large as the window allows at 16:9 under the nav. The nav, the figure chapters and the
+     gallery line up with it and scale with it, so the page keeps its proportions on every screen. */
+  --frame-w: min(calc(100vw - 48px), calc((100svh - var(--nav-h) - 44px) * 16 / 9));
+  --frame-h: calc(var(--frame-w) * 9 / 16);
+  --edge: calc((100vw - var(--frame-w)) / 2);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 19px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+img, video { max-width: 100%; display: block; }
+button { font-family: inherit; }
+a { color: inherit; }
+main { position: relative; z-index: 1; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
+                   white-space: nowrap; }
+section[id] { scroll-margin-top: var(--nav-h); }
+
+/* the lights go down for the survival-mode episodes */
+#backdrop { position: fixed; inset: 0; background: var(--dark); opacity: 0; pointer-events: none; z-index: 0; }
+
+/* ------------------------------------------------------------------ shared type */
+.eyebrow {
+  margin: 0 0 10px;
+  font-family: var(--sans);
+  font-size: clamp(19px, calc(var(--frame-w) * .0151), 32px);
+  font-weight: 600;
+  letter-spacing: .011em;
+  line-height: 1.3;
+  color: var(--accent);
+}
+h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+/* the key phrase of a headline, in gold (the page's product colour); the animations' captions use the same */
+.mk { background: linear-gradient(90deg, var(--gold-1), var(--gold-2)); -webkit-background-clip: text; background-clip: text;
+      color: transparent; -webkit-text-fill-color: transparent; }
+.cinema .mk { background-image: linear-gradient(90deg, var(--gold-dark-1), var(--gold-dark-2)); }
+.lede { color: var(--muted); text-wrap: pretty; }   /* (no word alone on the last line) */
+.lede strong, .step-body strong { color: var(--ink); font-weight: 600; }
+.red { color: var(--red); }
+.green { color: var(--green); }
+.blue, .violet, .teal { background: linear-gradient(90deg, var(--gold-1), var(--gold-2)); -webkit-background-clip: text;
+                        background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: clamp(40px, calc(var(--frame-w) * .0287), 58px);
+  padding: 0 clamp(22px, calc(var(--frame-w) * .0158), 32px);
+  border-radius: 999px;
+  border: 1.5px solid var(--ink);
+  font-family: var(--sans);
+  font-size: clamp(16px, calc(var(--frame-w) * .0115), 23px);
+  font-weight: 600;
+  letter-spacing: .01em;
+  text-decoration: none;
+  color: var(--ink);
+  background: transparent;
+  transition: background .25s, color .25s, transform .25s var(--ease);
+}
+/* hover effects only where a pointer can hover: on a touch screen a tap would leave them stuck on */
+@media (hover: hover) {
+  .pill:hover { transform: translateY(-1px); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+}
+.pill-dark { background: var(--ink); color: var(--bg); }
+@media (hover: hover) { .pill-dark:hover { background: #000; } }
+/* placeholder link: greyed out, not clickable, no hover lift */
+.pill.pill-disabled { color: color-mix(in srgb, var(--ink) 38%, transparent); border-color: color-mix(in srgb, var(--ink) 25%, transparent);
+                      cursor: default; pointer-events: none; }
+
+/* fade-up on arrival (time-based; scroll-linked effects live in site.js) */
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity .9s var(--ease), transform .9s var(--ease); }
+.reveal.in { opacity: 1; transform: none; }
+
+/* ------------------------------------------------------------------ local nav */
+.localnav {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--nav-h);
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+  border-bottom: 1px solid var(--line);
+  transition: background .4s, border-color .4s, color .4s;
+}
+.localnav-inner {
+  width: var(--frame-w);
+  height: 100%;
+  margin: 0 auto;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+.localnav-mark { font-family: var(--serif); font-size: clamp(21px, calc(var(--frame-w) * .0152), 30px); font-weight: 700; letter-spacing: -0.015em; text-decoration: none; }
+.localnav-links { display: flex; gap: clamp(22px, calc(var(--frame-w) * .0172), 38px); margin-left: auto;
+                  font-size: clamp(13.5px, calc(var(--frame-w) * .0097), 19px); font-weight: 500; letter-spacing: .01em; }
+.localnav-links a { text-decoration: none; color: var(--muted); transition: color .25s; white-space: nowrap; }
+.localnav-links a.active { color: var(--ink); }
+@media (hover: hover) { .localnav-links a:hover { color: var(--ink); } }
+.localnav-cta { height: clamp(30px, calc(var(--frame-w) * .0215), 40px); padding: 0 clamp(16px, calc(var(--frame-w) * .0115), 23px);
+                font-size: clamp(13px, calc(var(--frame-w) * .0093), 17px); border-width: 0; }
+.localnav-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; }
+.localnav-progress span { display: block; height: 100%; width: 100%; transform-origin: 0 50%; transform: scaleX(0);
+                          background: var(--ink); opacity: .55; will-change: transform; }   /* (perf2 10-16: its own layer, so the
+                          scaleX that follows every scroll frame doesn't repaint the blurred nav around it) */
+html.is-dark .localnav { background: color-mix(in srgb, var(--dark) 72%, transparent); border-color: rgba(255, 255, 255, .1);
+                         color: var(--on-dark); }
+html.is-dark .localnav-links a { color: color-mix(in srgb, var(--on-dark) 60%, transparent); }
+html.is-dark .localnav-links a.active { color: var(--on-dark); }
+@media (hover: hover) { html.is-dark .localnav-links a:hover { color: var(--on-dark); } }
+html.is-dark .localnav-cta { background: var(--on-dark); color: var(--dark); }
+html.is-dark .localnav-progress span { background: var(--on-dark); }
+
+/* ------------------------------------------------------------------ hero */
+.hero { height: 100vh; height: 100svh; position: relative; }   /* not pinned: it fades as it scrolls away */
+.hero-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--nav-h) + 2vh) var(--gutter) 6vh;
+  overflow: hidden;
+}
+.hero-mark {
+  position: relative;
+  width: min(92vw, calc(var(--frame-w) * .848));
+  aspect-ratio: 3.25 / 1;
+  will-change: transform, opacity;
+  container-type: inline-size;   /* .hero-word is sized from this box's width (cqw) */
+}
+/* the video is clipped a few pixels inside the box, under solid veil: its edge can never show as a seam */
+.hero-video-clip { position: absolute; inset: 8px; overflow: hidden; }
+.hero-video { width: 100%; height: 100%; object-fit: cover; will-change: transform; }
+.hero-knockout { position: absolute; inset: -12px; width: calc(100% + 24px); height: calc(100% + 24px); overflow: visible; }
+.hero-veil { fill: var(--bg); }
+.hero-word { font-family: var(--serif); font-weight: 800; letter-spacing: 0; }   /* leaves a gap between r and o for a tile seam */
+/* "Mirror" spans .945 of the video's width as shown (the box less the 8 px insets; object-fit: cover widens a
+   3.33:1 clip past a box flatter than it), at every size, so the letters sit where tools/build_hero.py's GAP seams
+   expect them, and each seam's dark gutter falls in the gap between two letters (r|o is the tightest).
+   .3347 = .945 / 2.823, the advance of "Mirror" in Source Sans 3 ExtraBold, in em */
+.hero-word { font-size: calc(max(100cqw - 16px, (100cqw / 3.25 - 16px) * 3.3333) * .3347); }
+.hero-copy { text-align: center; margin-top: clamp(28px, 5.5vh, 64px); will-change: transform, opacity; }
+.hero-sub {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(24px, calc(var(--frame-w) * .031), 74px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.009em;
+  text-wrap: balance;            /* two even lines on a phone, not "Models" alone */
+}
+.hero-authors { margin: 22px 0 0; font-size: clamp(16px, calc(var(--frame-w) * .01365), 32px); display: flex; flex-wrap: wrap;
+                justify-content: center; gap: 4px 22px; }
+.hero-authors a { text-decoration: none; border-bottom: 1px solid transparent; transition: border-color .2s; }
+@media (hover: hover) { .hero-authors a:hover { border-color: currentColor; } }
+.hero-affil { margin: 6px 0 0; font-size: clamp(15px, calc(var(--frame-w) * .0108), 25px); color: var(--muted); }
+.hero-affil span { margin: 0 8px; }
+.hero-links { display: flex; gap: 12px; justify-content: center; margin-top: 26px; flex-wrap: wrap; }
+.scroll-cue {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.scroll-cue i { width: 1.5px; height: 34px; background: linear-gradient(var(--muted), transparent); animation: cue 1.8s var(--ease) infinite; transform-origin: 50% 0; }
+@keyframes cue { 0% { transform: scaleY(0); opacity: 1; } 70% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
+/* fix: hero load and short screens. Until its face has loaded (the script in index.html's head) the hero shows
+   nothing rather than the letters in a fallback font, then fades in */
+.hero-video-clip, .hero-knockout { transition: opacity .5s var(--ease); }
+html.hero-wait .hero-video-clip, html.hero-wait .hero-knockout { opacity: 0; }
+/* the cue steps aside when it would touch the links or the text below (site.js, layoutHero) */
+.scroll-cue.off { display: none; }
+/* the subtitle breaks between words, never at the hyphens of "Self-Improving" or "Video-to-Action" */
+.hero-sub .mk, .hero-sub .nobr { white-space: nowrap; }
+/* on a phone the four authors wrap two by two, never three and one */
+@media (max-width: 600px) { .hero-authors { max-width: 20em; margin-inline: auto; } }
+
+/* ------------------------------------------------------------------ statements, revealed word by word */
+/* The text itself pins at the centre of the screen (there is no full-screen box to scroll through on either side);
+   the spacer after it is how long it stays pinned. */
+.statement, .closing { position: relative; padding: 0 var(--gutter); }
+.statement { padding-top: 16vh; }      /* enough that it is below the fold until scrolling starts */
+.closing { padding-top: 14vh; }        /* clear of the last chapter's stage as it dissolves */
+.statement-sticky, .closing-sticky {
+  position: sticky;
+  top: calc(50% + var(--nav-h) / 2);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.statement-spacer, .closing-spacer { height: 60vh; }   /* how long the finished statement stays pinned */
+.statement-text, .closing-text {
+  margin: 0;
+  max-width: 17.5em;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: clamp(32px, calc(var(--frame-w) * .0476), 116px);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.012em;
+}
+.closing-text { max-width: 15em; }
+.statement-text { text-wrap: pretty; }   /* fix: no single word ("planner.") alone on the last line */
+[data-words] .w { opacity: .14; transition: none; white-space: nowrap; }   /* keeps "hand-crafted" on one line */
+.closing-sub { opacity: 0; margin: 30px 0 0; font-size: clamp(18px, calc(var(--frame-w) * .0172), 40px); color: var(--muted); font-weight: 500; }
+
+/* ------------------------------------------------------------------ prose (abstract, bibtex) */
+.prose { max-width: max(800px, calc(var(--frame-w) * .575)); margin: 0 auto; padding: 8vh var(--gutter) 14vh; }
+#abstract { padding: 4vh var(--gutter) 4vh; }
+/* the first chapter starts while the abstract's tail is still leaving: its pinned box is empty at the top */
+#idea { margin-top: -22vh; }
+.chapter-sticky { pointer-events: none; }
+.chapter-sticky .steps, .chapter-sticky a, .chapter-sticky button { pointer-events: auto; }
+.chapter-split figure { position: relative; }
+.prose-body p { margin: 0; font-size: clamp(17px, calc(var(--frame-w) * .01345), 32px); line-height: 1.5; color: var(--ink-2); text-align: left; }
+/* fix: the abstract's measure. Its box narrows to about 68 characters of its text (ch at the paragraph's size), so the
+   lines stay readable from small laptops to 4K; the eyebrow lines up with the narrower column */
+#abstract { font-size: clamp(17px, calc(var(--frame-w) * .01345), 32px);
+            max-width: min(max(800px, calc(var(--frame-w) * .575)), calc(68ch + 2 * var(--gutter))); }
+#abstract .prose-body p { text-wrap: pretty; }
+
+/* ------------------------------------------------------------------ chapters: a pinned talk animation each */
+.chapter { position: relative; height: 600vh; }   /* the real height comes from site.js */
+.chapter-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
+.chapter-head {
+  position: absolute;
+  inset: var(--nav-h) 0 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 var(--gutter) 4vh;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.chapter-head h2 {
+  max-width: 15em;
+  font-size: clamp(38px, calc(var(--frame-w) * .058), 150px);
+  line-height: 1.05;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+/* the lede is grey, with its key phrase in ink (<strong>), as on Apple's product pages */
+.chapter-head .lede {
+  max-width: 31em;
+  margin: clamp(20px, 3.4vh, 36px) 0 0;
+  font-size: clamp(17px, calc(var(--frame-w) * .0151), 34px);
+  line-height: 1.38;
+  letter-spacing: .011em;
+}
+.stage {
+  position: absolute;
+  inset: var(--nav-h) 0 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  will-change: transform, opacity;
+}
+.stage-frame {
+  position: relative;
+  width: var(--frame-w);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 28px;
+  background: var(--bg-2);
+}
+.stage-frame iframe { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border: 0; display: block;
+                      pointer-events: none; background: var(--bg-2); }
+.stage-caption { display: none; }
+/* a slow connection: the stage waiting for its scene, or a click for its videos (site.js, Chapter.update) */
+.chapter-sticky::after { content: ""; position: absolute; z-index: 3; left: 50%; top: calc(50% + var(--nav-h) / 2);
+  width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; box-sizing: border-box;
+  border: 2.5px solid rgba(28, 27, 26, .14); border-top-color: rgba(28, 27, 26, .55);
+  opacity: 0; transition: opacity .3s; pointer-events: none; }
+.chapter.wait .chapter-sticky::after { opacity: 1; animation: spin .9s linear infinite; }
+@keyframes spin { to { transform: rotate(1turn); } }
+@media (prefers-reduced-motion: reduce) { .chapter.wait .chapter-sticky::after { animation: none; } }
+
+/* ------------------------------------------------------------------ split chapter: copy + a figure drawn in the page */
+/* On landscape screens the chapter is a 16:9 box the size of an animation's tile, and its type, gaps and figure are
+   sized to the box (container units), so it scales with the window exactly like the animations. Portrait screens
+   stack it (html.narrow, below). */
+.chapter-split .split-stage {
+  inset: auto 0;
+  top: calc(var(--nav-h) + (100svh - var(--nav-h) - var(--frame-h)) / 2);
+  width: var(--frame-w);
+  height: var(--frame-h);
+  margin: 0 auto;
+  container-type: size;
+  display: grid;
+  grid-template-columns: minmax(0, .74fr) minmax(0, 1.5fr);
+  gap: 4.4cqw;
+  align-items: center;
+  justify-items: stretch;
+  padding: 0 4cqw;
+}
+.chapter-split .eyebrow { font-size: max(16px, 1.5cqw); margin-bottom: 1cqw; }
+.chapter-split h3 { font-size: max(26px, 2.95cqw); line-height: 1.07; letter-spacing: -0.022em; margin-bottom: 1.85cqw;
+                    text-wrap: balance; }
+.steps { list-style: none; margin: 0; padding: 0; }
+.steps li { position: relative; padding: max(9px, .92cqw) 0; border-top: 1px solid var(--line); cursor: pointer; }
+.steps li:last-child { border-bottom: 1px solid var(--line); }
+.steps .prog { position: absolute; left: 0; top: -1px; width: 100%; height: 2px; background: var(--ink);
+               transform-origin: 0 50%; transform: scaleX(var(--p, 0)); }
+.steps h4 { margin: 0; font: 600 max(14.5px, 1.24cqw)/1.35 var(--sans); letter-spacing: -0.012em; color: var(--faint);
+            transition: color .35s; text-wrap: balance; }
+.steps li.done h4 { color: var(--muted); }
+.steps li.on h4 { color: var(--ink); }
+.step-body { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .5s var(--ease), opacity .45s; }
+.step-body > p { overflow: hidden; margin: 0; font-size: max(13.5px, 1.16cqw); line-height: 1.47; letter-spacing: -0.008em;
+                 color: var(--muted); }
+.steps li.on .step-body { grid-template-rows: 1fr; opacity: 1; }
+.steps li.on .step-body > p { padding-top: max(5px, .42cqw); }
+.replan-figure { margin: 0; }
+.replan-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.replan-svg .rp-label { font: 600 4px var(--sans); fill: var(--ink); letter-spacing: .02px; }
+.replan-svg .rp-num { font: 600 3.6px var(--sans); fill: var(--fail); }
+.replan-svg .rp-crit { font: 600 4px var(--sans); fill: var(--crit); }
+.replan-legend { display: flex; flex-wrap: wrap; gap: .4cqw 1.6cqw; margin-top: .7cqw; padding-left: 4%; font-size: max(12px, .97cqw);
+                 font-weight: 500; color: var(--muted); }
+.replan-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.replan-legend svg { height: max(9px, .8cqw); width: auto; }
+
+/* in-context learning: a 2x2 figure that always fits the viewport */
+.lava-figure { position: relative; margin: 0 auto; width: min(100%, calc(51cqw - 11px)); }
+.lava-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 18px; }
+.lava-cell { opacity: 0; transform: translateY(12px); transition: opacity .5s, transform .7s var(--ease); }
+.lava-cell.on { opacity: 1; transform: none; }
+.lava-title { margin: 0 0 1px; padding: 0 3% 0 13.6%; font: 600 max(12px, 1.04cqw)/1.3 var(--sans); color: var(--ink); text-align: center; }
+.lava-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.lava-svg .lv-bg { fill: color-mix(in srgb, var(--ink) 2.8%, transparent); }
+.lava-svg .lv-grid { stroke: color-mix(in srgb, var(--ink) 7.5%, transparent); stroke-width: .8; }
+.lava-svg .lv-spine { fill: none; stroke: color-mix(in srgb, var(--ink) 16%, transparent); stroke-width: .8; }
+.lava-svg .lv-tick { font: 500 calc(11.5px * var(--lv-k, 1)) var(--sans); fill: var(--muted); }
+.lava-svg .lv-axis { font: 500 calc(12.5px * var(--lv-k, 1)) var(--sans); fill: var(--ink-2); }
+.lava-svg .lv-note { font: 500 calc(11.5px * var(--lv-k, 1)) var(--sans); fill: var(--muted); }
+.lava-svg .lv-note-strong { font-weight: 700; fill: var(--ink); }
+.lava-svg .lv-end { font: 700 calc(13.5px * var(--lv-k, 1)) var(--sans); }
+.lava-svg .lv-cursor { stroke: color-mix(in srgb, var(--ink) 40%, transparent); stroke-width: .9; stroke-dasharray: 2.5 2.5; }
+.lava-svg .lv-life { font: 600 calc(10.5px * var(--lv-k, 1)) var(--sans); fill: var(--muted); }
+.lava-svg .lv-legend-bg { fill: color-mix(in srgb, var(--bg) 92%, transparent); stroke: color-mix(in srgb, var(--ink) 12%, transparent); stroke-width: .6; }
+.lava-svg .lv-legend-text { font: 500 10.5px var(--sans); fill: var(--ink-2); }
+.lava-shot { position: absolute; inset: 0 0 34px; display: flex; align-items: center; justify-content: center; pointer-events: none;
+             transform-origin: 50% 50%; }
+.lava-shot img { width: 100%; height: auto; border-radius: 16px; box-shadow: 0 30px 60px -30px color-mix(in srgb, var(--ink) 45%, transparent); }
+.lava-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: .3cqw 1.45cqw; margin-top: .55cqw; font-size: max(11.5px, .94cqw);
+               font-weight: 500; color: var(--muted); }
+.lava-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lava-legend { transition: opacity .5s; }
+.lava-figure[data-step="0"] .lava-legend { opacity: 0; }
+.lava-legend svg { height: max(10px, .86cqw); width: auto; }
+
+/* ------------------------------------------------------------------ cinema (dark) */
+/* --dark (0..1, set by site.js) follows the backdrop, so the copy stays readable while the lights change */
+.cinema { --dark: 1; --light: color-mix(in srgb, var(--on-dark) calc(var(--dark) * 100%), var(--ink));
+          position: relative; padding: 34vh var(--gutter) 30vh; color: var(--light); text-align: center; }
+.cinema .eyebrow { color: var(--light); }
+.cinema h2 { font-size: clamp(42px, calc(var(--frame-w) * .062), 148px); line-height: 1.02; letter-spacing: -0.03em;
+             text-wrap: balance; }   /* phones: "Watch Mirror / mine diamonds", not "diamonds" alone */
+.cinema h2 span:not(.mk) { opacity: .55; }
+.segmented {
+  display: inline-flex;
+  margin: 46px auto 34px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .1);
+  gap: 2px;
+}
+.segmented button {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: clamp(9px, calc(var(--frame-w) * .0065), 14px) clamp(20px, calc(var(--frame-w) * .0144), 32px);
+  border-radius: 999px;
+  font: 600 clamp(14.5px, calc(var(--frame-w) * .0104), 23px)/1.2 var(--sans);
+  color: color-mix(in srgb, var(--on-dark) 72%, transparent);
+  background: transparent;
+  cursor: pointer;
+  transition: background .3s, color .3s;
+}
+.segmented button[aria-selected="true"] { background: var(--on-dark); color: var(--ink); }   /* (.cinema reuses --dark as a number) */
+/* the video, then its caption */
+.cinema-figure { margin: 0 auto; max-width: calc(var(--frame-w) * .848); display: grid; grid-template-columns: minmax(0, 1fr); }
+/* the screen takes the current clip's shape (--ar, from its tab) before the clip loads, so nothing jumps; site.js
+   glides its height when the tab changes. Small corners at every size, as the gallery's videos have square ones:
+   the clips have labels and the hotbar in their corners */
+.cinema-screen { grid-column: 1 / -1; justify-self: center; width: min(100%, calc((100svh - var(--nav-h) - var(--sv-room, 140px)) * (var(--ar, 960 / 576))));
+                 aspect-ratio: var(--ar, 960 / 576); border-radius: 10px; overflow: hidden; background: #000;
+                 box-shadow: 0 40px 120px -40px rgba(0, 0, 0, .9); transition: height .5s var(--ease), width .5s var(--ease); }
+.cinema-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; transition: opacity .35s; }
+/* the clip (plan | execution, or plan above execution when stacked) keeps its own shape (--film) and sits against the
+   execution's edge, so a screen cropped to 16:9 shows the execution alone, and the crop glides as the screen does.
+   The labels over it are the page's text, laid out per pane in the pane's own units (cqw) */
+.sv-film { position: absolute; top: 0; right: 0; height: 100%; aspect-ratio: var(--film, 1280 / 360); }
+html.portrait .sv-film { top: auto; right: auto; bottom: 0; left: 0; width: 100%; height: auto; }
+.sv-film .cinema-video { object-fit: fill; }
+.sv-pane { position: absolute; top: 0; left: 0; width: 50%; height: 100%; pointer-events: none; container-type: inline-size;
+           transition: opacity .4s var(--ease); }
+.sv-exec { left: 50%; box-shadow: inset 2px 0 0 #000; }
+html.portrait .sv-pane { width: 100%; height: 50%; }
+html.portrait .sv-exec { left: 0; top: 50%; box-shadow: inset 0 2px 0 #000; }
+.plan-off .sv-plan { opacity: 0; }
+.sv-tag, .sv-toast { position: absolute; top: clamp(6px, 2.2cqw, 14px); padding: .28em .62em .32em; border-radius: 999px;
+           font: 600 clamp(11px, 2.35cqw, 16px)/1.15 var(--sans); letter-spacing: -.005em; color: #fff; white-space: nowrap;
+           background: rgba(16, 15, 14, .52); -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4); }
+.sv-tag { left: clamp(6px, 2.2cqw, 14px); }
+/* the speed rides in the execution's tag (the game shows its own notes in the top right corner) */
+.sv-speed { display: inline-flex; align-items: center; gap: .28em; margin-left: .55em; padding-left: .55em; font-variant-numeric: tabular-nums;
+            box-shadow: inset 1px 0 0 rgba(255, 255, 255, .28); }
+.sv-speed svg { height: .72em; width: auto; fill: currentColor; }
+.sv-speed:not(.fast) { color: rgba(255, 255, 255, .78); }
+.sv-toast { left: 50%; top: auto; bottom: 17%; display: inline-flex; align-items: center; gap: .45em; padding: .34em .85em .36em .4em;
+            font-size: clamp(12px, 2.9cqw, 20px); opacity: 0; transform: translate(-50%, 6px) scale(.96);
+            transition: opacity .3s var(--ease), transform .45s var(--ease); }
+.sv-toast.on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.sv-toast img { width: 1.55em; height: 1.55em; image-rendering: pixelated; }
+.sv-toast .sv-check { color: #5ee08a; font-weight: 700; }
+.sv-toast.death { color: #ffb4a8; padding-left: .85em; }
+/* under the screen: the current goal and the game clock, the twelve milestones as they are reached, the plan button */
+.sv-strip { grid-column: 1 / -1; grid-row: 3; display: flex; align-items: center; gap: 10px 18px; margin: 14px 2px 0;
+            font: 600 clamp(13px, calc(var(--frame-w) * .0094), 17px)/1.3 var(--sans); }
+.sv-goal { flex: 1 1 0; min-width: 0; margin: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+           color: color-mix(in srgb, #86868b calc(var(--dark) * 100%), var(--muted)); }
+.sv-goal b { font-weight: 600; color: color-mix(in srgb, #f5f5f7 calc(var(--dark) * 100%), var(--ink)); }
+.sv-goal .sv-clock { font-variant-numeric: tabular-nums; }
+.sv-goal b + .sv-clock { margin-left: .8em; }
+.sv-milestones { display: flex; gap: clamp(2px, .35vw, 6px); margin: 0; padding: 0; list-style: none; }
+.sv-milestones li { width: clamp(20px, calc(var(--frame-w) * .019), 30px); aspect-ratio: 1; border-radius: 6px; display: grid; place-items: center;
+                    background: rgba(255, 255, 255, .06); transition: background .4s; }
+.sv-milestones img { width: 78%; height: 78%; pointer-events: none; image-rendering: pixelated; opacity: .22; filter: grayscale(1);
+                     transition: opacity .35s, filter .35s, transform .5s cubic-bezier(.3, 1.6, .5, 1); }
+.sv-milestones li.got { background: rgba(255, 255, 255, .13); }
+.sv-milestones button { appearance: none; border: 0; margin: 0; padding: 0; width: 100%; height: 100%; border-radius: inherit;
+                        display: grid; place-items: center; background: none; cursor: pointer; }
+.sv-milestones button:disabled { cursor: default; }
+.sv-milestones button:focus-visible { outline: 2px solid var(--on-dark); outline-offset: 2px; }
+@media (hover: hover) { .sv-milestones li:hover:has(button:enabled) { background: rgba(255, 255, 255, .22); }
+                        .sv-milestones li:hover button:enabled img { opacity: .75; filter: none; } }
+.sv-milestones li.got img { opacity: 1; filter: none; }
+.sv-milestones li.pop img { transform: scale(1.25); }
+.sv-toggle { appearance: none; border: 0; margin: 0; display: inline-flex; align-items: center; gap: .5em; cursor: pointer;
+             padding: .5em 1em .52em .85em; border-radius: 999px; font: inherit; color: var(--ink); background: var(--on-dark);
+             transition: background .25s, transform .2s var(--ease); white-space: nowrap; }
+@media (hover: hover) { .sv-toggle:hover { transform: scale(1.04); } }
+.sv-toggle:active { transform: scale(.97); }
+.sv-toggle svg { height: 1em; width: auto; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.sv-toggle-plan { fill: currentColor; transition: fill-opacity .3s, stroke-opacity .3s; }
+.plan-off .sv-toggle-plan { fill-opacity: 0; stroke-dasharray: 2 2; }
+html.narrow .sv-strip { flex-wrap: wrap; }
+html.narrow .sv-toggle { order: 2; }
+html.narrow .sv-milestones { order: 3; flex-basis: 100%; justify-content: space-between; }
+html.narrow .sv-milestones li { width: auto; flex: 0 1 30px; }
+/* round play/pause buttons on the videos (js/controls.js), in place of the browser's controls; the ring shows how far
+   the video has played */
+.cinema-screen, .card-media { position: relative; }
+.vbtn { position: absolute; z-index: 2; right: clamp(10px, calc(var(--frame-w) * .011), 22px); bottom: clamp(10px, calc(var(--frame-w) * .011), 22px);
+        width: clamp(34px, calc(var(--frame-w) * .0287), 48px); aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%;
+        display: grid; place-items: center; cursor: pointer; color: var(--ink);
+        background: color-mix(in srgb, var(--bg-2) 78%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+        transition: transform .2s var(--ease); }
+@media (hover: hover) { .vbtn:hover { transform: scale(1.06); } }
+.vbtn svg { width: 100%; height: 100%; }
+.vbtn-track { fill: none; stroke: currentColor; stroke-width: 1.6; opacity: .14; }
+.vbtn-ring { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50% 50%; }
+/* Apple's media caption: left-aligned under the video, a bold lead-in in near-white, the rest in grey. Both follow
+   --dark as the heading does, so the caption stays readable while the lights come back up */
+.cinema-caption { grid-column: 1; grid-row: 4; max-width: min(100%, 680px); margin: 18px 0 0 4px; text-align: left;
+                  font-size: clamp(14px, calc(var(--frame-w) * .0094), 19px); line-height: 1.42; letter-spacing: -.01em; font-weight: 600;
+                  color: color-mix(in srgb, #86868b calc(var(--dark) * 100%), var(--muted)); transition: opacity .35s; }
+.cinema-caption strong { font-weight: 600; color: color-mix(in srgb, #f5f5f7 calc(var(--dark) * 100%), var(--ink)); }
+/* the way into every evaluation episode (the Diamond Challenge modal), under the survival video */
+.cinema-more { margin: 48px 0 0; text-align: center; }
+
+/* ------------------------------------------------------------------ results gallery */
+.results { padding: 12vh 0 8vh; background: var(--bg-2); }   /* Apple's grey band, white cards */
+.results-head { width: var(--frame-w); margin: 0 auto 40px; }
+.results-head h2 { font-size: clamp(40px, calc(var(--frame-w) * .0517), 124px); line-height: 1.02; letter-spacing: -0.03em; }
+.gallery { position: relative; }
+.gallery-track {
+  --gh: clamp(150px, calc(var(--frame-w) * .2), 440px);       /* the height of every card's video */
+  position: relative;
+  display: flex;
+  align-items: stretch;   /* the white cards all as tall as the tallest */
+  gap: clamp(16px, calc(var(--frame-w) * .016), 28px);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 0 var(--edge);
+  padding: 10px var(--edge) 30px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.gallery-track::-webkit-scrollbar { display: none; }
+/* the cards come in two rows (.gallery-row). On a desktop the rows stack and scroll together, two cards tall, with a
+   smaller video so both rows fit under the nav; elsewhere the rows dissolve into the track's single row */
+.gallery-row { display: contents; }
+html:not(.narrow):not(.short) .gallery-track {
+  --gh: clamp(130px, min(calc(var(--frame-w) * .16), calc((100svh - var(--nav-h) - 420px) / 2)), 400px);
+  flex-direction: column;
+  align-items: flex-start;
+}
+html:not(.narrow):not(.short) .gallery-row { display: flex; align-items: stretch; gap: inherit; }
+.card {
+  flex: 0 0 auto;
+  width: min(calc(var(--gh) * var(--ar, 1.803) + 28px), var(--frame-w));   /* --ar: the video's width / height; never wider than the content column */
+  scroll-snap-align: start;
+  background: var(--bg);
+  border-radius: 28px;
+  padding: 14px 14px 22px;
+}
+.card-media { display: block; overflow: hidden; background: #111; aspect-ratio: var(--ar, 1.803); }   /* square corners: the videos have labels there */
+.card-media video, .card-media img { width: 100%; height: 100%; object-fit: contain; }
+.card-figure .card-media { background: var(--bg); aspect-ratio: 16 / 7.5; }
+.card h3 { margin: 18px 8px 6px; font-size: clamp(19px, calc(var(--frame-w) * .0145), 26px); line-height: 1.2; letter-spacing: .009em;
+           text-wrap: balance; }   /* "DeepMind Control: / Walker Walk", not "Walk" alone */
+.card p { margin: 0 8px; font-size: clamp(14.5px, calc(var(--frame-w) * .0106), 18px); line-height: 1.47; color: var(--muted);
+          text-wrap: pretty; }
+.gallery-paddles { position: relative; width: var(--frame-w); margin: 6px auto 0; display: flex; justify-content: flex-end; gap: 12px; }
+/* the dot indicator (js/controls.js): one dot per card, the current one long */
+.gallery-dots { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: 10px; padding: 10px 14px;
+                border-radius: 999px; background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.gallery-dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 4px; cursor: pointer;
+                       background: color-mix(in srgb, var(--ink) 35%, transparent); transition: width .35s var(--ease), background .35s; }
+.gallery-dots button[aria-current="true"] { width: 30px; background: var(--ink); }
+/* each dot's tap target is 44px tall and runs to its neighbours' (wider apart on touch screens), the dot stays 8px */
+.gallery-dots button { position: relative; }
+.gallery-dots button::after { content: ""; position: absolute; inset: -18px -5px; }
+@media (pointer: coarse) {
+  .gallery-dots { gap: 24px; }
+  .gallery-dots button::after { inset: -18px -12px; }   /* 32px wide (the dot's 8 and the gap's 24), meeting its neighbours' */
+}
+.gallery-dots button:focus-visible, .vbtn:focus-visible { outline: 2px solid var(--mirror); outline-offset: 2px; }
+.paddle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+  font-size: 26px;
+  line-height: 1;
+  padding-bottom: 3px;
+  cursor: pointer;
+  transition: background .25s, opacity .25s;
+}
+@media (hover: hover) { .paddle:hover { background: color-mix(in srgb, var(--ink) 14%, transparent); } }
+.paddle:disabled { opacity: .35; cursor: default; }
+
+/* ------------------------------------------------------------------ the episode modals (js/modal.js) */
+/* the way in: Apple's "+" link, a label and a round + after it, ink on the light page and near-white in the dark */
+.more-link { display: inline-flex; align-items: center; gap: .5em; font: 600 clamp(17px, calc(var(--frame-w) * .0125), 26px)/1.25 var(--sans);
+             letter-spacing: .005em; color: inherit; text-decoration: none; }
+.more-plus { flex: none; width: 1.45em; height: 1.45em; transition: transform .3s var(--ease); }
+.more-plus circle, .card-more circle { fill: currentColor; }
+.more-plus path, .card-more path { fill: none; stroke: var(--bg); stroke-width: 1.6; stroke-linecap: round; }
+.cinema .more-link { color: var(--light); }
+.cinema .more-plus path { stroke: color-mix(in srgb, #0f0e0d calc(var(--dark) * 100%), var(--bg)); }   /* (--dark is a number here) */
+@media (hover: hover) {
+  .more-link:hover span { text-decoration: underline; text-underline-offset: .18em; text-decoration-thickness: 1.5px; }
+  .more-link:hover .more-plus { transform: scale(1.08); }
+}
+.more-link:focus-visible, .card-more:focus-visible { outline: 2px solid var(--mirror); outline-offset: 4px; border-radius: 999px; }
+.chapter-more { margin: clamp(18px, 3vh, 30px) 0 0; }
+/* a gallery card's way in: the round + at its bottom right, as on Apple's cards */
+.gallery .card.card-has-more { position: relative; padding-bottom: calc(22px + clamp(34px, calc(var(--frame-w) * .025), 44px)); }
+.card-more { position: absolute; right: 18px; bottom: 18px; width: clamp(34px, calc(var(--frame-w) * .025), 44px); aspect-ratio: 1;
+             color: var(--ink); transition: transform .3s var(--ease); }
+.card-more svg { display: block; width: 100%; height: 100%; }
+@media (hover: hover) { .card-more:hover { transform: scale(1.08); } }
+
+/* the modal: the page dims and blurs, and a grey sheet rises from below with its close button at the top right. The
+   viewer scrolls inside the sheet; the page behind holds still */
+html.modal-open { overflow: hidden; scrollbar-gutter: stable; }
+.xmodal { position: fixed; inset: 0; z-index: 200; overscroll-behavior: contain;
+          background: rgba(0, 0, 0, 0); transition: background .3s var(--ease), -webkit-backdrop-filter .3s, backdrop-filter .3s; }
+.xmodal[hidden] { display: none; }
+.xmodal:focus { outline: none; }
+.xmodal.is-open { background: rgba(0, 0, 0, .48); -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%);
+                  transition-duration: .42s; }
+.xmodal-sheet { position: absolute; left: 50%; top: max(40px, 5vh); bottom: 0; width: min(1180px, calc(100vw - 2 * var(--gutter)));
+                margin-left: calc(min(1180px, calc(100vw - 2 * var(--gutter))) / -2);
+                background: var(--bg-2); border-radius: 28px 28px 0 0; overflow: hidden;
+                box-shadow: 0 -20px 80px -30px rgba(0, 0, 0, .5);
+                opacity: 0; transform: translateY(64px); transition: transform .3s var(--ease), opacity .24s var(--ease); }
+/* (it rises in over .5 s and goes in .3 s: the closing transitions are the ones above, js/modal.js hides it after them) */
+.xmodal.is-open .xmodal-sheet { opacity: 1; transform: none; transition: transform .5s var(--ease), opacity .32s var(--ease); }
+.xmodal-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--bg-2); }
+.xmodal-frame[hidden] { display: none; }
+.xmodal-close { position: absolute; z-index: 1; top: 18px; right: 18px; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%;
+                display: grid; place-items: center; cursor: pointer; color: var(--ink-2);
+                background: color-mix(in srgb, var(--ink) 9%, var(--bg-2)); transition: background .25s, transform .25s var(--ease); }
+/* (airy 10-16: an iOS sheet's close button, a light grey disc with a dark glyph; was a black disc that crowded the title) */
+.xmodal-close svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+@media (hover: hover) { .xmodal-close:hover { background: color-mix(in srgb, var(--ink) 15%, var(--bg-2)); transform: scale(1.06); } }
+.xmodal-close:focus-visible { outline: 2px solid var(--mirror); outline-offset: 3px; }
+@media (max-width: 560px) {
+  /* airy 10-16: as an iOS sheet, it starts a little below the status bar, with the dimmed page showing above it as a
+     card stacked behind (::before), so it reads as a sheet over the page rather than a page of its own */
+  .xmodal-sheet { top: calc(max(10px, env(safe-area-inset-top)) + 18px); left: 0; width: 100%; margin-left: 0; border-radius: 14px 14px 0 0; }
+  .xmodal::before { content: ""; position: absolute; left: 16px; right: 16px; top: calc(max(10px, env(safe-area-inset-top)) + 8px); height: 40px;
+                    border-radius: 12px 12px 0 0; background: rgba(255, 255, 255, .3); opacity: 0; transform: translateY(40px);
+                    transition: opacity .24s var(--ease), transform .3s var(--ease); }
+  .xmodal.is-open::before { opacity: 1; transform: none; transition: opacity .42s var(--ease), transform .5s var(--ease); }
+  .xmodal-close { top: 14px; right: 16px; width: 30px; height: 30px; }
+  .xmodal-close svg { width: 14px; height: 14px; }
+}
+/* a phone held sideways: the sheet keeps only a sliver of the dimmed page above it */
+@media (max-height: 500px) and (orientation: landscape) {
+  .xmodal-sheet { top: max(12px, env(safe-area-inset-top)); }
+  .xmodal-close { top: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .xmodal, .xmodal-sheet, .xmodal.is-open, .xmodal.is-open .xmodal-sheet, .xmodal::before, .xmodal.is-open::before { transition: none; }
+}
+
+/* ------------------------------------------------------------------ bibtex + footer */
+.bibtex { position: relative; }
+.bibtex pre {
+  margin: 0;
+  padding: 26px 28px;
+  border-radius: 22px;
+  background: var(--bg-2);
+  overflow-x: auto;
+  font: clamp(14.5px, calc(var(--frame-w) * .0104), 22px)/1.65 var(--mono);
+  color: var(--ink-2);
+  white-space: pre-wrap;   /* a line too long for the box wraps rather than hiding behind the edge */
+  overflow-wrap: anywhere;
+}
+/* one span per line of the entry: a wrapped line continues under a hanging indent */
+.bibtex code > span { display: block; padding-left: 4ch; text-indent: -4ch; }
+.bibtex-copy {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: 600 13px/1.2 var(--sans);
+  background: var(--bg);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: 0 1px 0 var(--line);
+}
+.footer { position: relative; z-index: 1; background: var(--bg-2); padding: 48px 0 64px;   /* lines up with the gallery and the nav */
+          font-size: clamp(14px, calc(var(--frame-w) * .01), 22px); color: var(--muted); }
+.footer-inner { width: var(--frame-w); max-width: 100%; margin: 0 auto; }
+.footer p { margin: 4px 0; }
+.footer a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
+.footer-mark { font-family: var(--serif); font-size: clamp(22px, calc(var(--frame-w) * .0158), 34px); font-weight: 700; color: var(--ink); margin-bottom: 10px !important; }
+
+/* ------------------------------------------------------------------ narrow screens */
+@media (max-width: 980px) {
+  .localnav-links { display: none; }
+  .localnav-cta { margin-left: auto; }
+}
+@media (max-width: 760px) {
+  .steps li { padding: 9px 0; }
+  .paddle { display: none; }
+  .hero-mark { width: 94vw; }
+}
+/* fix: split chapters stacked, solo (js/split.js). Portrait, small or narrowish windows (.split-stack) stack the figure
+   chapters, figure first, in a grey box as wide as the animations' boxes (--split-w); the lava figure shows one plot
+   at a time, the one the current step is about. A screen too short for the whole step list shows only the current
+   step (.split-solo, on wide screens too), and a stacked figure that still leaves too little room for it is drawn
+   smaller inside its box (--split-fig). The copy is top-anchored, so the figure stays put as the step text changes. */
+.chapter-split.split-stack { --split-w: var(--frame-w); --fp-t: 24px; --fp-x: 28px; --fp-b: 24px; }
+html.narrow .chapter-split.split-stack { --split-w: calc(100vw - 24px); --fp-t: 16px; --fp-x: 14px; --fp-b: 12px; }
+.chapter-split.split-stack .split-stage { top: var(--nav-h); bottom: 0; width: auto; height: auto; container-type: normal;
+                                          grid-template-columns: 1fr; gap: 14px; align-content: start; justify-items: center;
+                                          padding: clamp(16px, 4svh, 40px) 0 0; }
+.split-stack .split-copy { width: var(--split-w); padding-inline: clamp(8px, calc(var(--gutter) - 12px), 28px); }
+.split-stack .split-copy > * { max-width: 760px; }
+.split-stack h3 { margin-bottom: 14px; }
+.split-stack.chapter-lava .eyebrow { margin-bottom: 8px; }
+.split-stack .split-stage > figure { order: -1; width: var(--split-w); margin: 0; padding: var(--fp-t) var(--fp-x) var(--fp-b);
+                                     background: var(--bg-2); border-radius: 28px; }
+html.narrow .split-stack .split-stage > figure { border-radius: 18px; }
+.split-stack .replan-svg { width: var(--split-fig, 100%); margin: 0 auto; }
+.split-stack .replan-legend { padding: 0 4px; }
+.split-stack .lava-grid { grid-template-columns: 1fr; width: min(100%, 520px, var(--split-fig, 520px)); margin: 0 auto; }
+.split-stack .lava-legend { padding: 0 46px; }
+.split-stack .lava-cell { display: none; }
+.split-stack .lava-figure[data-step="0"] [data-plot="shared"], .split-stack .lava-figure[data-step="1"] [data-plot="shared"],
+.split-stack .lava-figure[data-step="2"] [data-plot="independent"], .split-stack .lava-figure[data-step="3"] [data-plot="ours"],
+.split-stack .lava-figure[data-step="4"] [data-plot="vpt"] { display: block; }
+/* the opening screenshot covers the first plot's place (the plot is there, still hidden), so the figure keeps its height
+   when the plot takes over */
+.split-stack .lava-shot { inset: var(--fp-t) var(--fp-x) var(--lg-h, 60px); }
+.split-stack .lava-shot img { width: auto; height: auto; max-width: 100%; max-height: 100%; }
+.split-solo .steps li:not(.on) { display: none; }
+.split-solo .steps li.on { border-bottom: 1px solid var(--line); }
+/* portrait or small (site.js sets .narrow): the scene's title is drawn by the page, in the grey box above the
+   animation, so it stays legible. The caption block and the frame join into one box; site.js sizes it (--card-w,
+   --cap-h: room for the scene's longest title) */
+html.narrow .stage-caption {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  width: var(--card-w, calc(100vw - 24px));
+  min-height: var(--cap-h, 0px);
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: clamp(20px, 5.4vw, 30px);
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  text-align: left;
+}
+/* the grey part is only as tall as the current title and sits right on the frame, so a short title leaves its room
+   above the box (white), never between the text and the figure */
+html.narrow .stage-caption .cap-in { position: relative; padding: 20px 20px 6px; transition: transform .45s var(--ease); }
+/* the grey is a layer behind the caption, as tall as the caption block, with its top at the current text's top
+   (--cap-top, set by site.js). It slides there, and the text with it, so a taller or shorter title or a note coming in
+   grows or shrinks the box smoothly; the part below the block hides behind the frame */
+html.narrow .stage-caption { position: relative; }
+html.narrow .stage-caption::before { content: ""; position: absolute; inset: 0; background: var(--bg-2);
+                                     border-radius: 18px 18px 0 0; transform: translateY(var(--cap-top, 100%));
+                                     transition: transform var(--cap-dur, .45s) var(--ease); }
+html.narrow .stage-caption b { font-weight: 700; }
+html.narrow .stage-caption .sub { display: block; margin-top: 8px; font-family: var(--sans); font-size: 14.5px; font-weight: 500;
+                                   letter-spacing: 0; line-height: 1.45; color: var(--muted); }
+html.narrow .stage-frame { width: var(--card-w, calc(100vw - 24px)); aspect-ratio: 1920 / 880; border-radius: 0 0 18px 18px; }
+/* the box hangs from --card-top (site.js), so a click that fills less of a tall stage leaves its room at the bottom */
+html.narrow .chapter:not(.chapter-split) .stage { justify-content: flex-start; padding-top: var(--card-top, 0px); }
+html.narrow .stage-frame iframe { top: -22.727%; height: 122.727%; }
+/* a phone held upright (site.js sets .portrait and .tall): the animation lays itself out on a tall stage
+   (scenes/portrait/), and the frame takes that shape (site.js fits the box to the screen) */
+html.portrait .chapter.tall .stage-frame {
+  aspect-ratio: var(--scene-ar);
+  width: var(--card-w, min(calc(100vw - 24px), calc((100svh - var(--nav-h) - 160px) * var(--scene-r))));
+}
+html.portrait .chapter.tall .stage-frame iframe { top: 0; height: 100%; }
+/* a phone held upright: the gallery's two-up videos play stacked, plan above execution (site.js swaps them in), so a
+   card takes the screen's width and its video the stacked aspect (--par). A tall video stops at --gmax, which leaves
+   room under the nav for the title, a three-line caption and the dots, and its card narrows to fit it */
+html.portrait .gallery-track {
+  --gmax: min(calc(100svh - var(--nav-h) - 210px), 125vw);
+  gap: 12px;
+  padding: 8px 16px 26px;
+  scroll-padding: 0 16px;
+}
+html.portrait .results-head { width: auto; margin-inline: 16px; }
+/* narrow screens: a smaller heading and less air around the gallery and its captions */
+html.narrow .results { padding: 44px 0 24px; }
+html.narrow .results-head { margin-bottom: 14px; }
+html.narrow .results-head h2 { font-size: 28px; letter-spacing: -0.02em; }
+html.narrow .card { padding: 10px 10px 16px; border-radius: 20px; }
+html.narrow .card h3 { margin: 12px 4px 4px; font-size: 17px; }
+html.narrow .card p { margin: 0 4px; font-size: 14px; line-height: 1.42; }
+html.narrow #bibtex { padding-top: 36px; }
+html.portrait .card { width: min(calc(100vw - 32px), calc(var(--gmax) * var(--par, var(--ar, 1.803)) + 20px)); }
+html.portrait .card-media { aspect-ratio: var(--par, var(--ar, 1.803)); }
+/* fix: gallery + footer. Upright, the footer lines up with the gallery's 16px edge. An upright tablet (or a tall
+   narrow window) caps the stacked videos at 620px, so a card no longer fills the screen and the next one shows beside
+   it, with type between the phone's and the desktop's */
+html.portrait .footer-inner { width: auto; margin-inline: 16px; }
+@media (max-width: 599px) { html.narrow .bibtex pre { padding: 20px 18px; font-size: 13px; } }
+@media (min-width: 600px) {
+  html.portrait .gallery-track { --gmax: min(calc(100svh - var(--nav-h) - 210px), 620px); gap: 16px; padding-inline: 24px; scroll-padding: 0 24px; }
+  html.portrait .results-head, html.portrait .footer-inner { margin-inline: 24px; }
+  html.narrow .results { padding: 64px 0 32px; }
+  html.narrow .results-head { margin-bottom: 22px; }
+  html.narrow .results-head h2 { font-size: 40px; letter-spacing: -0.025em; }
+  html.narrow .card { padding: 12px 12px 20px; }
+  html.portrait .card { width: min(calc(100vw - 48px), calc(var(--gmax) * var(--par, var(--ar, 1.803)) + 24px)); }
+  html.narrow .card h3 { margin: 14px 6px 5px; font-size: 19px; }
+  html.narrow .card p { margin: 0 6px; font-size: 15px; }
+}
+/* a phone held sideways (.short): the gallery stays in the nav's column, with less air and phone-size type, so a
+   card and the dots fit under the nav together */
+html.short .results { padding: 28px 0 14px; }
+html.short .results-head { margin-bottom: 12px; }
+html.short .results-head h2 { font-size: 30px; letter-spacing: -0.02em; }
+html.short .gallery-track { --gh: 150px; padding-block: 6px 18px; }
+html.short .card { width: min(calc(var(--gh) * var(--ar, 1.803) + 20px), var(--frame-w)); padding: 10px 10px 16px; border-radius: 20px; }
+html.short .card h3 { margin: 10px 4px 4px; font-size: 17px; }
+html.short .card p { margin: 0 4px; font-size: 14px; line-height: 1.42; }
+html.short .gallery-paddles { margin-top: 0; }
+html.short #bibtex { padding-top: 36px; }
+/* fix: gallery buttons. A card's play/pause button sits beside its title, under the video (js/controls.js), since
+   the clips have keys, a hotbar, labels and the agent itself in their bottom corners. The title and the button share
+   a row, centred on each other; the caption runs the card's full width under them */
+.card { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; align-content: start; }
+.card > .card-media { grid-column: 1 / -1; }
+.card > h3 { grid-column: 1; grid-row: 2; }
+.card > p { grid-column: 1 / -1; grid-row: 3; }
+/* (the margins move it down by half the gap between the title's top and bottom margins, without making the row taller) */
+.card > .vbtn { position: relative; grid-column: 2; grid-row: 2; align-self: center; margin: 6px 4px -6px 12px; }
+html.narrow .card > .vbtn, html.short .card > .vbtn { margin: 4px 2px -4px 10px; }
+/* phones: the upright environment clips make narrow cards (150-235px), so the titles run a size smaller beside a
+   closer button ("DeepMind Control: Walker Walk": SE 4 -> 3 lines, Pro 3 -> 2); every card alike, so they match */
+@media (max-width: 599px) {
+  html.narrow .card > h3 { font-size: 15px; letter-spacing: -.005em; }
+  html.narrow .card > .vbtn { margin-left: 4px; margin-right: 0; }
+}
+/* on a touchscreen the button keeps its look but takes taps over 44px, Apple's minimum */
+@media (pointer: coarse) { .vbtn::after { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)); border-radius: 50%; } }
+
+/* captions that say where the plan is: beside the execution, or above it in the stacked videos */
+.tall-only { display: none; }
+html.portrait .tall-only { display: inline; }
+html.portrait .wide-only { display: none; }
+
+/* fix: survival interlude on narrow screens. The video is as wide as the chapters' boxes (the screen less 12px a
+   side); a clip too tall for the screen (the stacked iron-ingot clip on an upright tablet, or the diamonds clip on a
+   phone held sideways) stops under the nav, letterboxed. A phone held sideways (.short) gets the same, clear of the
+   notch. Each tab's label puts its plans on a second, smaller line, so the tabs fit a phone without wrapping */
+html.narrow .cinema-figure { max-width: none; margin-inline: calc(12px - var(--gutter)); }
+html.short .cinema-figure { max-width: none; margin-inline: calc(max(12px, env(safe-area-inset-left, 0px)) - var(--gutter))
+                                                            calc(max(12px, env(safe-area-inset-right, 0px)) - var(--gutter)); }
+html.narrow .cinema-screen, html.short .cinema-screen { --sv-room: 16px; }
+html.narrow .cinema-caption, html.short .cinema-caption { margin-left: 2px; }
+html.narrow .segmented { margin: 32px auto 24px; }
+html.narrow .segmented button { padding: 7px 22px 8px; line-height: 1.15; }
+html.narrow .seg-sep { display: none; }
+html.narrow .seg-sub { display: block; font-size: 12px; font-weight: 500; opacity: .75; }
+
+/* fix: short landscape. A phone held sideways (site.js sets .short: under 500px tall, wider than tall, not .narrow).
+   The nav slides away while a chapter holds the screen (.stage-on), so each chapter gets the whole height. An
+   animation takes the narrow layout's box, the scene's title drawn above its 1920 x 880 body, as large as the height
+   allows (fitShort in site.js); the figure chapters put the current step beside one figure, with the other steps as
+   a row of segments above it. The sides keep clear of the notch (safe-area insets). */
+html.short .localnav { transition: transform .35s var(--ease), background .4s, border-color .4s, color .4s; }
+html.short.stage-on .localnav { transform: translateY(calc(-100% - 2px)); }
+html.short .chapter:not(.chapter-split) .stage { inset: 0; justify-content: flex-start; padding: var(--card-top, 0px)
+  env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
+html.short .stage-caption { position: relative; display: flex; flex-direction: column; justify-content: flex-end;
+                            width: var(--card-w, calc(100vw - 24px)); min-height: var(--cap-h, 0px); margin: 0;
+                            font: 700 18px/1.22 var(--serif); letter-spacing: -0.01em; text-align: left; }
+html.short .stage-caption .cap-in { position: relative; padding: 10px 16px 4px; transition: transform .45s var(--ease); }
+html.short .stage-caption::before { content: ""; position: absolute; inset: 0; background: var(--bg-2); border-radius: 16px 16px 0 0;
+                                    transform: translateY(var(--cap-top, 100%)); transition: transform var(--cap-dur, .45s) var(--ease); }
+html.short .stage-caption b { font-weight: 700; }
+html.short .stage-caption .sub { display: block; margin-top: 3px; font: 500 13px/1.4 var(--sans); letter-spacing: 0; color: var(--muted); }
+html.short .stage-frame { width: var(--card-w, calc(100vw - 24px)); aspect-ratio: 1920 / 880; border-radius: 0 0 16px 16px; }
+html.short .stage-frame iframe { top: -22.727%; height: 122.727%; }
+/* the figure chapters: copy on the left, the figure as large as the height allows on the right */
+html.short .chapter-split .split-stage { inset: 0; width: auto; height: auto; margin: 0; container-type: normal;
+  grid-template-columns: minmax(0, 1fr) var(--fig-w); gap: 24px; align-items: center;
+  padding: 8px max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); }
+html.short #replanning .split-stage { --fig-w: min(calc((100svh - 60px) * 1.914), calc(100vw - 300px
+  - max(0px, env(safe-area-inset-left, 0px) - 16px) - max(0px, env(safe-area-inset-right, 0px) - 16px))); }   /* (the copy keeps its width beside a notch) */
+html.short .chapter-lava .split-stage { --fig-w: min(calc((100svh - 96px) * 1.018), calc(100vw - 300px));
+                                       grid-template-columns: minmax(0, 420px) var(--fig-w); justify-content: center; gap: 40px; }
+html.short .chapter-split .eyebrow { font-size: 14px; margin-bottom: 4px; }
+html.short .chapter-split h3 { font-size: 21px; line-height: 1.12; margin-bottom: 12px; }
+html.short .chapter-split .steps { display: grid; grid-template-columns: repeat(var(--n, 6), minmax(0, 1fr)); column-gap: 5px; }
+html.short .chapter-lava .steps { --n: 5; }
+html.short .chapter-split .steps li { grid-row: 1; height: 20px; padding: 0; border: 0;
+  background: linear-gradient(var(--line), var(--line)) 0 50% / 100% 3px no-repeat; }
+html.short .chapter-split .steps li.done { background-image: linear-gradient(var(--muted), var(--muted)); }
+html.short .chapter-split .steps li > * { display: none; }
+html.short .chapter-split .steps li.on { display: contents; }
+html.short .chapter-split .steps li.on .prog { display: block; position: static; grid-row: 1; width: auto; height: 20px; transform: none;
+  background: linear-gradient(90deg, var(--ink) calc(var(--p, 0) * 100%), var(--line) 0) 0 50% / 100% 3px no-repeat; }
+html.short .chapter-split .steps li.on h4 { display: block; grid-row: 2; grid-column: 1 / -1; margin-top: 8px; font-size: 16px; }
+html.short .chapter-split .steps li.on .step-body { display: grid; grid-row: 3; grid-column: 1 / -1; }
+html.short .chapter-split .step-body > p { font-size: 14px; }
+html.short .replan-legend { gap: 2px 14px; margin-top: 4px; font-size: 12px; }
+html.short .replan-legend svg { height: 9px; }
+/* in-context learning: one plot at a time, as on a phone held upright */
+html.short .lava-figure { width: var(--fig-w); margin: 0; }
+html.short .lava-title { font-size: 13px; }
+html.short .lava-legend { justify-content: flex-start; gap: 2px 12px; margin-top: 4px; padding: 0 8px 0 13.6%; font-size: 11.5px; }
+html.short .lava-legend svg { height: 10px; }
+html.short .lava-grid { grid-template-columns: 1fr; }
+html.short .lava-cell { display: none; }
+html.short .lava-figure[data-step="0"] .lava-shot { position: relative; inset: auto; }
+html.short .lava-figure[data-step="0"] .lava-grid, html.short .lava-figure[data-step="0"] .lava-legend { display: none; }
+html.short .lava-figure[data-step="0"] [data-plot="shared"], html.short .lava-figure[data-step="1"] [data-plot="shared"],
+html.short .lava-figure[data-step="2"] [data-plot="independent"], html.short .lava-figure[data-step="3"] [data-plot="ours"],
+html.short .lava-figure[data-step="4"] [data-plot="vpt"] { display: block; }
+@media (prefers-reduced-motion: reduce) {
+  html.short .localnav, html.short .stage-caption::before, html.short .stage-caption .cap-in { transition: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cinema-screen { transition: none; }
+  .reveal { transition: none; opacity: 1; transform: none; }
+  .scroll-cue i { animation: none; }
+  html.narrow .stage-caption::before, html.narrow .stage-caption .cap-in { transition: none; }
+}
+
+/* fix: perf. The looping cue stops where it can't be seen (the scroll cue once it has faded, site.js updateHero), so a
+   page at rest has nothing to animate */
+.scroll-cue.still i { animation-play-state: paused; }
+
+/* controls: each animation's progress bar and its controls (site.js "controls"). The box (a scene's frame, or the
+   figure drawn in the page) takes taps and sideways swipes, and leaves vertical scrolling to the page (pan-y). */
+.chapter-sticky .ctl-box { pointer-events: auto; cursor: pointer; touch-action: pan-y pinch-zoom; user-select: none; -webkit-user-select: none;
+                           -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.ctl-box:focus { outline: none; }
+/* the bar: one segment per click, inside the box along its bottom, clear of the rounded corners */
+.pbar { position: absolute; z-index: 3; left: var(--pb-x, 26px); right: var(--pb-x, 26px); bottom: var(--pb-b, 11px); height: 2px;
+        display: flex; gap: 4px; pointer-events: none; transition: height .25s var(--ease); }
+.pbar i { position: relative; flex: 1; overflow: hidden; border-radius: 2px; background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.pbar i::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--ink) 40%, transparent);
+                 transform-origin: 0 50%; transform: scaleX(var(--p, 0)); transition: background .25s; }
+html.narrow .stage-frame, html.short .stage-frame { --pb-x: 14px; --pb-b: 5px; }   /* (below the Minecraft chart's footnote) */
+/* the figures drawn in the page sit in a grey box too, beside the copy as when stacked, so the bar keeps the same
+   place from the box's edges in every chapter: 26 px in and 11 px up, or 14 and 5 on a phone or a short screen */
+.chapter-split:not(.split-stack) .split-stage > figure { padding: 24px 28px 24px; background: var(--bg-2); border-radius: 28px; }
+html.short .chapter-split:not(.split-stack) .split-stage > figure { padding: 10px 14px 12px; border-radius: 16px; }
+.chapter-split:not(.split-stack) .lava-shot { inset: 24px 28px 58px; }
+.chapter-split .ctl-box { --pb-x: 26px; --pb-b: 11px; }
+html.narrow .chapter-split .ctl-box, html.short .chapter-split .ctl-box { --pb-x: 14px; --pb-b: 5px; }
+/* selected: the bar darkens and thickens, and on a wide screen a faint ring goes round the box (on a phone the title
+   and the frame make one box, so the ring is left out there) */
+.ctl-box.selected .pbar { height: 3px; }
+.ctl-box.selected .pbar i::after { background: var(--ink); }
+.ctl-box.selected { outline: 2px solid color-mix(in srgb, var(--ink) 14%, transparent); outline-offset: 4px; }
+html.narrow .chapter:not(.chapter-split) .ctl-box.selected, html.short .chapter:not(.chapter-split) .ctl-box.selected { outline: none; }
+.ctl-box:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+/* the controls: the glyph in the middle (what a tap does next), a chevron at each side, and a line on the gestures */
+.ctl { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+/* (perf2 10-16) hidden once faded out: at opacity 0 their blurred backdrops (three per chapter) were still composited
+   layers, redrawn behind every scroll frame; inherit, not visible, so a hidden stage still hides them */
+.ctl > * { position: absolute; opacity: 0; visibility: hidden; transition: opacity .45s, visibility 0s .45s; }
+.ctl-glyph { left: 50%; top: 50%; width: clamp(54px, calc(var(--frame-w) * .052), 80px); aspect-ratio: 1; border-radius: 50%;
+             transform: translate(-50%, -50%); display: grid; place-items: center; color: var(--bg);
+             background: color-mix(in srgb, var(--ink) 50%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.ctl-glyph svg { width: 100%; height: 100%; fill: currentColor; }
+.ctl-side { top: 50%; width: clamp(34px, calc(var(--frame-w) * .03), 46px); aspect-ratio: 1; border-radius: 50%; transform: translateY(-50%);
+            display: grid; place-items: center; color: var(--bg); background: color-mix(in srgb, var(--ink) 40%, transparent);
+            -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.ctl-side svg { width: 56%; height: 56%; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.ctl-prev { left: clamp(10px, calc(var(--frame-w) * .012), 20px); }
+.ctl-prev svg { transform: scaleX(-1); }
+.ctl-next { right: clamp(10px, calc(var(--frame-w) * .012), 20px); }
+.ctl-hint { left: 50%; bottom: calc(var(--pb-b, 11px) + 14px); transform: translateX(-50%); max-width: calc(100% - 16px); padding: 6px 14px;
+            border-radius: 999px; white-space: nowrap; font: 600 13px/1.3 var(--sans); letter-spacing: .01em; color: var(--ink-2);
+            background: color-mix(in srgb, var(--bg) 90%, transparent); }
+.ctl-ar { display: inline-block; font: 700 1.3em/1 system-ui, -apple-system, sans-serif; vertical-align: -.06em; }
+.ctl.show-glyph .ctl-glyph, .ctl.show-prev .ctl-prev, .ctl.show-next .ctl-next, .ctl.show-hint .ctl-hint { opacity: 1; visibility: inherit; transition: none; }
+.ctl.show-glyph .ctl-glyph { animation: ctl-pop .3s var(--ease); }
+@keyframes ctl-pop { from { transform: translate(-50%, -50%) scale(.84); } }
+.ctl-box.paused .ctl-glyph { opacity: 1; visibility: inherit; transition: opacity .45s; }   /* paused by the reader: the play glyph stays */
+/* controls: the transport (site.js "controls"). Previous, pause or play, and next, as buttons that work without
+   selecting the box first, and a note on the keys (or the swipe) until the reader has used the controls (html.ctl-used).
+   On a wide screen it floats over the bottom of the animation: shown as the chapter comes into focus, while the
+   pointer moves over the box and after a key (.awake), and always on a touch screen. Under the box where there is room
+   (html.ctl-below) and beside it on a phone held sideways (html.short), it stays. */
+.ctl-bar { --ctl-b: clamp(34px, calc(var(--frame-w) * .027), 40px);
+           position: absolute; z-index: 4; display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 999px;
+           pointer-events: auto; cursor: default; color: var(--ink); user-select: none; -webkit-user-select: none;
+           background: color-mix(in srgb, var(--bg) 80%, transparent);
+           -webkit-backdrop-filter: blur(14px) saturate(1.5); backdrop-filter: blur(14px) saturate(1.5);
+           box-shadow: 0 0 0 .5px color-mix(in srgb, var(--ink) 14%, transparent), 0 6px 20px color-mix(in srgb, var(--ink) 12%, transparent);
+           opacity: 0; visibility: hidden; transition: opacity .35s, visibility 0s .35s; }
+/* (inherit rather than visible: the stage hides itself, and so the transport, while its headline shows) */
+.ctl-bar.awake, .ctl-bar:hover, .ctl-bar:has(:focus-visible) { opacity: 1; visibility: inherit; transition: opacity .2s; }
+@media (hover: none) { .ctl-bar { opacity: 1; visibility: inherit; } }
+.stage > .ctl-bar { left: 50%; bottom: calc((100% - var(--frame-h)) / 2 + clamp(20px, calc(var(--frame-w) * .017), 30px));
+                    transform: translateX(-50%); }
+.chapter-split figure > .ctl-bar { left: 50%; bottom: calc(var(--pb-b, 11px) + 14px); transform: translateX(-50%); }
+.ctl-btn { position: relative; flex: none; width: var(--ctl-b); aspect-ratio: 1; padding: 0; border: 0; border-radius: 50%;
+           display: grid; place-items: center; color: inherit; background: transparent; cursor: pointer; transition: background .2s;
+           -webkit-tap-highlight-color: transparent; }
+.ctl-btn::after { content: ""; position: absolute; inset: -6px -1px; }   /* (a finger's reach) */
+.ctl-btn.hit { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+@media (hover: hover) { .ctl-btn:hover { background: color-mix(in srgb, var(--ink) 10%, transparent); } }   /* (a tap leaves :hover stuck on a phone) */
+.ctl-btn:active { background: color-mix(in srgb, var(--ink) 16%, transparent); }
+.ctl-btn:focus-visible { outline: 2px solid var(--mirror); outline-offset: 1px; }
+.ctl-btn svg { width: 100%; height: 100%; fill: currentColor; }
+.ctl-btn svg.st { width: 50%; height: 50%; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.ctl-b-prev svg { transform: scaleX(-1); }
+.ctl-tip { display: flex; align-items: center; gap: 3px; padding: 0 13px 0 5px; font: 600 12.5px/1 var(--sans); letter-spacing: .01em;
+           color: var(--ink-2); white-space: nowrap; }
+.ctl-tip kbd { display: inline-grid; place-items: center; width: 19px; height: 19px; margin-left: 2px; border-radius: 5px; color: var(--ink);
+               background: var(--bg);
+               box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent), 0 1px 0 color-mix(in srgb, var(--ink) 18%, transparent); }
+.ctl-tip kbd svg { width: 11px; height: 11px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+html.ctl-used .ctl-tip { display: none; }
+@media (prefers-reduced-motion: reduce) { .ctl-b-play { display: none; } }
+/* under the box (a narrow screen, where site.js fitCard keeps CTL_ROOM for it, a wide one with room under the frame, and
+   the figures beside their copy, which always have room under them) or beside it (a phone held sideways): on the page,
+   and always shown */
+html.ctl-below .ctl-bar, html.short .ctl-bar, html:not(.short) .chapter-split:not(.split-stack) .ctl-bar { opacity: 1; visibility: inherit; transition: none;
+  background: color-mix(in srgb, var(--ink) 6%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: none; }
+html.ctl-below .stage > .ctl-bar { top: calc((100% + var(--frame-h)) / 2 + 8px); bottom: auto; }
+html.narrow .ctl-bar, html.short .ctl-bar { --ctl-b: 34px; }
+html.narrow .stage > .ctl-bar { position: relative; left: auto; top: auto; transform: none; margin-top: 8px; }
+html.ctl-below .chapter-split figure > .ctl-bar, html:not(.short) .chapter-split:not(.split-stack) figure > .ctl-bar { top: calc(100% + 8px); bottom: auto; }
+html.ctl-below .chapter-split.split-stack .split-stage > figure { margin-bottom: 48px; }   /* (split.js counts it) */
+html.short .ctl-bar { flex-direction: column; }
+html.short .ctl-tip { display: none; }
+html.short .stage > .ctl-bar { left: var(--ctl-x); top: var(--ctl-y); bottom: auto; transform: translateY(-50%); }
+html.short .chapter-split figure > .ctl-bar { left: calc(100% + 8px); top: 50%; bottom: auto; transform: translateY(-50%); }
+html.short .chapter-split .split-stage { padding-right: calc(max(16px, env(safe-area-inset-right, 0px)) + 48px); }
+/* the survival video's bar (js/controls.js): just under the video, clear of the game's hotbar, above the caption */
+.cbar { position: relative; grid-column: 1 / -1; grid-row: 2; align-self: start; margin: 10px 2px 0; height: 2px; overflow: hidden;
+        border-radius: 2px; pointer-events: none; background: color-mix(in srgb, var(--light) 20%, transparent); }
+.cbar i { position: absolute; inset: 0; background: color-mix(in srgb, var(--light) 75%, transparent); transform-origin: 0 50%;
+          transform: scaleX(var(--p, 0)); }
+@media (prefers-reduced-motion: reduce) {
+  .ctl.show-glyph .ctl-glyph { animation: none; }
+}
