@@ -5,13 +5,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Mirror: MineRL Diamond Challenge Episodes</title>
-  <meta name="description"
-    content="Hour-long MineRL Diamond Challenge episodes of Mirror, with the agent's recording, its video plans and a timeline of what happened.">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="description" content="Every MineRL Diamond Challenge evaluation episode of Mirror: watch the agent beside its video plan.">
+  <meta name="theme-color" content="#0f0e0d">
   <link rel="stylesheet" href="../css/theme.css">
   <link rel="stylesheet" href="../css/site.css">
-  <link rel="stylesheet" href="../css/viewer.css">
-  <link rel="stylesheet" href="eval.css">
+  <link rel="stylesheet" href="../css/watch.css?v=20261016z">
   <script src="../js/embed.js"></script>
 </head>
 
@@ -19,102 +17,49 @@
   <nav class="localnav" aria-label="Sections">
     <div class="localnav-inner">
       <a class="localnav-mark" href="../">Mirror</a>
-      <div class="localnav-links">
-        <a href="../#minecraft">Minecraft</a>
-        <a href="../#videos">Videos</a>
-      </div>
+      <div class="localnav-links"><a href="../#survival">Survival mode</a></div>
       <a class="pill pill-dark localnav-cta" href="#">Paper</a>
     </div>
   </nav>
 
-  <main class="ev">
-    <header class="ev-head">
-      <p class="eyebrow">MineRL Diamond Challenge</p>
-      <h1>All 384 <span class="mk">evaluation episodes</span></h1>
-      <p class="lede">Every episode behind the paper&rsquo;s Diamond Challenge figure, up to an hour each, 128 per setting. Open one to watch the agent with its video plan and a timeline of what happened.</p>
-    </header>
-
-    <div class="ev-tabs-wrap">
-      <div class="ev-tabs" role="tablist" aria-label="Setting">
-        <button role="tab" data-tab="offline" aria-selected="true">Offline <span>(Generative VP)</span></button>
-        <button role="tab" data-tab="online" aria-selected="false">Online <span>(Generative VP)</span></button>
-        <button role="tab" data-tab="oracle" aria-selected="false">Online <span>(Oracle VP)</span></button>
+  <main class="w cinema">
+    <!-- all episodes -->
+    <div class="w-list" id="list">
+      <header class="cinema-head">
+        <p class="eyebrow">MineRL Diamond Challenge</p>
+        <h1>All 384 <span class="mk">evaluation episodes</span></h1>
+      </header>
+      <div class="segmented" id="tabs" role="tablist" aria-label="Setting">
+        <button role="tab" type="button" data-tab="online" aria-selected="true">Online<span class="seg-sep"> &middot; </span><span class="seg-sub">generated plans</span></button>
+        <button role="tab" type="button" data-tab="oracle" aria-selected="false">Online<span class="seg-sep"> &middot; </span><span class="seg-sub">oracle plans</span></button>
+        <button role="tab" type="button" data-tab="offline" aria-selected="false">Offline<span class="seg-sep"> &middot; </span><span class="seg-sub">generated plans</span></button>
       </div>
-      <ul class="ev-facts" id="arm-facts" aria-label="What this agent used"></ul>
-      <div class="ev-rates" id="rates" aria-label="Acquisition milestones"></div>
+      <p class="w-note" id="note"></p>
+      <section class="w-section" aria-labelledby="count">
+        <div class="w-section-head"><h3 id="count"></h3><span id="count-sub"></span></div>
+        <ul class="w-grid" id="grid"></ul>
+      </section>
     </div>
 
-    <section class="ev-episodes" aria-label="Episodes">
-      <div class="ev-table-wrap">
-        <table class="ev-dtable">
-          <thead id="episodes-head"></thead>
-          <tbody id="episodes-body"></tbody>
-        </table>
+    <!-- one episode -->
+    <section class="w-episode" id="episode" aria-labelledby="ep-title" tabindex="-1" hidden>
+      <div class="w-topbar">
+        <button class="w-back" id="back" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>All episodes</button>
+        <div class="w-steps">
+          <button class="w-round" id="ep-prev" type="button" aria-label="Previous episode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+          <button class="w-round" id="ep-next" type="button" aria-label="Next episode"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></button>
+        </div>
       </div>
+      <header class="cinema-head">
+        <p class="eyebrow" id="ep-eyebrow"></p>
+        <h2 id="ep-title"></h2>
+      </header>
+      <figure id="player"></figure>
     </section>
   </main>
 
-  <footer class="footer">
-    <div class="footer-inner">
-      <p class="footer-mark">Mirror</p>
-      <p>Hyunwoo Ryu, Eric Ming Chen, Max Wilcoxson, Vincent Sitzmann &middot; MIT</p>
-      <p><a href="../">Back to the project page</a> &middot; <a href="#">Back to top</a></p>
-    </div>
-  </footer>
-
-  <div class="ev-modal" id="viewer" role="dialog" aria-modal="true" aria-labelledby="ep-title" hidden>
-    <div class="ev-sheet">
-      <button class="ev-return" id="back">All episodes</button>
-      <div class="ev-sheet-head">
-        <div>
-          <p id="ep-setting" class="ev-setting"></p>
-          <h2 id="ep-title">Episode</h2>
-        </div>
-        <div class="ev-sheet-buttons">
-          <button class="paddle" id="ep-prev" aria-label="Previous episode">&#8249;</button>
-          <button class="paddle" id="ep-next" aria-label="Next episode">&#8250;</button>
-          <button class="paddle ev-close" id="close" aria-label="Close (Esc)">&times;</button>
-        </div>
-      </div>
-
-      <!-- the outcome, then the twelve milestones with when each was first reached (a click jumps there) -->
-      <p class="ev-outcome" id="ep-outcome"></p>
-      <ol class="ev-strip" id="ep-strip" aria-label="Milestones reached"></ol>
-
-      <div class="ev-view" id="view-toggle" role="tablist" aria-label="Video">
-        <button role="tab" data-view="raw" aria-selected="true">Recording</button>
-        <button role="tab" data-view="plan_idm" aria-selected="false">With the video plan</button>
-      </div>
-
-      <div class="ev-screen">
-        <video id="video-raw" controls playsinline preload="metadata" controlslist="nodownload"></video>
-        <video id="video-plan_idm" playsinline muted preload="metadata" controlslist="nodownload" tabindex="-1"></video>
-      </div>
-
-      <!-- the same order as the BASALT viewer: the timeline under the video, the speed row, then what is happening now -->
-      <svg id="timeline" role="img" aria-label="Episode timeline"></svg>
-      <div class="ev-controls">
-        <span class="ev-speeds" id="speeds" role="group" aria-label="Speed"></span>
-        <button id="highlight" class="ev-highlight" aria-pressed="true"
-          title="Plays at 1&times; from 3.5 s before to 1 s after each subgoal change (and the diamond), and at 16&times; in between">Fast-forward between subgoals</button>
-      </div>
-      <div class="ev-now" id="stage-now" aria-live="off"></div>
-      <p class="ev-legend ev-muted" id="legend"></p>
-
-      <div class="ev-lists">
-        <section id="section-stages">
-          <h3>Subgoals</h3>
-          <ol id="list-stages"></ol>
-        </section>
-        <section>
-          <h3 id="damage-title">Deaths</h3>
-          <ol id="list-damage"></ol>
-        </section>
-      </div>
-    </div>
-  </div>
-
-  <script src="eval.js"></script>
+  <script src="../js/watch-player.js?v=20261016z"></script>
+  <script src="watch.js?v=20261016z"></script>
 </body>
 
 </html>

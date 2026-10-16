@@ -4,14 +4,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Mirror: MineRL BASALT Challenge Episodes</title>
-  <meta name="description"
-    content="Every BASALT evaluation episode of Mirror on FindCave and MakeWaterfall, with the supervised and the self-improving V2A model.">
-  <meta name="theme-color" content="#ffffff">
+  <title>Mirror: MineRL BASALT Episodes</title>
+  <meta name="description" content="Every MineRL BASALT evaluation episode of Mirror, supervised and self-improving, on the same 11 worlds.">
+  <meta name="theme-color" content="#0f0e0d">
   <link rel="stylesheet" href="../css/theme.css">
   <link rel="stylesheet" href="../css/site.css">
-  <link rel="stylesheet" href="../css/viewer.css">
-  <link rel="stylesheet" href="basalt.css">
+  <link rel="stylesheet" href="../css/watch.css?v=20261016z">
   <script src="../js/embed.js"></script>
 </head>
 
@@ -19,89 +17,46 @@
   <nav class="localnav" aria-label="Sections">
     <div class="localnav-inner">
       <a class="localnav-mark" href="../">Mirror</a>
-      <div class="localnav-links">
-        <a href="../#basalt">BASALT</a>
-        <a href="../#videos">Videos</a>
-      </div>
+      <div class="localnav-links"><a href="../#basalt">BASALT</a></div>
       <a class="pill pill-dark localnav-cta" href="#">Paper</a>
     </div>
   </nav>
 
-  <main class="ev">
-    <header class="ev-head">
-      <p class="eyebrow">MineRL BASALT</p>
-      <h1>All 44 <span class="mk">evaluation episodes</span></h1>
-      <p class="lede">FindCave and MakeWaterfall on the 11 worlds of the BASALT 2022 challenge, each played by the supervised and by the self-improving V2A model. Pick one to watch it.</p>
-    </header>
-
-    <div class="ev-tabs-wrap">
-      <div class="ev-tabs" role="tablist" aria-label="Task">
-        <button role="tab" data-tab="findcave" aria-selected="true">FindCave</button>
-        <button role="tab" data-tab="waterfall" aria-selected="false">MakeWaterfall</button>
+  <main class="w cinema">
+    <!-- all episodes -->
+    <div class="w-list" id="list">
+      <header class="cinema-head">
+        <p class="eyebrow">MineRL BASALT</p>
+        <h1>All 44 <span class="mk">evaluation episodes</span></h1>
+      </header>
+      <div class="segmented" id="tabs" role="tablist" aria-label="Task">
+        <button role="tab" type="button" data-tab="findcave" aria-selected="true">FindCave</button>
+        <button role="tab" type="button" data-tab="waterfall" aria-selected="false">MakeWaterfall</button>
       </div>
-      <p class="ev-goal" id="goal"></p>
-      <div class="ev-versions" id="versions" role="tablist" aria-label="Version"></div>
-      <!-- (cards 10-16) phones only: the selected version's checklist, once under the two-up switch (basalt.css) -->
-      <ul class="ev-facts ev-version-facts" id="version-facts"></ul>
+      <p class="w-note" id="note"></p>
+      <div id="sections"></div>
     </div>
 
-    <section class="ev-episodes" aria-label="Episodes">
-      <div class="ev-table-wrap">
-        <table>
-          <thead id="episodes-head"></thead>
-          <tbody id="episodes-body"></tbody>
-        </table>
+    <!-- one episode -->
+    <section class="w-episode" id="episode" aria-labelledby="ep-title" tabindex="-1" hidden>
+      <div class="w-topbar">
+        <button class="w-back" id="back" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>All episodes</button>
+        <div class="w-steps">
+          <button class="w-round" id="ep-prev" type="button" aria-label="Previous world"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+          <button class="w-round" id="ep-next" type="button" aria-label="Next world"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6"/></svg></button>
+        </div>
       </div>
+      <header class="cinema-head">
+        <p class="eyebrow" id="ep-eyebrow"></p>
+        <h2 id="ep-title"></h2>
+      </header>
+      <div class="segmented" id="models" role="tablist" aria-label="Model"></div>
+      <figure id="player"></figure>
     </section>
   </main>
 
-  <footer class="footer">
-    <div class="footer-inner">
-      <p class="footer-mark">Mirror</p>
-      <p>Hyunwoo Ryu, Eric Ming Chen, Max Wilcoxson, Vincent Sitzmann &middot; MIT</p>
-      <p><a href="../">Back to the project page</a> &middot; <a href="#">Back to top</a></p>
-    </div>
-  </footer>
-
-  <div class="ev-modal" id="viewer" role="dialog" aria-modal="true" aria-labelledby="ep-title" hidden>
-    <div class="ev-sheet">
-      <button class="ev-return" id="back">All episodes</button>
-      <div class="ev-sheet-head">
-        <div>
-          <p id="ep-task" class="ev-setting"></p>
-          <h2 id="ep-title">Episode</h2>
-          <p id="ep-meta" class="ev-result"></p>
-        </div>
-        <div class="ev-sheet-buttons">
-          <button class="paddle" id="ep-prev" aria-label="Previous world">&#8249;</button>
-          <button class="paddle" id="ep-next" aria-label="Next world">&#8250;</button>
-          <button class="paddle ev-close" id="close" aria-label="Close (Esc)">&times;</button>
-        </div>
-      </div>
-
-      <div class="ev-row">
-        <div class="ev-view ev-model" id="version-toggle" role="tablist" aria-label="Model"></div>
-        <div class="ev-view" id="view-toggle" role="tablist" aria-label="Video">
-          <button role="tab" data-view="raw" aria-selected="true">Recording</button>
-          <button role="tab" data-view="plan_idm" aria-selected="false">With the video plan</button>
-        </div>
-      </div>
-
-      <div class="ev-screen">
-        <video id="video-raw" controls playsinline preload="metadata" controlslist="nodownload"></video>
-        <video id="video-plan_idm" playsinline muted preload="metadata" controlslist="nodownload" tabindex="-1"></video>
-      </div>
-
-      <svg id="timeline" role="img" aria-label="Episode timeline"></svg>
-      <div class="ev-controls">
-        <span class="ev-speeds" id="speeds" role="group" aria-label="Speed"></span>
-        <button id="to-moment"></button>
-      </div>
-      <p class="ev-legend ev-muted" id="legend"></p>
-    </div>
-  </div>
-
-  <script src="basalt.js"></script>
+  <script src="../js/watch-player.js?v=20261016z"></script>
+  <script src="watch.js?v=20261016z"></script>
 </body>
 
 </html>

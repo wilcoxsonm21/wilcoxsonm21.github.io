@@ -377,7 +377,7 @@ for (const slot in SLOT_CLIPS) {
     VIDS[slot] = {};
     for (const clip of SLOT_CLIPS[slot]) {
       const v = document.createElement("video");
-      v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = CLIPS[clip].src;
+      v.muted = true; v.playsInline = true; v.preload = window.SCENE_SCROLL ? "none" : "auto"; v.src = CLIPS[clip].src;
       v.style.visibility = "hidden";
       host.append(v);
       VIDS[slot][clip] = v;

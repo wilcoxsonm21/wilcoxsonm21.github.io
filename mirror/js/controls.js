@@ -1,54 +1,82 @@
 // controls.js: Apple-style controls for the page's videos and its gallery.
 //
-// Every gallery video gets a round play/pause button in place of the browser's controls, with a ring that shows how far
-// the video has played; the survival video has no controls and plays while it is in view, with a thin bar along its
-// bottom that shows how far it has played. A video the reader pauses
-// stays paused (data-held): site.js plays videos as they scroll into view and skips held ones. The gallery gets a dot
-// indicator, one dot per card, that follows the scrolling and scrolls to a card when clicked.
+// Every gallery video is a mini player like the survival video: no controls, the page's labels over the clip, a tap to
+// pause or play, and a thin bar under it that shows how far it has played (the survival video's too). A video the
+// reader pauses stays paused (data-held): site.js plays videos as they scroll into view and skips held ones. The
+// gallery gets a dot indicator, one dot per card, that follows the scrolling and scrolls to a card when clicked.
 (() => {
   "use strict";
-  const R = 15.5, C = 2 * Math.PI * R;
-  const PAUSE = '<rect x="13.2" y="11.5" width="3.2" height="13" rx="1"/><rect x="19.6" y="11.5" width="3.2" height="13" rx="1"/>';
-  const PLAY = '<path d="M14.6 11.7v12.6c0 .7.8 1.1 1.4.7l10-6.3c.5-.4.5-1.1 0-1.4l-10-6.3c-.6-.4-1.4 0-1.4.7z"/>';
-
-  function attach(video, host) {
+  // a gallery card's mini player: the survival video's look at card size. Its labels are the page's text over the clip
+  // (data-panes: "two" for plan | execution, "stages:<a>|<b>|<c>" for FindCave's stages, plan above execution); a tap or
+  // a click (or Enter/Space) pauses or plays, with a glyph that pops and stays while paused; the bar under it shows how
+  // far it has played. It plays at 1x, with nothing to skip or seek
+  const GLYPH_PAUSE = '<svg viewBox="0 0 36 36"><rect x="11.5" y="10" width="4.6" height="16" rx="1.4"/><rect x="19.9" y="10" width="4.6" height="16" rx="1.4"/></svg>';
+  const GLYPH_PLAY = '<svg viewBox="0 0 36 36"><path d="M13.2 10.4v15.2c0 .9 1 1.4 1.7.9l12-7.6c.7-.4.7-1.4 0-1.8l-12-7.6c-.7-.5-1.7 0-1.7.9z"/></svg>';
+  function pane(k, s, tags) {
+    const d = document.createElement("div");
+    d.className = "g-pane";
+    d.setAttribute("aria-hidden", "true");
+    d.style.setProperty("--k", k);
+    if (s != null) d.style.setProperty("--s", s);
+    d.innerHTML = tags.map(([cls, text]) => `<span class="sv-tag ${cls}">${text}</span>`).join("");
+    return d;
+  }
+  function mini(video, media) {
     video.removeAttribute("controls");
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "vbtn";
-    b.innerHTML = `<svg viewBox="0 0 36 36" aria-hidden="true"><circle class="vbtn-track" cx="18" cy="18" r="${R}"/>` +
-      `<circle class="vbtn-ring" cx="18" cy="18" r="${R}" stroke-dasharray="${C.toFixed(2)}" stroke-dashoffset="${C.toFixed(2)}"/>` +
-      `<g class="vbtn-icon" fill="currentColor"></g></svg>`;
-    const ring = b.querySelector(".vbtn-ring"), icon = b.querySelector(".vbtn-icon");
-    // the ring follows the video every frame while it plays (timeupdate alone comes only ~4 times a second)
-    let raf = 0;
-    const progress = () => {
+    const spec = media.dataset.panes || "";
+    if (spec === "two") media.append(pane(0, null, [["", "Video plan"]]), pane(1, null, [["", "Execution"]]));
+    else if (spec.startsWith("stages:")) spec.slice(7).split("|").forEach((stage, s) =>
+      media.append(pane(0, s, [["", "Video plan"], ["g-stage", stage]]), pane(1, s, [["", "Execution"]])));
+    const glyph = document.createElement("div");
+    glyph.className = "g-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    media.append(glyph);
+    const bar = document.createElement("div");
+    bar.className = "cbar";
+    bar.setAttribute("aria-hidden", "true");
+    bar.innerHTML = "<i></i>";
+    media.after(bar);
+    const fill = bar.firstChild;
+    const title = media.closest(".card")?.querySelector("h3")?.textContent.trim() || "Video";
+    media.tabIndex = 0;
+    media.setAttribute("role", "button");
+    // the bar follows the video every frame while it plays (timeupdate alone comes only ~4 times a second)
+    let raf = 0, last = "";
+    const follow = () => {
       raf = 0;
-      const d = video.duration;
-      const off = (C * (1 - (d ? Math.min(1, video.currentTime / d) : 0))).toFixed(2);
-      if (off !== ring.getAttribute("stroke-dashoffset")) ring.setAttribute("stroke-dashoffset", off);
-      if (!video.paused && !video.ended) raf = requestAnimationFrame(progress);
+      const d = video.duration, p = (d ? Math.min(1, video.currentTime / d) : 0).toFixed(4);
+      if (p !== last) { last = p; fill.style.setProperty("--p", p); }
+      if (!video.paused && !video.ended) raf = requestAnimationFrame(follow);
     };
     const state = () => {
-      const playing = !video.paused && !video.ended;
-      icon.innerHTML = playing ? PAUSE : PLAY;
-      b.setAttribute("aria-label", playing ? "Pause video" : "Play video");
-      cancelAnimationFrame(raf);
-      progress();
+      const held = !!video.dataset.held;
+      media.classList.toggle("paused", held);
+      glyph.innerHTML = held ? GLYPH_PLAY : GLYPH_PAUSE;
+      media.setAttribute("aria-label", `${title}: ${held ? "play" : "pause"} the video`);
+      if (!raf) raf = requestAnimationFrame(follow);
     };
-    video.addEventListener("timeupdate", () => { if (!raf) raf = requestAnimationFrame(progress); });
-    ["play", "pause", "ended", "emptied", "loadedmetadata"].forEach(e => video.addEventListener(e, state));
-    b.addEventListener("click", () => {
-      if (video.paused || video.ended) {
+    ["timeupdate", "play", "pause", "seeked", "emptied", "loadedmetadata", "ended"].forEach(e => video.addEventListener(e, state));
+    let popTimer = 0;
+    const toggle = () => {
+      if (video.dataset.held) {
         delete video.dataset.held;
         if (!video.getAttribute("src") && video.dataset.src) video.src = video.dataset.src;
         video.play().catch(() => {});
       } else {
-        video.dataset.held = "1";
+        video.dataset.held = "1";   // site.js leaves a held video paused as it scrolls in and out
         video.pause();
       }
+      state();
+      media.classList.remove("show-glyph");
+      void media.offsetWidth;   // (restart the pop)
+      media.classList.add("show-glyph");
+      clearTimeout(popTimer);
+      popTimer = setTimeout(() => media.classList.remove("show-glyph"), 500);
+    };
+    media.addEventListener("click", toggle);
+    media.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); }
     });
-    host.append(b);
     state();
   }
 
@@ -72,8 +100,7 @@
     const kick = () => { if (!raf) raf = requestAnimationFrame(follow); };
     ["timeupdate", "play", "pause", "seeked", "emptied", "loadedmetadata", "ended"].forEach(e => cinema.addEventListener(e, kick));
   }
-  // a gallery card's button sits beside its title, under the clip, which has keys, a hotbar and labels in its corners
-  document.querySelectorAll(".card-media").forEach(m => { const v = m.querySelector("video"); if (v) attach(v, m.closest(".card") || m); });
+  document.querySelectorAll(".card-media").forEach(m => { const v = m.querySelector("video"); if (v) mini(v, m); });
 
   // the gallery's dot indicator
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;

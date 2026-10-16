@@ -199,7 +199,7 @@ const $ = id => document.getElementById(id);
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const STILLS = window.STILLS || { wf0: "stills/wf0.jpg", wf1: "stills/wf1.jpg", wf2: "stills/wf2.jpg",
                                   cave0: "stills/cave0.jpg", cave1: "stills/cave1.jpg", cave2: "stills/cave2.jpg" };
-document.querySelectorAll("img[data-still]").forEach(im => im.src = STILLS[im.dataset.still]);
+document.querySelectorAll("img[data-still]").forEach(im => { if (window.SCENE_SCROLL) im.dataset.src = STILLS[im.dataset.still]; else im.src = STILLS[im.dataset.still]; });
 window.__errors = [];
 // local checking only: headless Firefox does not split the system Avenir Next .ttc into weights
 if (RENDER) document.head.insertAdjacentHTML("beforeend", "<style>" + [["Regular", 400, "normal"], ["Italic", 400, "italic"],
@@ -492,7 +492,7 @@ for (const slot in SLOT_CLIPS) {
     VIDS[slot] = {};
     for (const clip of SLOT_CLIPS[slot]) {
       const v = document.createElement("video");
-      v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = CLIPS[clip].src;
+      v.muted = true; v.playsInline = true; v.preload = window.SCENE_SCROLL ? "none" : "auto"; v.src = CLIPS[clip].src;
       v.style.visibility = "hidden";
       host.append(v);
       VIDS[slot][clip] = v;

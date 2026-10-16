@@ -336,6 +336,33 @@ if (window.PORTRAIT) document.head.insertAdjacentHTML("beforeend", "<style>#stag
 </script>
 """
 TAIL = '<script src="scene-adapter.js"></script>\n<script>SceneAdapter.init("{name}");</script>\n'
+# In scroll mode a scene fetches only what its opening shows (scenes/scene-adapter.js): its images go in data-src, which
+# the adapter fills as a frame shows each (and, opened on its own, at once), and its clips start with preload none, so
+# the browser asks for none of them before the adapter has taken their sources. lazy_media() is idempotent:
+#   python3 -c "import sys; sys.path.insert(0, 'mirror/tools'); import build_scenes as b; b.relazy()"
+# applies it to the built scenes in place (dreamer.html is edited by hand and never rebuilt).
+LAZY_MEDIA = [
+    (re.compile(r'(<img\b[^>]*?)(?<![-\w])src="(media/[^"]+)"'), r'\1data-src="\2"'),
+    ("im => im.src = STILLS[im.dataset.still]",
+     "im => { if (window.SCENE_SCROLL) im.dataset.src = STILLS[im.dataset.still]; else im.src = STILLS[im.dataset.still]; }"),
+    ('v.preload = "auto"; v.src = CLIPS[clip].src;', 'v.preload = window.SCENE_SCROLL ? "none" : "auto"; v.src = CLIPS[clip].src;'),
+]
+
+
+def lazy_media(html):
+    for a, b in LAZY_MEDIA:
+        html = a.sub(b, html) if isinstance(a, re.Pattern) else html.replace(a, b)
+    return html
+
+
+def relazy():
+    for name in SOURCES:
+        path = os.path.join(OUT, name + ".html")
+        html = open(path, encoding="utf-8").read()
+        new = lazy_media(html)
+        if new != html:
+            open(path, "w", encoding="utf-8").write(new)
+            print(name, "made lazy")
 
 
 def encode_video(raw, name, key, opts):
@@ -415,6 +442,7 @@ def build(name, keep_media=False):
     html = "".join(out)
     # the website's theme: role colours, fonts and caption keywords (tools/theme.py, css/theme.css)
     html, themed = theme.apply(html, name)
+    html = lazy_media(html)
     # head / tail
     assert html.count("<head>") == 1 and html.count("</body>") == 1
     phone = ENCODE.get(name, {}).get("phone")

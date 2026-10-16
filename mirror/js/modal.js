@@ -6,12 +6,9 @@
 // link can open it (with the page under it at the modal's section). Each viewer loads once, in a
 // frame with ?embed (js/embed.js), and stays loaded; the two talk by postMessage.
 (() => {
-  // ?design=grid|cinema|list on the page opens the redesigned viewers (eval/v2.html, basalt/v2.html; js/design.js) in
-  // that look; without it, the current ones
-  const DESIGN = new URLSearchParams(location.search).get("design");
   const MODALS = {
-    "diamond-episodes": { src: DESIGN ? "eval/v2.html" : "eval/", section: "survival", title: "MineRL Diamond Challenge: all 384 evaluation episodes" },
-    "basalt-episodes": { src: DESIGN ? "basalt/v2.html" : "basalt/", section: "basalt", title: "MineRL BASALT: all 44 evaluation episodes" },
+    "diamond-episodes": { src: "eval/", section: "survival", title: "MineRL Diamond Challenge: all 384 evaluation episodes" },
+    "basalt-episodes": { src: "basalt/", section: "basalt", title: "MineRL BASALT: all 44 evaluation episodes" },
   };
   const parse = (url) => {
     const [key, ...rest] = decodeURIComponent(new URL(url, location.href).hash.slice(1)).split("/");
@@ -32,9 +29,8 @@
   modal.innerHTML = `<div class="xmodal-sheet"><button class="xmodal-close" aria-label="Close">
     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9"/></svg></button></div>`;
   const sheet = modal.firstElementChild, closeBtn = sheet.firstElementChild;
-  if (DESIGN === "cinema") {   // a dark sheet: its frame's ground and the close button follow these
-    for (const [name, value] of [["--bg-2", "#000"], ["--ink", "#f5f5f7"], ["--ink-2", "#d2d2d7"]]) sheet.style.setProperty(name, value);
-  }
+  // the viewers are dark, as the survival section: the sheet's ground (behind the frame) and its close button follow these
+  for (const [name, value] of [["--bg-2", "#0f0e0d"], ["--ink", "#f5f5f7"], ["--ink-2", "#d2d2d7"]]) sheet.style.setProperty(name, value);
   const frames = {};
   let current = null, pushed = false, hideTimer = 0, paused = [], lastFocus = null;
   const behind = () => [...document.body.children].filter((el) => el !== modal && el.tagName !== "SCRIPT");
@@ -53,7 +49,7 @@
       frame = frames[key] = document.createElement("iframe");
       frame.className = "xmodal-frame";
       frame.title = MODALS[key].title;
-      frame.src = MODALS[key].src + "?embed" + (DESIGN ? "&design=" + encodeURIComponent(DESIGN) : "") + (inner ? "#" + inner : "");
+      frame.src = MODALS[key].src + "?embed" + (inner ? "#" + inner : "");
       sheet.append(frame);
     } else send(key, { type: "mirror-route", hash: inner });
     for (const k in frames) frames[k].hidden = k !== key;

@@ -102,5 +102,6 @@
   }).observe(root, { attributes: true, attributeFilter: ["class"] });
   if (document.fonts) document.fonts.ready.then(fitAll);
   addEventListener("load", fitAll);
+  addEventListener("mirror:figure", fitAll);   // (a figure's code arrived after the page: site.js, data-scripts)
   fitAll();
 })();

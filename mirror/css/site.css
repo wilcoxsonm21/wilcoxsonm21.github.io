@@ -32,8 +32,9 @@ main { position: relative; z-index: 1; }
                    white-space: nowrap; }
 section[id] { scroll-margin-top: var(--nav-h); }
 
-/* the lights go down for the survival-mode episodes */
-#backdrop { position: fixed; inset: 0; background: var(--dark); opacity: 0; pointer-events: none; z-index: 0; }
+/* the lights go down for the survival-mode episodes. Hidden while unlit: iOS Safari tints its toolbar from fixed
+   layers touching the screen edge, even transparent ones, so a lingering one shows as a black bar over the page */
+#backdrop { position: fixed; inset: 0; background: var(--dark); opacity: 0; visibility: hidden; pointer-events: none; z-index: 0; }
 
 /* ------------------------------------------------------------------ shared type */
 .eyebrow {
@@ -304,14 +305,23 @@ html.hero-wait .hero-video-clip, html.hero-wait .hero-knockout { opacity: 0; }
 .stage-frame iframe { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border: 0; display: block;
                       pointer-events: none; background: var(--bg-2); }
 .stage-caption { display: none; }
-/* a slow connection: the stage waiting for its scene, or a click for its videos (site.js, Chapter.update) */
-.chapter-sticky::after { content: ""; position: absolute; z-index: 3; left: 50%; top: calc(50% + var(--nav-h) / 2);
-  width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; box-sizing: border-box;
-  border: 2.5px solid rgba(28, 27, 26, .14); border-top-color: rgba(28, 27, 26, .55);
-  opacity: 0; transition: opacity .3s; pointer-events: none; }
-.chapter.wait .chapter-sticky::after { opacity: 1; animation: spin .9s linear infinite; }
+/* each animation's opening frame (scenes/posters/, tools/build_posters.py) while its scene loads. It sits where the
+   scene's frame draws that frame (site.js gives it the frame's width and left), at its own height, cut to what the box
+   shows at the start; the scene fades in over it */
+.stage-frame .poster { position: absolute; left: 0; top: 0; width: 100%; height: auto; display: block; pointer-events: none;
+                       opacity: 0; transition: opacity .3s; }
+.stage-frame .poster.in { opacity: 1; }
+/* a slow connection: a spinner over the box waiting for its scene, a click for its videos, or a figure for its code
+   (site.js, Chapter.update) */
+.spin { position: absolute; z-index: 3; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px;
+        border-radius: 50%; background: rgba(255, 255, 255, .8); box-shadow: 0 2px 12px rgba(28, 27, 26, .14);
+        opacity: 0; transition: opacity .3s; pointer-events: none; }
+.spin::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; box-sizing: border-box;
+                border: 2.5px solid rgba(28, 27, 26, .14); border-top-color: rgba(28, 27, 26, .6); }
+.chapter.wait .spin { opacity: 1; }
+.chapter.wait .spin::before { animation: spin .9s linear infinite; }
 @keyframes spin { to { transform: rotate(1turn); } }
-@media (prefers-reduced-motion: reduce) { .chapter.wait .chapter-sticky::after { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .chapter.wait .spin::before { animation: none; } }
 
 /* ------------------------------------------------------------------ split chapter: copy + a figure drawn in the page */
 /* On landscape screens the chapter is a 16:9 box the size of an animation's tile, and its type, gaps and figure are
@@ -544,7 +554,7 @@ html:not(.narrow):not(.short) .gallery-row { display: flex; align-items: stretch
   border-radius: 28px;
   padding: 14px 14px 22px;
 }
-.card-media { display: block; overflow: hidden; background: #111; aspect-ratio: var(--ar, 1.803); }   /* square corners: the videos have labels there */
+.card-media { display: block; overflow: hidden; background: #000; aspect-ratio: var(--ar, 1.803); }
 .card-media video, .card-media img { width: 100%; height: 100%; object-fit: contain; }
 .card-figure .card-media { background: var(--bg); aspect-ratio: 16 / 7.5; }
 .card h3 { margin: 18px 8px 6px; font-size: clamp(19px, calc(var(--frame-w) * .0145), 26px); line-height: 1.2; letter-spacing: .009em;
@@ -587,22 +597,16 @@ html:not(.narrow):not(.short) .gallery-row { display: flex; align-items: stretch
 .more-link { display: inline-flex; align-items: center; gap: .5em; font: 600 clamp(17px, calc(var(--frame-w) * .0125), 26px)/1.25 var(--sans);
              letter-spacing: .005em; color: inherit; text-decoration: none; }
 .more-plus { flex: none; width: 1.45em; height: 1.45em; transition: transform .3s var(--ease); }
-.more-plus circle, .card-more circle { fill: currentColor; }
-.more-plus path, .card-more path { fill: none; stroke: var(--bg); stroke-width: 1.6; stroke-linecap: round; }
+.more-plus circle { fill: currentColor; }
+.more-plus path { fill: none; stroke: var(--bg); stroke-width: 1.6; stroke-linecap: round; }
 .cinema .more-link { color: var(--light); }
 .cinema .more-plus path { stroke: color-mix(in srgb, #0f0e0d calc(var(--dark) * 100%), var(--bg)); }   /* (--dark is a number here) */
 @media (hover: hover) {
   .more-link:hover span { text-decoration: underline; text-underline-offset: .18em; text-decoration-thickness: 1.5px; }
   .more-link:hover .more-plus { transform: scale(1.08); }
 }
-.more-link:focus-visible, .card-more:focus-visible { outline: 2px solid var(--mirror); outline-offset: 4px; border-radius: 999px; }
+.more-link:focus-visible { outline: 2px solid var(--mirror); outline-offset: 4px; border-radius: 999px; }
 .chapter-more { margin: clamp(18px, 3vh, 30px) 0 0; }
-/* a gallery card's way in: the round + at its bottom right, as on Apple's cards */
-.gallery .card.card-has-more { position: relative; padding-bottom: calc(22px + clamp(34px, calc(var(--frame-w) * .025), 44px)); }
-.card-more { position: absolute; right: 18px; bottom: 18px; width: clamp(34px, calc(var(--frame-w) * .025), 44px); aspect-ratio: 1;
-             color: var(--ink); transition: transform .3s var(--ease); }
-.card-more svg { display: block; width: 100%; height: 100%; }
-@media (hover: hover) { .card-more:hover { transform: scale(1.08); } }
 
 /* the modal: the page dims and blurs, and a grey sheet rises from below with its close button at the top right. The
    viewer scrolls inside the sheet; the page behind holds still */
@@ -813,24 +817,38 @@ html.short .card h3 { margin: 10px 4px 4px; font-size: 17px; }
 html.short .card p { margin: 0 4px; font-size: 14px; line-height: 1.42; }
 html.short .gallery-paddles { margin-top: 0; }
 html.short #bibtex { padding-top: 36px; }
-/* fix: gallery buttons. A card's play/pause button sits beside its title, under the video (js/controls.js), since
-   the clips have keys, a hotbar, labels and the agent itself in their bottom corners. The title and the button share
-   a row, centred on each other; the caption runs the card's full width under them */
-.card { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr; align-content: start; }
-.card > .card-media { grid-column: 1 / -1; }
-.card > h3 { grid-column: 1; grid-row: 2; }
-.card > p { grid-column: 1 / -1; grid-row: 3; }
-/* (the margins move it down by half the gap between the title's top and bottom margins, without making the row taller) */
-.card > .vbtn { position: relative; grid-column: 2; grid-row: 2; align-self: center; margin: 6px 4px -6px 12px; }
-html.narrow .card > .vbtn, html.short .card > .vbtn { margin: 4px 2px -4px 10px; }
-/* phones: the upright environment clips make narrow cards (150-235px), so the titles run a size smaller beside a
-   closer button ("DeepMind Control: Walker Walk": SE 4 -> 3 lines, Pro 3 -> 2); every card alike, so they match */
-@media (max-width: 599px) {
-  html.narrow .card > h3 { font-size: 15px; letter-spacing: -.005em; }
-  html.narrow .card > .vbtn { margin-left: 4px; margin-right: 0; }
-}
-/* on a touchscreen the button keeps its look but takes taps over 44px, Apple's minimum */
-@media (pointer: coarse) { .vbtn::after { content: ""; position: absolute; inset: min(0px, calc((100% - 44px) / 2)); border-radius: 50%; } }
+/* the gallery's mini players (js/controls.js), the survival video's look at card size: a dark screen with small
+   corners, the page's own labels over the clip (the clips hold only game pixels), and a thin bar under it that shows
+   how far it has played. A tap or a click pauses or plays; a paused clip keeps its play glyph */
+.card { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto 1fr; align-content: start; }
+.card > .card-media { grid-row: 1; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.card > .cbar { grid-row: 2; margin: 8px 2px 0; --light: var(--ink); }
+.card > h3 { grid-row: 3; }
+.card > p { grid-row: 4; }
+.card-media:focus-visible { outline: 2px solid var(--mirror); outline-offset: 3px; }
+/* the panes: plan | execution (stacked when the phone is upright), or FindCave's three stages, plan above execution
+   (one stage per row when upright), laid out in the clip's own proportions; --k is 0 for a plan and 1 for an execution,
+   --s the stage. A 2px black seam between panes, as on the survival video */
+.g-pane { position: absolute; pointer-events: none; container-type: inline-size; }
+[data-panes="two"] .g-pane { top: 0; left: calc(var(--k) * 50%); width: 50%; height: 100%; box-shadow: inset calc(var(--k) * 2px) 0 0 #000; }
+html.portrait [data-panes="two"] .g-pane { left: 0; top: calc(var(--k) * 50%); width: 100%; height: 50%; box-shadow: inset 0 calc(var(--k) * 2px) 0 #000; }
+[data-panes^="stages"] .g-pane { left: calc(var(--s) * 100% / 3); top: calc(var(--k) * 50%); width: calc(100% / 3); height: 50%;
+                                 box-shadow: inset calc(min(var(--s), 1) * 2px) calc(var(--k) * 2px) 0 #000; }
+html.portrait [data-panes^="stages"] .g-pane { left: calc(var(--k) * 50%); top: calc(var(--s) * 100% / 3); width: 50%; height: calc(100% / 3);
+                                               box-shadow: inset calc(var(--k) * 2px) calc(min(var(--s), 1) * 2px) 0 #000; }
+/* (the survival tags, a size smaller: the panes here are 120-450px wide) */
+.g-pane .sv-tag { top: clamp(5px, 2.6cqw, 12px); left: clamp(5px, 2.6cqw, 12px); font-size: clamp(10.5px, 4.2cqw, 14px); }
+.g-pane .g-stage { left: auto; right: clamp(5px, 2.6cqw, 12px); }
+/* the glyph in the middle: it pops on each tap, and stays while the clip is paused */
+.g-glyph { position: absolute; left: 50%; top: 50%; width: clamp(40px, 16cqmin, 64px); aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+           transform: translate(-50%, -50%); display: grid; place-items: center; color: #fff; opacity: 0; visibility: hidden;
+           background: rgba(16, 15, 14, .52); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+           transition: opacity .45s, visibility 0s .45s; }
+.g-glyph svg { width: 100%; height: 100%; fill: currentColor; }
+.card-media { container-type: size; }
+.card-media.show-glyph .g-glyph, .card-media.paused .g-glyph { opacity: 1; visibility: inherit; transition: none; }
+.card-media.show-glyph .g-glyph { animation: ctl-pop .3s var(--ease); }
+.card-media.paused:not(.show-glyph) .g-glyph { transition: opacity .45s; }
 
 /* captions that say where the plan is: beside the execution, or above it in the stacked videos */
 .tall-only { display: none; }
@@ -1028,6 +1046,15 @@ html.short .chapter-split .split-stage { padding-right: calc(max(16px, env(safe-
         border-radius: 2px; pointer-events: none; background: color-mix(in srgb, var(--light) 20%, transparent); }
 .cbar i { position: absolute; inset: 0; background: color-mix(in srgb, var(--light) 75%, transparent); transform-origin: 0 50%;
           transform: scaleX(var(--p, 0)); }
+/* the milestones on that bar (js/survival.js): tiny item icons where the clip reaches each, faded until then */
+.sv-marks { position: relative; grid-column: 1 / -1; grid-row: 2; align-self: start; height: 2px; margin: 10px 2px 0; pointer-events: none; }
+.sv-marks button { position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; padding: 0; border: 0; background: none;
+                   cursor: pointer; pointer-events: auto; }
+.sv-marks img { display: block; width: 100%; height: 100%; image-rendering: pixelated; filter: grayscale(1) brightness(.42) drop-shadow(0 0 1px #0f0e0d) drop-shadow(0 0 1px #0f0e0d) drop-shadow(0 0 1px #0f0e0d);
+                transition: filter .35s, transform .2s var(--ease); }   /* (opaque, so the bar runs clearly behind) */
+.sv-marks button.got img { filter: drop-shadow(0 0 1px #0f0e0d) drop-shadow(0 0 1px #0f0e0d) drop-shadow(0 1px 2px rgba(0, 0, 0, .75)); }
+@media (hover: hover) { .sv-marks button:hover img { filter: drop-shadow(0 0 1px #0f0e0d) drop-shadow(0 0 1px #0f0e0d) drop-shadow(0 1px 2px rgba(0, 0, 0, .75)); transform: scale(1.3); } }
+html.narrow .sv-marks button { width: 14px; height: 14px; margin: -7px 0 0 -7px; }
 @media (prefers-reduced-motion: reduce) {
   .ctl.show-glyph .ctl-glyph { animation: none; }
 }

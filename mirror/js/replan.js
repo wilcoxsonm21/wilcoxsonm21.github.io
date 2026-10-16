@@ -4,7 +4,8 @@
 // where it actually is, fails at the milestone three times, re-planning after each, and a critical action sampled
 // once carries it through.
 //
-// It is an inline scene for site.js: window.INLINE_SCENES.replan = { ready, render(T, ctx), pause, caption, setNarrow }.
+// It is an inline scene for site.js: window.INLINE_SCENES.replan = { load, ready, render(T, ctx), pause, caption, setNarrow }
+// (load: the chapter is loading, so its picture can).
 (() => {
   "use strict";
   const G = window.REPLAN_GEOM, svg = document.querySelector(".replan-svg");
@@ -69,8 +70,8 @@
   el("line", { x1: wx, x2: wx, y1: H - W.lower[1], y2: H - W.lower[0], stroke: C.ink, "stroke-width": 1.7 }, wall);
   el("line", { x1: wx, x2: wx, y1: H - W.gap[1], y2: H - W.gap[0], stroke: C.ink, "stroke-width": .5,
                "stroke-dasharray": "1.5 1.3", opacity: .55 }, wall);
-  const icon = el("image", { href: "media/replan_log.png", x: G.log.x, y: H - G.log.top, width: G.log.w, height: G.log.h }, wall);
-  icon.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", "media/replan_log.png");   // older Safari
+  // (its picture loads with the chapter, site.js: load below)
+  const icon = el("image", { x: G.log.x, y: H - G.log.top, width: G.log.w, height: G.log.h }, wall);
   el("text", { x: G.log.x + G.log.w + 2.2, y: H - G.log.top + G.log.h * .64, class: "rp-label" }, wall).textContent = "Milestone";
 
   // layers, bottom to top
@@ -232,6 +233,10 @@
   const info = { segs: segs.map(s => ({ start: s.start, dur: s.end - s.start, names: s.names })), total: TOTAL };
   window.INLINE_SCENES = window.INLINE_SCENES || {};
   window.INLINE_SCENES.replan = {
+    load() {
+      icon.setAttribute("href", "media/replan_log.png");
+      icon.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", "media/replan_log.png");   // older Safari
+    },
     ready: Promise.resolve(info),
     render: T => render(T),
     pause() {},

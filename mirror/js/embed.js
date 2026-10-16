@@ -1,6 +1,6 @@
 "use strict";
 // The episode viewers (eval/, basalt/) as the project page's modal. The page (js/modal.js) loads a viewer in a frame
-// with ?embed; then html gets .ev-embed (css/viewer.css), and the two talk by postMessage, same origin only:
+// with ?embed; then html gets .ev-embed (css/watch.css), and the two talk by postMessage, same origin only:
 //   page -> viewer: {type: "mirror-route", hash}   show this tab or episode (the viewer's own #hash)
 //                   {type: "mirror-closed"}        the modal closed: stop the episode's videos
 //   viewer -> page: {type: "mirror-hash", hash}    the viewer's #hash changed (the page mirrors it in its URL)

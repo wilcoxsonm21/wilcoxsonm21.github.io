@@ -10,10 +10,19 @@
 //   SCENE.pause()          stops every video (scene scrolled away)
 //   SCENE.caption()        the title on screen, as HTML (shown outside the stage on narrow screens)
 //   SCENE.setNarrow(b)     hides the in-stage titles
+//   SCENE.more()           the page shows the scene's opening: fetch the rest of its images
+//   SCENE.pending()        how many clips and images its frame needs and hasn't got (not what it fetches ahead)
+//   SCENE.waiting()        an image the frame on screen shows is still loading
+//   SCENE.park(), resume() the clips on their way give way to other downloads, and go on (parked(): how many)
+//   SCENE.busy()           something is on its way
 (function () {
   "use strict";
-  if (!window.SCENE_SCROLL) return;   // opened on its own: the page steps on clicks and arrow keys, as in the deck
+  if (!window.SCENE_SCROLL) {         // opened on its own: the page steps on clicks and arrow keys, as in the deck
+    document.querySelectorAll("img[data-src]").forEach(im => { im.src = im.dataset.src; });
+    return;
+  }
   const SEG_TAIL = 0.5;               // seconds of settled frame at the end of each segment
+  const PENDING_MAX = 6;              // seconds a clip or image counts as pending, at most (pending)
   const lim = (x, a, b) => Math.min(b, Math.max(a, x));
 
   // A slow connection: a scene's clips (intro's 17, basalt's 10 MB) don't all download the moment it opens, ahead of
@@ -28,9 +37,90 @@
   if (typeof SLOT_CLIPS !== "undefined") for (const v of document.querySelectorAll("video[src]")) {
     LAZY.set(v, pick(v.getAttribute("src")));
     v.removeAttribute("src");
-    v.load();   // (stops the download it has started)
+    v.load();   // (stops the download it has started; in scroll mode the scenes make their clips with preload none)
   }
-  const fetchClip = v => { const src = v && LAZY.get(v); if (src) { LAZY.delete(v); v.src = src; } };
+  // What the frame on screen needs and hasn't got yet (pending): the page holds the next scene's load until it is in
+  // (js/site.js), so on a slow connection a scene further down doesn't share the line with this scene's opening or the
+  // click it is playing. What is fetched ahead (the next click's clips, the later clicks' images) doesn't hold it. Each
+  // counts for PENDING_MAX at most: a phone that fetches only a clip's metadata until it plays would never finish it.
+  const asked = new Map();   // clip or image -> when it was asked for
+  const fetchClip = (v, ahead) => {
+    const src = v && LAZY.get(v);
+    if (!src) return;
+    LAZY.delete(v);
+    v.preload = "auto";
+    v.src = src;
+    if (!ahead) asked.set(v, performance.now());
+  };
+  for (const v of document.querySelectorAll("video[src]")) asked.set(v, performance.now());   // (a scene's own: suites)
+  // The scene's images wait too (data-src in scroll mode, tools/build_scenes.py), so its opening doesn't wait for what
+  // its later clicks show: each loads as soon as a frame shows it (showImages), and the rest once the page has shown
+  // the scene's opening (SCENE.more).
+  const LAZY_IMG = [...document.querySelectorAll("img[data-src]")];
+  const onShow = new Set();  // images a frame showed before they had loaded (waiting)
+  function fetchImg(im, ahead) {
+    const i = LAZY_IMG.indexOf(im);
+    if (i < 0) return;
+    LAZY_IMG.splice(i, 1);
+    im.src = im.dataset.src;
+    if (!ahead) asked.set(im, performance.now());
+  }
+  const shows = el => {
+    if (!el.getClientRects().length || getComputedStyle(el).visibility === "hidden") return false;
+    for (let e = el; e && e !== document.body; e = e.parentElement) if (+getComputedStyle(e).opacity < .01) return false;
+    return true;
+  };
+  function showImages() {
+    for (const im of [...LAZY_IMG]) if (shows(im)) { fetchImg(im); onShow.add(im); }
+  }
+  function pending() {
+    const now = performance.now();
+    for (const [el, at] of asked) {
+      const busy = el.tagName === "IMG" ? !el.complete : el.networkState === 2 && el.readyState < 4;
+      if (!busy || now - at > PENDING_MAX * 1e3) asked.delete(el);
+    }
+    return asked.size;
+  }
+  // What is fetched ahead waits until what the frame needs is in (pending), so the two never share the line
+  const aheadQ = [];
+  function fetchAhead() {
+    if (aheadQ.length && pending() === 0) for (const f of aheadQ.splice(0)) f();
+  }
+  function more() {
+    for (const im of LAZY_IMG) aheadQ.push(() => fetchImg(im, true));
+    fetchAhead();
+  }
+  // The reader has scrolled past the scene (js/site.js): the clips still on their way give way to what the reader is
+  // on and coming to (park), and pick up again once that is in, or as soon as the reader is back (resume). The page
+  // decides when; the browser keeps what they had (HTTP ranges), so they go on from there.
+  const PARKED = new Map(), CUED = new Set(LAZY.keys());   // (CUED: the clips the timeline asks for itself)
+  const RESUME = new Set();
+  function park() {
+    for (const v of document.querySelectorAll("video[src]")) {
+      if (v.networkState !== 2 || v.readyState >= 4) continue;   // (in, or not downloading)
+      const src = v.getAttribute("src");
+      v.removeAttribute("src");
+      v.load();
+      asked.delete(v);
+      if (CUED.has(v)) { LAZY.set(v, src); RESUME.add(v); } else PARKED.set(v, src);
+    }
+    fed = -1;
+    aheadQ.length = 0;   // (fed again when the reader is back)
+  }
+  function resume() {
+    for (const v of RESUME) fetchClip(v, true);
+    RESUME.clear();
+    for (const [v, src] of PARKED) v.src = src;
+    PARKED.clear();
+  }
+  const parked = () => RESUME.size + PARKED.size;
+  // something is on its way: a clip or an image, or what the frame on screen fetches ahead next
+  const busy = () => aheadQ.length > 0 || [...document.querySelectorAll("video[src]")].some(v => v.networkState === 2 && v.readyState < 4)
+    || [...document.images].some(im => im.getAttribute("src") && !im.complete);
+  function waiting() {
+    for (const im of onShow) if (im.complete) onShow.delete(im);
+    return onShow.size > 0;
+  }
 
   // How each page hands a chained beat over (beat seconds after it starts) and what else it needs per frame.
   // Names inside these functions are the page's own globals.
@@ -183,13 +273,18 @@
     }
   }
 
-  // every clip cued up to the end of the click after s (slotsAt carries a clip on through the later beats)
+  // every clip cued up to the end of the click after s (slotsAt carries a clip on through the later beats); the next
+  // click's are fetched ahead
   let fed = -1;
   function feed(s) {
     if (!LAZY.size || s <= fed) return;
     fed = s;
-    const last = SEGS[Math.min(s + 1, SEGS.length - 1)].beats.slice(-1)[0][0];
-    for (let k = 0; k <= last; k++) for (const c of STEPS[k].cues || []) fetchClip(VIDS[c.slot] && VIDS[c.slot][c.clip]);
+    const lastOf = i => SEGS[Math.min(i, SEGS.length - 1)].beats.slice(-1)[0][0];
+    const now = lastOf(s), last = lastOf(s + 1);
+    for (let k = 0; k <= last; k++) for (const c of STEPS[k].cues || []) {
+      const v = VIDS[c.slot] && VIDS[c.slot][c.clip];
+      if (k <= now) fetchClip(v); else aheadQ.push(() => fetchClip(v, true));
+    }
   }
 
   // ---------------------------------------------------------------- render
@@ -206,6 +301,7 @@
     feed(s);
     let t = T - sg.start;
     if (s === 0 && P.start) t = Math.max(t, P.start);
+    fetchAhead();
     let k = sg.first, tau = 0;
     for (const [kk, st] of sg.beats) if (t >= st) { k = kk; tau = (t - st) * SPEED; }
     if (P.clock) {
@@ -218,6 +314,7 @@
       lastState = stateAt(k, tau);
       apply(lastState);
       lastT = T;
+      if (LAZY_IMG.length) showImages();
     }
     let want = null;
     if (P.videos) {
@@ -297,7 +394,7 @@
   };
   window.SCENE = {
     ready: readyP,
-    render, pause, caption, captions,
+    render, pause, caption, captions, more, pending, waiting, park, resume, parked, busy,
     setNarrow: b => document.documentElement.classList.toggle("narrow", !!b),
     get total() { return TOTAL; },
   };

@@ -51,7 +51,7 @@ EPISODES = {
     "generated": dict(
         tab="online", n=2, exec="online02_raw.mp4", plan="online02_plan_idm.mp4", final="iron_pickaxe",
         plan_box=(320, 20, 640, 211),   # the debug render's plan panel (320x191, the 16:9 view squashed), upscaled
-        plan_lag=1,                      # the panel video starts one frame after the recording (eval.js PLAN_LAG)
+        plan_lag=1,                      # the panel video starts one frame after the recording (eval/watch.js PLAN_LAG)
         resync=(8, 1),                   # a new plan every 8 frames, at composite frames 1, 9, 17, ...
         firsts=["pick_up_crafting_table", "load_furnace"],   # first completions of these subgoals, from the stages
         name="survival_iron_pickaxe_generated"),

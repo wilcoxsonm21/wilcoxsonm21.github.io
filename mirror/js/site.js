@@ -66,7 +66,9 @@
     css(heroCopy, "opacity", (1 - smooth(.02, .42, p)).toFixed(3));
     css(cue, "opacity", (1 - smooth(0, .08, p)).toFixed(3));
     cue.classList.toggle("still", p >= .08);          // its looping line stops once it has faded (css "fix: perf")
-    const on = sy < topOf(heroEl) + heightOf(heroEl);
+    const end = topOf(heroEl) + heightOf(heroEl), on = sy < end, far = sy > end + vh / 2;
+    // (half a screen past it, its download gives way to the rest: park)
+    if (far !== heroFar) { heroFar = far; if (far) park(heroVideo); else unpark(heroVideo); }
     if (on && heroVideo.paused && !REDUCED) heroVideo.play().catch(() => {});
     else if (!on && !heroVideo.paused) heroVideo.pause();
   }
@@ -263,6 +265,7 @@
       this.inline = el.hasAttribute("data-inline");              // drawn in the page, not in an iframe
       this.noHead = el.dataset.head === "none";                  // no headline phase: pinned as it arrives
       this.setSegs(el.dataset.segs.split(",").map(Number));
+      if (this.dots.length) this.dots[0].classList.add("on");   // (the opening's step shows before its figure is drawn)
       this.read = (el.dataset.read || "").split(",").map(x => x.trim() === "" ? null : Number(x));
       // seconds of still opening to skip (data-lead): the animation starts where something first moves
       this.lead = Number(el.dataset.lead) || 0;
@@ -297,7 +300,77 @@
       this.box = this.inline ? $("figure", el) : this.frameEl();
       this.selected = false;
       this.played = 0;        // how far the click on screen has got, its reading hold included (progress)
+      this.wanted = false;    // within reach of the reader (schedule): a scene out of reach lets go of its downloads
+      this.parked = false;    // ... and has (update)
+      // The animation's opening frame (scenes/posters/, tools/build_posters.py) stands in for the scene until the scene
+      // has loaded and drawn that frame, and fades out under it; the box takes the scene's shape and caption room
+      // from posters.js before then (prep), so nothing moves when the scene arrives.
+      this.pinfo = !this.inline && (window.SCENE_POSTERS || {})[el.dataset.scene] || null;
+      if (this.pinfo) {
+        const p = this.poster = document.createElement("img");
+        p.className = "poster";
+        p.alt = "";
+        p.decoding = "async";
+        p.setAttribute("aria-hidden", "true");
+        p.addEventListener("load", () => { p.classList.add("in"); wake(); });
+        p.addEventListener("error", wake);
+        this.iframe.before(p);
+      }
+      // a figure drawn in the page has its pictures for a poster (img data-src: the lava escape's screenshot, its first
+      // step), loaded in the same order
+      this.pics = this.inline ? $$("img[data-src]", el) : [];
+      // a slow connection: a spinner over the box while it waits (css .wait)
+      this.box.insertAdjacentHTML("beforeend", '<i class="spin" aria-hidden="true"></i>');
       controls(this);
+    }
+    // the poster for the layout of now; whether it is in (or failed, or is taking over POSTER_MAX: the chapters after
+    // it don't wait any longer); and asking for it
+    posterSrc() {
+      const P = this.pinfo;
+      return portrait ? P.portrait.src : narrow || short ? P.narrow : P.wide;
+    }
+    posterReady() {
+      const late = performance.now() - this.posterAt > POSTER_MAX * 1e3;
+      if (this.pics.length) return this.pics.every(im => im.getAttribute("src") && (im.complete || late));
+      return !this.poster || this.poster.getAttribute("src") === this.posterSrc() && (this.poster.complete || late);
+    }
+    loadPoster() {
+      if (this.pics.length) {
+        const ask = this.pics.filter(im => !im.getAttribute("src"));
+        ask.forEach(im => { im.src = im.dataset.src; });
+        if (ask.length) this.posterAt = performance.now();
+        return;
+      }
+      if (!this.poster) return;
+      const src = this.posterSrc();
+      if (this.poster.getAttribute("src") === src) return;
+      this.poster.classList.remove("in");
+      this.poster.src = src;
+      this.posterAt = performance.now();
+    }
+    // the poster stands in for the scene: until the scene has drawn its opening and faded in over it (a scene that
+    // reloads partway through, in the other layout, fades in on the click it was on instead)
+    covers() { return !!this.poster && this.shown < 1 && this.T <= this.lead + 1e-3; }
+    // before its scene has loaded, the box takes the shape and the caption room the scene will want
+    prep() {
+      const P = this.pinfo;
+      if (!P || this.api) return;
+      const pt = portrait && P.portrait;
+      this.el.classList.toggle("tall", !!pt);
+      if (pt) { this.el.style.setProperty("--scene-ar", `${pt.w} / ${pt.h}`); this.el.style.setProperty("--scene-r", (pt.w / pt.h).toFixed(4)); }
+      this.caps = portrait && P.pcaps || P.caps;
+      this.capHTML = null;
+    }
+    // its scene has what the frame on the screen needs (its opening, the clips of the click it plays; SCENE.pending),
+    // so the next chapter can load without sharing the connection with it (schedule). What it fetches ahead doesn't
+    // count, and a scene that stalls holds the others back for LOAD_MAX at most.
+    settled() {
+      if (this.state === "failed") return true;
+      if (this.state === "loading") return performance.now() - this.loadAt > LOAD_MAX * 1e3;   // (stalled: go on)
+      if (this.state !== "ready") return false;
+      if (this.inline) return true;
+      if (this.swap && this.wasVisible) return false;   // (on the screen and not yet shown: its opening first)
+      return !(this.api.pending && this.api.pending() > 0);
     }
     setSegs(durs) {
       let G = 0;
@@ -314,6 +387,7 @@
       this.rest = this.noHead ? 0 : REST * this.headLen;
       this.pinLen = this.rest + DWELL * vh;
       this.el.style.height = Math.round(this.pinLen + vh) + "px";
+      this.prep();
       this.fitCard();
     }
     // Narrow screens: the scene's title sits in the grey box, above the animation, as it does on a wide screen. Every
@@ -329,7 +403,7 @@
       if (!narrow) {
         for (const k of ["--card-w", "--cap-h", "--card-top"]) this.el.style.removeProperty(k);
         this.card = null; f.style.height = "";
-        Object.assign(this.iframe.style, { height: "", width: "", left: "" });
+        this.place("", "", "");
         return;
       }
       const tall = this.el.classList.contains("tall"), r = tall ? parseFloat(this.el.style.getPropertyValue("--scene-r"))
@@ -346,10 +420,16 @@
       this.el.style.setProperty("--cap-h", capH + "px");
       this.el.style.setProperty("--card-top", Math.round(top) + "px");
       this.card = { w, fw, full, tall };
-      Object.assign(this.iframe.style, { width: fw + "px", left: (w - fw) / 2 + "px", height: tall ? full + "px" : "" });
+      this.place(fw + "px", (w - fw) / 2 + "px", tall ? full + "px" : "");
       f.style.height = full.toFixed(1) + "px";
       this.frameH = null;
       this.fillFrame();
+    }
+    // the scene's frame in the box, and its poster where the frame's opening is drawn (its own height: the poster is
+    // cut to what the box shows at the start)
+    place(width, left, height) {
+      Object.assign(this.iframe.style, { width, left, height });
+      if (this.poster) Object.assign(this.poster.style, { width, left });
     }
     // A phone held sideways (short): the nav slides away while a chapter is on screen, so the box has the screen's
     // whole height. It is the narrow layout's box (title above, animation below, cropped to its 1920 x 880 body), as
@@ -374,7 +454,7 @@
       this.el.style.setProperty("--ctl-x", Math.round(pl + (vw - pl - pr + fw) / 2 + 8) + "px");
       this.el.style.setProperty("--ctl-y", Math.round(top + capH + full / 2) + "px");
       this.card = { w: fw, fw, full, tall: false };
-      Object.assign(this.iframe.style, { width: "", left: "", height: "" });
+      this.place("", "", "");
       f.style.height = full.toFixed(1) + "px";
       this.frameH = null;
     }
@@ -386,6 +466,11 @@
     fillFrame() {
       if (this.inline) return;
       const c = this.card, F = this.fill, el = this.frameEl();
+      if (!this.api && this.pinfo && c && c.tall) {   // (before its scene has loaded: what it shows at the start)
+        const pt = this.pinfo.portrait, h = Math.min(c.full, pt.fh * c.fw / pt.w);
+        if (this.frameH === null || Math.abs(h - this.frameH) > .4) { this.frameH = h; el.style.height = h.toFixed(1) + "px"; }
+        return;
+      }
       if (!c || !c.tall || !F || !this.stageW) {
         if (this.frameH !== null) { el.style.height = c ? c.full.toFixed(1) + "px" : ""; this.frameH = null; }
         return;
@@ -529,9 +614,21 @@
     load() {
       if (this.state !== "idle") return;
       this.state = "loading";
+      this.loadAt = performance.now();
       if (this.inline) {
-        const S = (window.INLINE_SCENES || {})[this.el.dataset.scene];
-        if (S) this.attach(S); else this.state = "failed";
+        // a figure drawn in the page loads its pictures (img data-src), and the code and data it is drawn from when they
+        // aren't in the page yet (data-scripts: the lava figure's 200 KB of paths), only now
+        const name = this.el.dataset.scene, scripts = (this.el.dataset.scripts || "").split(/\s+/).filter(Boolean);
+        const go = () => {
+          const S = (window.INLINE_SCENES || {})[name];
+          if (!S) { this.state = "failed"; return; }
+          if (S.load) S.load();
+          this.attach(S);
+        };
+        $$("img[data-src]", this.el).forEach(im => { if (!im.getAttribute("src")) im.src = im.dataset.src; });
+        if (!scripts.length || (window.INLINE_SCENES || {})[name]) go();
+        else loadScripts(scripts).then(() => { go(); dispatchEvent(new Event("mirror:figure")); wake(); },
+                                       () => { this.state = "failed"; wake(); });
         return;
       }
       // the stage stays hidden, and the chapter doesn't play, until the scene has drawn where it starts, with its videos
@@ -570,6 +667,7 @@
     reset() {
       this.gen++;
       this.api = null;
+      this.parked = false;
       this.state = "idle";
       this.capHTML = null;
       this.frameShape(0);
@@ -598,9 +696,11 @@
           if (REDUCED && this.T === 0) this.T = this.segs[0].dur;
           else if (this.T === 0) this.fromLead();
           if (this.swap) this.swap.at = performance.now();
-          // the frame loop draws it, and a video in it that finishes seeking or loading gets drawn again (wake)
+          // the frame loop draws it, and a video in it that finishes seeking or loading gets drawn again (wake); a clip or
+          // image coming in may let the next scene load (schedule)
           if (!this.inline) try {
-            for (const ev of ["seeked", "loadeddata", "canplay"]) this.iframe.contentDocument.addEventListener(ev, wake, true);
+            for (const ev of ["seeked", "loadeddata", "canplay", "canplaythrough", "suspend", "load", "error"])
+              this.iframe.contentDocument.addEventListener(ev, wake, true);
           } catch (e) {}
           wake();
         });
@@ -618,7 +718,9 @@
       const o = r * (1 - smooth(0, .55, e));
       const sc = lerp(.9, 1, r) * (1 - .05 * smooth(0, 1, e));
       this.stageO = o;
-      const so = o * this.shown;
+      // (with its poster standing in, the stage comes forward as usual and the scene fades in over the poster)
+      const cover = this.covers(), so = o * (cover ? 1 : this.shown);
+      if (this.poster) css(this.iframe, "opacity", cover ? this.shown.toFixed(3) : "");
       css(this.stage, "opacity", so.toFixed(3));
       // (not while it holds the focus: Chrome drops the focus from a hidden box, and a Tab onto a box lands while the
       // stage is still faint, before the glide brings it forward)
@@ -635,13 +737,14 @@
       // Back or Forward across an entry made before the scene last reloaded (the modal's close is a Back) takes its frame
       // back to the page it had then, which isn't the scene this chapter holds: start over with the layout of now
       if (this.api && !this.inline && frameAt(this.iframe)?.S !== this.api) this.reset();
-      // A scene's page takes one long task to parse (Minecraft's: 70-150 ms on a phone), so it loads 2.5 screens ahead
-      // at a moment when nothing moves: no animation plays (between clicks or chapters, or once a chapter has ended),
-      // the page doesn't glide, and the reader has stopped scrolling or is past LOAD_SOON screens from it, where no
-      // chapter is in focus. Within LOAD_NOW screens it loads whatever moves.
-      const wait = moving || scrolling(now) && y < -LOAD_SOON * vh;
-      if (y > -2.5 * vh && y < this.pinLen + 1.5 * vh && (this.inline || !wait || y > -LOAD_NOW * vh)) this.load();
+      // (its scene loads when schedule says, below)
       const visible = y > -vh && y < this.pinLen + vh;
+      // scrolled past, or far below the screen again: its clips still on their way give way to what the reader is on
+      // and coming to (SCENE.park), and go on once that is in (background) or the reader is back
+      if (this.api && !this.inline && this.api.park) {
+        const gone = !visible && (y > 0 || !this.wanted);
+        if (gone !== this.parked) { this.parked = gone; if (gone) this.api.park(); else this.api.resume(); }
+      }
       // (perf2 10-16: and once on the first frame, so a chapter the reader hasn't reached yet starts out hidden, as one
       // scrolled past is: its scene's frame then doesn't render behind every frame while it waits far down the page)
       if (visible || this.wasVisible || !this.styled) { this.style(y); this.styled = true; }
@@ -658,7 +761,8 @@
       if (this.selected && this.stageO * this.shown < .05) this.deselect();   // (dissolved: as good as off the screen)
       // a chapter that played to its end plays from the start when the reader comes to it again from above
       if (visible && !this.wasVisible && y < 0 && this.ended) { this.ended = false; this.fromLead(); this.cur = -1; }
-      if (this.state === "failed") this.swap = null;   // (a scene that failed to load shows its empty box)
+      // (a scene that failed to load shows its poster, or its empty box)
+      if (this.state === "failed") { this.swap = null; if (this.poster) this.shown = 0; }
       // (it holds its opening while the stage fades in after a load)
       this.live = !!this.api && !this.swap && this.shown >= 1 && visible && this.wasVisible && this.inFocus(y) && !this.held && !this.ended;
       // coming into focus, the transport shows for a while, until the reader has used the controls (cue, below)
@@ -678,16 +782,26 @@
           // reloaded in the other layout: the stage fades back in once the scene has drawn the click it was on (a few
           // frames, with its videos done seeking, or 0.6 s at most)
           const w = this.swap;
-          // (a first load waits up to 4 s for slow videos)
-          if (w && w.at !== null && (++w.n > (w.first ? 240 : 36) || w.n > 2 && !this.seeking())) this.swap = null;
+          // (a first load waits up to 4 s for slow videos, 8 s over its poster); once it shows, the rest of its images
+          // load (SCENE.more)
+          if (w && w.at !== null && (++w.n > (w.first ? this.poster ? 480 : 240 : 36) || w.n > 2 && !this.seeking())) {
+            this.swap = null;
+            if (this.api.more) this.api.more();
+          }
         } else if (this.wasVisible) this.api.pause();
+      } else if (visible && this.pinfo && (narrow || short) && this.capEl && this.capHTML === null && this.covers()) {
+        this.caption(portrait && this.pinfo.pcap || this.pinfo.cap);   // the title the scene opens on, over its poster
       }
-      if (!this.swap && this.shown < 1) this.shown = REDUCED ? 1 : Math.min(1, this.shown + dt / .25);
+      if (!this.swap && this.shown < 1 && !(this.poster && this.state === "failed"))
+        this.shown = REDUCED ? 1 : Math.min(1, this.shown + dt / .25);
+      // the poster goes once the scene has faded in over it
+      if (this.poster) css(this.poster, "display", this.api && this.shown >= 1 ? "none" : "");
       // the frame loop keeps running while this chapter plays (or holds between clicks), or fades back in (wake)
       this.busy = this.live || (!this.swap ? this.shown < 1 : visible && this.swap.at !== null);
-      // a slow connection: a spinner shows once the stage, in place, has waited 0.6 s for its scene or a click for its
-      // videos (css .wait)
-      const spin = visible && this.stageO > .5 && (this.shown < .05 && this.state !== "failed" || this.live && this.stall > .6);
+      // a slow connection: a spinner shows once the stage, in place, has waited 0.6 s for its scene (over its poster), a
+      // click for its videos, or a figure for its code (css .wait)
+      const spin = visible && this.stageO > .5 && (this.shown < .05 && this.state !== "failed" || this.live && this.stall > .6
+        || this.inline && this.state === "loading");
       this.waitAt = spin ? this.waitAt ?? now : null;
       this.el.classList.toggle("wait", spin && now - this.waitAt > 600);
       this.busy ||= spin;
@@ -705,9 +819,10 @@
       return s && this.stall < 8;
     }
     seeking() {
-      // a video on show that is seeking, or has no frame yet; or the scene's fonts still loading
+      // a video on show that is seeking, or has no frame yet; an image on show still loading; or the scene's fonts
       try { const d = this.iframe.contentDocument;
-            return d.fonts.status !== "loaded" || [...d.querySelectorAll("video")].some(v => v.seeking ||
+            return d.fonts.status !== "loaded" || !!(this.api && this.api.waiting && this.api.waiting())
+              || [...d.querySelectorAll("video")].some(v => v.seeking ||
               v.readyState < 1 && v.currentSrc && !v.error && v.style.visibility !== "hidden" && +(v.style.opacity || 1) > 0); }
       catch (e) { return false; }
     }
@@ -768,10 +883,9 @@
     }
     // The caption fades with the scene's title and note (c.o, c.so). When it changes height, its grey top (a layer
     // behind it at --cap-top, css/site.css) and its text glide to the new height together, so the box never jumps.
-    caption() {
+    caption(c = this.api.caption()) {
       // a resize of the caption block (fitCard, fitShort, fonts) has it re-measure its grey top
       if (!this.capRO) (this.capRO = new ResizeObserver(() => { this.capHTML = null; })).observe(this.capEl);
-      const c = this.api.caption();
       const html = c ? `<div class="cap-in"><span class="cap-t">${c.html}</span>${c.sub ? `<span class="sub"${c.subColor ? ` style="color:${c.subColor}"` : ""}>${c.sub}</span>` : ""}</div>` : "";
       if (html !== this.capHTML) {
         const old = this.capEl.firstElementChild, tf = old ? getComputedStyle(old).transform : "none";
@@ -1044,6 +1158,7 @@
   const backdrop = $("#backdrop"), cinema = $("#survival"), cScreen = $(".cinema-screen");
   const cVideo = $(".cinema-video"), cCap = $(".cinema-caption"), segBtns = $$(".segmented button");
   let cinemaLoaded = false, cinemaOn = false;
+  let heroFar = false, cinemaFar = false;   // well off the screen: their downloads give way (park)
   // each tab names its clip and the clip's shape (data-ar); a two-up clip also has a stacked version, plan above
   // execution, that a phone held upright plays (data-portrait-video, built by tools/build_gallery_portrait.py)
   const clip = btn => portrait && btn.dataset.portraitVideo ? [btn.dataset.portraitVideo, btn.dataset.portraitAr]
@@ -1093,6 +1208,8 @@
     const p = "media/posters/" + src.split("?")[0].split("/").pop().replace(/\.\w+$/, ".jpg");
     cVideo.removeAttribute("poster");
     cVideo.style.background = `#000 url("${p}") center / contain no-repeat`;
+    delete cVideo.dataset.park;
+    delete cVideo.dataset.parkT;
     cVideo.src = src;
   }
   function swapCinema() {
@@ -1127,10 +1244,17 @@
     const top = topOf(cinema) - sy, bottom = top + heightOf(cinema);
     const o = smooth(.62, .12, top / vh) * (1 - smooth(.86, .42, bottom / vh));
     css(backdrop, "opacity", o.toFixed(3));
+    css(backdrop, "visibility", o > 0 ? "visible" : "hidden");
     css(cinema, "--dark", smooth(.3, .7, o).toFixed(3));   // the copy flips while the light is mid-grey
     root.classList.toggle("is-dark", o > .5);
     // (landing already in view, after a reload, the clip plays as soon as its source is set)
     if (!cinemaLoaded && top < 2 * vh && bottom > -vh) pick(segBtns[0]);
+    // well off the screen its download gives way to the rest (park), and it picks up where it was when the reader is back
+    const far = top > 2 * vh || bottom < -vh;
+    if (far !== cinemaFar) {
+      cinemaFar = far;
+      if (far) park(cVideo); else unpark(cVideo, clip(segBtns.find(b => b.getAttribute("aria-selected") === "true") || segBtns[0])[0]);
+    }
     // (no transform once it is full size, so the labels over the clip are drawn at the screen's own resolution)
     css(cScreen, "transform", u > .999 ? "none" : `scale(${lerp(.88, 1, u).toFixed(4)})`);
     const on = r.top < vh * .85 && r.bottom > vh * .15;
@@ -1181,8 +1305,8 @@
   });
 
   // on a phone held upright the gallery's two-up videos (plan beside execution) play their stacked versions, plan
-  // above execution (data-portrait-src, built by tools/build_gallery_portrait.py). data-src always names the one for
-  // the current layout, so the lazy loading above and the play button (js/controls.js) pick it up. A video that has
+  // above execution (data-portrait-src, built by tools/build_gallery.py). data-src always names the one for the
+  // current layout, so the lazy loading above and a tap to play (js/controls.js) pick it up. A video that has
   // loaded swaps on the spot: it keeps its time, plays on if it was playing and stays paused if not
   const twoUp = $$("video[data-portrait-src]");
   twoUp.forEach(v => { v.dataset.landscapeSrc = v.dataset.src; });
@@ -1381,17 +1505,145 @@
     rT = setTimeout(relayout, 120);
   });
   // a phone's connection back: a scene that failed to load while it was gone loads again when it next comes near
-  addEventListener("online", () => chapters.forEach(c => { if (!c.inline && c.state === "failed") { c.reset(); wake(); } }));
+  addEventListener("online", () => chapters.forEach(c => {
+    if (c.state !== "failed") return;
+    if (c.inline) c.state = "idle"; else c.reset();
+    wake();
+  }));
   document.fonts.ready.then(layoutHero);
+
+  // ------------------------------------------------------------------ loading, in reading order
+  // A slow connection shares its speed between everything downloading at once, so the page asks for one thing at a
+  // time, in the order the reader comes to it: what is on the screen, then the chapters below it, then those above.
+  // Each chapter first gets its poster (the animation's opening frame, a few KB), then its scene, and the chapter after
+  // it waits until that scene has what its frame needs (Chapter.settled). A scene loads within LOAD_AHEAD screens, or as
+  // the first chapter below the screen wherever it is; the posters further on follow in order. The hero's montage and
+  // the survival clip, while playing, first get BUFFER_AHEAD seconds ahead (for FILL_MAX seconds at most).
+  const LOAD_AHEAD = 2.5;   // screens
+  const BUFFER_AHEAD = 6, FILL_MAX = 8;   // seconds
+  const LOAD_MAX = 8, POSTER_MAX = 3;     // seconds a stalled scene or poster holds the others back, at most
+  const loadScripts = srcs => Promise.all(srcs.map(src => new Promise((ok, no) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.async = false;        // (they run in order)
+    s.onload = ok;
+    s.onerror = no;
+    document.body.append(s);
+  })));
+  // seconds a video has buffered past where it is (Infinity: all of it)
+  function bufferedAhead(v) {
+    const b = v.buffered, t = v.currentTime;
+    for (let i = 0; i < b.length; i++) {
+      if (b.start(i) <= t + .1 && b.end(i) > t) return b.end(i) >= (v.duration || Infinity) - .25 ? Infinity : b.end(i) - t;
+    }
+    return 0;
+  }
+  const fillFrom = new WeakMap();
+  function filling(v, now) {
+    if (!v.getAttribute("src") || v.paused || v.error || bufferedAhead(v) >= BUFFER_AHEAD) { fillFrom.delete(v); return false; }
+    if (!fillFrom.has(v)) fillFrom.set(v, now);
+    return now - fillFrom.get(v) < FILL_MAX * 1e3;
+  }
+  // how far a section is from the screen, in screens (one above counts twice as far: the reader is going down)
+  function dist(el) {
+    const t = topOf(el), b = t + heightOf(el), top = sy, bottom = sy + vh;
+    return t >= bottom ? (t - bottom) / vh : b <= top ? 2 * (top - b) / vh : 0;
+  }
+  let loadsWaiting = true;
+  function schedule(now) {
+    loadsWaiting = true;
+    const order = chapters.map(c => ({ c, t: topOf(c.el), below: topOf(c.el) >= sy + vh, d: dist(c.el) })).sort((a, b) => a.d - b.d);
+    const next = order.find(o => o.below);   // (the first chapter below the screen)
+    for (const o of order) o.c.wanted = o.d < LOAD_AHEAD || o === next;
+    if (filling(heroVideo, now) || cinemaOn && filling(cVideo, now) || foreground(order, now)) { giveWay(); return; }
+    if (background(order)) loadsWaiting = false;
+  }
+  // the next thing the reader is on or coming to, if anything is still to load (true)
+  function foreground(order, now) {
+    for (const { c, t } of order) {
+      if (!c.posterReady()) { c.loadPoster(); return true; }
+      if (!c.wanted) continue;
+      if (c.state === "idle") {
+        // A scene's page takes one long task to parse (Minecraft's: 70-150 ms on a phone), so it loads at a moment when
+        // nothing moves: no animation plays (between clicks or chapters, or once a chapter has ended), the page doesn't
+        // glide, and the reader has stopped scrolling or is past LOAD_SOON screens from it, where no chapter is in focus.
+        // Within LOAD_NOW screens it loads whatever moves, and so does a figure drawn in the page with nothing to fetch.
+        const y = sy - t, wait = moving || scrolling(now) && y < -LOAD_SOON * vh;
+        if (!wait || y > -LOAD_NOW * vh || c.inline && !c.el.dataset.scripts) c.load();
+        return true;
+      }
+      if (!c.settled()) return true;
+    }
+    return false;
+  }
+  // Downloads the reader has scrolled past (park) wait until the rest is in: what the reader is on and coming to, and
+  // what the chapter on the screen fetches ahead. Then they go on in the background, one at a time and nearest first,
+  // and give way again whenever something else needs the line (giveWay). True once nothing is left.
+  let behind = null;      // the one going on now: { c }, a chapter's clips, or { v }, the hero's montage or survival clip
+  const passed = v => v === heroVideo ? heroFar : cinemaFar;
+  function giveWay() {
+    const b = behind;
+    behind = null;
+    if (!b) return;
+    if (b.c) { if (b.c.parked && b.c.api) b.c.api.park(); }
+    else if (passed(b.v)) park(b.v);
+  }
+  function background(order) {
+    // (what the reader is looking at: the chapter on the screen, or the hero's montage or the survival clip playing)
+    const streaming = v => !v.paused && bufferedAhead(v) !== Infinity;
+    if (order.some(o => o.d === 0 && o.c.api && o.c.api.busy && o.c.api.busy()) || streaming(heroVideo) || streaming(cVideo)) {
+      giveWay();
+      return false;
+    }
+    if (behind) {
+      const done = behind.c ? !behind.c.api || !behind.c.api.busy() : behind.v.networkState !== 2 || bufferedAhead(behind.v) === Infinity;
+      if (!done) return false;
+      behind = null;
+    }
+    const left = [
+      ...order.filter(o => o.c.parked && o.c.api && o.c.api.parked && o.c.api.parked() > 0),
+      ...[[heroVideo, heroEl], [cVideo, cinema]].filter(([v]) => v.dataset.park !== undefined).map(([v, el]) => ({ v, d: dist(el) })),
+    ].sort((a, b) => a.d - b.d)[0];
+    if (!left) return true;
+    behind = left.c ? { c: left.c } : { v: left.v };
+    if (left.c) left.c.api.resume();
+    else unpark(left.v, left.v === cVideo ? clip(segBtns.find(b => b.getAttribute("aria-selected") === "true") || segBtns[0])[0] : undefined, true);
+    return false;
+  }
+  // (the frame loop sleeps when nothing moves, and a clip coming in doesn't always say so: look again now and then)
+  setInterval(() => { if (loadsWaiting && !document.hidden) schedule(performance.now()); }, 500);
+  // A paused video keeps downloading (browsers buffer on), which on a slow connection starves what the reader looks at
+  // next. Once well off the screen, the hero's montage and the survival clip stop downloading, unless they have it all
+  // (park); they go on in the background once the rest is in (background), or as soon as the reader is back (unpark;
+  // src: the clip to play then). They keep their place in the clip, and the browser keeps what they had.
+  function park(v) {
+    // (only a download under way: a clip the reader never started has nothing to go on with)
+    if (v.dataset.park !== undefined || !v.getAttribute("src") || v.networkState !== 2 || bufferedAhead(v) === Infinity) return;
+    v.dataset.park = v.getAttribute("src");
+    v.dataset.parkT = v.currentTime;
+    v.removeAttribute("autoplay");   // (the page plays it while it is on the screen: updateHero, updateCinema)
+    v.pause();
+    v.removeAttribute("src");
+    v.load();
+  }
+  function unpark(v, src = v.dataset.park, behindScreen = false) {
+    if (v.dataset.park === undefined) return;
+    const t = +v.dataset.parkT || 0;
+    delete v.dataset.park;
+    delete v.dataset.parkT;
+    if (behindScreen) v.preload = "auto";   // (off the screen it only downloads)
+    v.src = src;
+    if (t) v.addEventListener("loadedmetadata", () => { v.currentTime = Math.min(t, v.duration || t); }, { once: true });
+  }
 
   // The frame loop sleeps once nothing has changed for IDLE seconds: no scrolling or finger down, no glide, no chapter
   // playing (or holding between clicks) or fading in, no statement playing on. Input, scrolling, a resize, the tab
   // coming back, a section changing size, a scene loading and its videos seeking or loading wake it (wake).
   const IDLE = 1;        // seconds
-  const LOAD_NOW = 1.2;  // screens: a scene this close loads even while something moves (Chapter.update)
+  const LOAD_NOW = 1.2;  // screens: a scene this close loads even while something moves (schedule)
   const LOAD_SOON = 1.8; // screens: a scene this close loads while the reader scrolls, if nothing else moves
   let lastNow = performance.now(), rafId = 0, quietAt = 0;
-  let moving = false;    // in the last frame an animation played or the page scrolled itself: a scene load waits (Chapter.update)
+  let moving = false;    // in the last frame an animation played or the page scrolled itself: a scene load waits (schedule)
   function wake() {
     if (rafId) return;
     lastNow = quietAt = performance.now();   // the time asleep is not a frame's dt
@@ -1420,6 +1672,7 @@
       wordBlocks.forEach(updateWords);
       updateNav();
     }
+    schedule(now);
     for (const c of chapters) c.update(now, dt);
     if (short) root.classList.toggle("stage-on", chapters.some(c => c.staged));
     // under an episode modal (js/modal.js) the page holds still: a glide or snap under way stops where it is

@@ -21,11 +21,19 @@
   const items = PAPER.map(k => {
     const li = document.createElement("li");
     li.innerHTML = `<button type="button" title="Jump to ${NAME[k].toLowerCase()}" aria-label="Jump to ${NAME[k].toLowerCase()}">`
-      + `<img src="eval/icons/${k}.png" alt="" width="88" height="88"></button>`;
+      + `<img src="eval/icons/${k}.png" alt="" width="88" height="88" loading="lazy"></button>`;
     li.firstChild.addEventListener("click", () => jump(k));
     list.append(li);
     return li;
   });
+  // the milestones on the bar under the video (css .cbar, from js/controls.js) as tiny item icons where the clip
+  // reaches each: faded until then, lit after, and each jumps there as the strip's do (the user, 10-16). The strip's
+  // buttons are the keyboard's way in, so these stay out of the tab order.
+  const marks = document.createElement("div");
+  marks.className = "sv-marks";
+  marks.setAttribute("aria-hidden", "true");
+  fig.querySelector(".cbar")?.after(marks);
+
   function jump(k) {
     const m = ep?.milestones.find(x => x[0] === k);
     if (!m) return;
@@ -56,6 +64,17 @@
       .sort((a, b) => a.t - b.t);
     shown = {};
     items.forEach((li, i) => { li.firstChild.disabled = !ep?.milestones.some(m => m[0] === PAPER[i]); });
+    marks.replaceChildren(...(ep ? ep.milestones.filter(m => PAPER.includes(m[0])).map(([k, t]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.tabIndex = -1;
+      b.dataset.key = k;
+      b.title = NAME[k];
+      b.style.left = `${(100 * t) / ep.duration}%`;
+      b.innerHTML = `<img src="eval/icons/${k}.png" alt="">`;
+      b.addEventListener("click", () => jump(k));
+      return b;
+    }) : []));
     render();
   }
   function set(key, value, apply) { if (shown[key] !== value) { shown[key] = value; apply(value); } }
@@ -80,6 +99,7 @@
     const got = new Set(ep.milestones.filter(m => m[1] <= t).map(m => m[0]));
     PAPER.forEach((k, idx) => set("m" + k, got.has(k), v => {
       items[idx].classList.toggle("got", v);
+      marks.querySelector(`[data-key="${k}"]`)?.classList.toggle("got", v);
       if (v && t > 0) { items[idx].classList.add("pop"); setTimeout(() => items[idx].classList.remove("pop"), 450); }
     }));
   }
