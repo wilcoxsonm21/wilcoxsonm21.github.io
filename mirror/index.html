@@ -120,14 +120,13 @@
           interactions, without prior action data or hand-crafted rewards.
           Mirror learns by attempting to follow a visual plan by executing its best guess of the underlying
           actions in the environment. Mirror then trains on the resulting video-action pairs, incrementally
-          self-improving and following the visual planner more and more closely.
-          Across Atari, OGBench, and DeepMind Control, Mirror achieves overall performance comparable to leading
-          learning-from-observation methods with learned video plans, and near-expert performance with oracle
-          plans. On Minecraft BASALT and text-conditioned tasks, it outperforms methods with access to expert
-          actions or hand-engineered task knowledge. Using generated video plans, it surpasses VPT-BC in survival
-          mode, even though VPT-BC was trained on thousands of hours of action-labeled human gameplay. With oracle
-          video plans, it learns to acquire diamonds without task rewards, using an order of magnitude fewer
-          environment interactions than DreamerV3.
+          self-improving and following the visual planner more closely.
+          Across Atari, OGBench, and DeepMind Control, Mirror outperforms leading learning-from-observation methods
+          with learned video plans, and achieves near-expert performance with oracle plans. On Minecraft BASALT, it
+          outperforms methods with access to expert actions or hand-engineered task knowledge. In Minecraft
+          survival, it is the first method to acquire an iron pickaxe through self-improvement alone, without
+          rewards or expert action labels. In the offline setting, with expert action labels but no environment
+          interaction, it sets a new state of the art in obtaining diamonds.
           Our results suggest that advances in video models can translate into increasingly capable agents without
           a corresponding need for hand-crafted rewards or large collections of expert action data.
         </p>
