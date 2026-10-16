@@ -120,7 +120,10 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
     const target = Math.max(0, exec.currentTime - planLag), rate = exec.playbackRate;
     if (rate > 4) {
       if (!plan.paused) plan.pause();
-      if (force || (performance.now() - lastFollow > (planOn() ? 300 : 1000) && !plan.seeking)) { lastFollow = performance.now(); plan.currentTime = target; }
+      // (hidden, it stays where it is and downloads nothing, so the execution racing has the whole connection: it
+      // catches up when shown, or when the speed drops)
+      if (!planOn()) return;
+      if (force || (performance.now() - lastFollow > 300 && !plan.seeking)) { lastFollow = performance.now(); plan.currentTime = target; }
       return;
     }
     const drift = plan.currentTime - target;
