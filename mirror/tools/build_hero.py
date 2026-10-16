@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build media/hero.mp4, the montage seen through the letters of "Mirror" in the hero.
 
-One agent, many worlds: Minecraft (a waterfall, lava, a cave, diamonds, a tree) and the benchmark suites (DeepMind
+One agent, many worlds: Minecraft (diamonds first, then a waterfall, lava, a cave, a tree) and the benchmark suites (DeepMind
 Control, OGBench, Atari, and OGBench manipulation), each shown for a couple of seconds. A soft edge sweeps from left
 to right between shots, so the letters change one after another, M first. The last shot sweeps back into the first,
 so the video loops without a seam. SHOTS below is the whole edit.
@@ -209,6 +209,9 @@ ROW3, SEAMS3 = row(GAP["M|i"], GAP["r|o"])          # M | irr | or
 ROW2, SEAMS2 = row(GAP["i|r"])                      # Mi | rror
 
 SHOTS = [
+    # the loop opens on diamonds
+    Shot("diamonds", 2.2, [Layer(SURVIVAL, 460.3, speed=0.9, focus=(.5, .45), zoom=(1.0, 1.06),
+                                 grade={"gamma": .55, "gain": 1.25, "sat": 1.35})]),   # lifted: it is underground
     Shot("waterfall", 2.3, [Layer(WATERFALL, 27.4, focus=(.5, .42), zoom=(1.0, 1.08), grade=MC)]),
     Shot("dmc-ogbench-atari", 2.5, [
         Layer(WALKER, 6.0, box=ROW3[0], zoom=(1.0, 1.04)),                     # its limbs show in the M
@@ -221,8 +224,6 @@ SHOTS = [
         Layer(CUBES, 0.9, box=ROW2[0], speed=0.72, focus=(.5, .68), zoom=(1.13, 1.17)),   # table edges above
         Layer(ROBOT, 1.0, box=ROW2[1], speed=0.76, focus=(.5, .56), zoom=(1.0, 1.05)),    # the letters
     ], SEAMS2),
-    Shot("diamonds", 2.2, [Layer(SURVIVAL, 460.3, speed=0.9, focus=(.5, .45), zoom=(1.0, 1.06),
-                                 grade={"gamma": .55, "gain": 1.25, "sat": 1.35})]),   # lifted: it is underground
     Shot("tree", 2.2, [Layer(SURVIVAL, 63.4, focus=(.5, .45), zoom=(1.0, 1.06), grade=MC)]),
 ]
 
@@ -320,7 +321,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, default=SITE / "media" / "hero.mp4")
     ap.add_argument("--poster", type=Path, default=SITE / "media" / "hero_poster.jpg")
-    ap.add_argument("--crf", type=int, default=25)
+    ap.add_argument("--crf", type=int, default=20)
     ap.add_argument("--sheet", type=Path, help="write a contact sheet instead of encoding")
     ap.add_argument("--mask", help="letter mask (red openings) to view the sheet through")
     ap.add_argument("--step", type=float, default=0.8)

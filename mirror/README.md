@@ -39,9 +39,9 @@ first frame. GitHub Pages supports ranges.
 | `tools/build_thumbs.py` | cuts the viewers' stills, `eval/thumbs/` and `basalt/thumbs/` |
 | `js/modal.js` | opens the viewers as Apple-style modals over the page (see "The episode modals" below) |
 
-**Hero.** The video seen through the letters of "Mirror" is a 23 s loop of the agent in seven worlds: the BASALT
-waterfall, a row of DeepMind Control, Atari and OGBench clips, the lava escape, FindCave, OGBench manipulation,
-diamonds, and a tree in survival. A soft edge sweeps left to right between them, so the letters change one at a time.
+**Hero.** The video seen through the letters of "Mirror" is a 23 s loop of the agent in seven worlds, opening on
+diamonds in survival: the BASALT waterfall, a row of DeepMind Control, Atari and OGBench clips, the lava escape,
+FindCave, OGBench manipulation, and a tree in survival. A soft edge sweeps left to right between them, so the letters change one at a time.
 Every clip is the agent's own execution, never a video plan or a human demo. Rows of clips are split at gaps between
 letters (measured in Chromium); css sizes the word to .945 of the video's width at every size (`.hero-word`), so
 each seam's dark gutter stays between two letters. `python3 mirror/tools/build_hero.py` rebuilds it; the edit
