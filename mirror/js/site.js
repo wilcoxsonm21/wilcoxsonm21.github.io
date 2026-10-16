@@ -1069,13 +1069,18 @@
   cScreen.addEventListener("transitionend", e => {
     if (e.target === cScreen && (e.propertyName === "height" || e.propertyName === "width")) cScreen.style.width = cScreen.style.height = "";
   });
-  // the plan shows beside the execution by default; the button under the screen hides it (and the choice holds across
-  // the tabs)
-  planBtn?.addEventListener("click", () => {
-    planOff = !planOff;
+  // the plan shows beside the execution by default, but not on a phone held upright, where plan above execution is too
+  // tall; the button under the screen hides or shows it, and once pressed its choice holds across the tabs and turns
+  let planChosen = false;
+  function setPlan(off) {
+    planOff = off;
     cFig.classList.toggle("plan-off", planOff);
-    planBtn.setAttribute("aria-pressed", String(planOff));
-    planBtn.lastElementChild.textContent = planOff ? "Show plan" : "Hide plan";
+    planBtn?.setAttribute("aria-pressed", String(planOff));
+    if (planBtn) planBtn.lastElementChild.textContent = planOff ? "Show plan" : "Hide plan";
+  }
+  planBtn?.addEventListener("click", () => {
+    planChosen = true;
+    setPlan(!planOff);
     const btn = segBtns.find(b => b.getAttribute("aria-selected") === "true") || segBtns[0];
     shape(clip(btn)[1], true);
   });
@@ -1349,6 +1354,7 @@
       root.classList.toggle("portrait", portrait);
       chapters.forEach(c => { if (!c.inline && c.state !== "idle" && c.mode !== portrait) c.reset(); });
       swapTwoUp();
+      if (!planChosen) setPlan(portrait);
       swapCinema();
     }
     chapters.forEach(c => c.layout());
