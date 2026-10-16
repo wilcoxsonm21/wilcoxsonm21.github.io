@@ -122,51 +122,47 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   });
 
   // ---------------------------------------------------------------- the plan follows the execution
-  // It follows whether shown or not (hidden, it keeps loading, so showing it is instant). Small drift is taken up by
-  // playing the plan a little faster or slower; a jump or a big drift seeks it. While it is shown and still loading or
-  // seeking, the execution waits for it (state.gated: paused, with the spinner) and goes on once it can play, so the two
-  // stay together (the user, 10-16). Racing at over 4x it plays a sped-up copy like the execution's; hidden, it stays
-  // where it is and downloads nothing, so the execution racing has the whole connection (it catches up when shown, or
-  // when the speed drops). Without sped-up copies, racing, it only steps along and holds nothing back.
-  let lastFollow = 0;
+  // It follows whether shown or not (hidden, it keeps loading, so showing it is instant). The two play the same copy
+  // (1x, 4x or 16x) at the same rate, at most 2x on its own clock, so the plan just plays along: drift past two frames is
+  // taken up by playing it a few percent faster or slower until it is back within one, and only a jump or a drift of
+  // half a second seeks it. While it is shown and seeking or stalled, the execution waits for it (state.gated: paused,
+  // with the spinner) and goes on once it can play, so the two stay together (the user, 10-16).
   function follow(force = false) {
     if (!state.hasPlan || plan.readyState < 1 || state.pending != null) return;
-    const k = state.k, target = Math.max(0, exec.currentTime - planLag / k), rate = exec.playbackRate;
-    if (state.rate > 4 && !planOn()) { if (!plan.paused) plan.pause(); return; }
-    if (rate > 4) {
-      if (!plan.paused) plan.pause();
-      if (force || (performance.now() - lastFollow > 300 && !plan.seeking)) { lastFollow = performance.now(); plan.currentTime = target; }
-      return;
-    }
-    // (in a copy's own seconds: a 16x copy's frame is 0.8 s of the episode)
-    const drift = plan.currentTime - target;
-    if (force || (!plan.seeking && Math.abs(drift) > Math.max(0.5 / k, 0.15))) plan.currentTime = target;
-    const want = Math.abs(drift) > Math.max(0.12 / k, 0.06) && !plan.seeking ? rate * (drift > 0 ? 0.9 : 1.1) : rate;
+    const target = Math.max(0, exec.currentTime - planLag / state.k), rate = exec.playbackRate, drift = plan.currentTime - target;
+    if (!plan.seeking && Math.abs(drift) > (force ? 0.03 : 0.5)) plan.currentTime = target;
+    if (Math.abs(drift) > 0.1) state.nudge = true; else if (Math.abs(drift) < 0.05) state.nudge = false;
+    const want = state.nudge && !plan.seeking ? rate * (drift > 0 ? 0.97 : 1.03) : rate;
     if (plan.playbackRate !== want) plan.playbackRate = want;
     const running = !exec.paused || state.gated;
     if (!running && !plan.paused) plan.pause();
-    if (!exec.paused && plan.paused && !plan.seeking) plan.play().catch(() => {});
-    if (planOn() && !exec.paused && (plan.seeking || plan.readyState < 3)) hold();
+    if (running && plan.paused && !plan.seeking) plan.play().catch(() => {});
+    if (planOn() && !exec.paused && plan.seeking) hold();
   }
   // the execution waits for the plan, and goes on once the plan can play
+  // (it checks again every quarter second too: a plan already loaded fires no event to say it can play)
+  let gateTimer = 0;
   function hold() {
     if (state.gated) return;
     state.gated = true;
     exec.pause();
     screen.classList.add("w-waiting");
+    clearInterval(gateTimer);
+    gateTimer = setInterval(ready, 250);
   }
   function resume() {
     if (!state.gated) return;
     state.gated = false;
+    clearInterval(gateTimer);
     screen.classList.remove("w-waiting");
     play();
   }
   // (no forced seek here or on "playing": each would start the plan seeking again, and the execution waiting again)
-  const ready = () => { if (state.gated && (!planOn() || (plan.readyState >= 3 && !plan.seeking))) { follow(); if (!plan.seeking) resume(); } };
+  const ready = () => { if (state.gated && (!planOn() || (plan.readyState >= 3 && !plan.seeking))) { follow(); if (!plan.seeking) resume(); } else if (!state.gated) clearInterval(gateTimer); };
   // (each copy's element hears its own events; only the one playing counts)
   const on = (els, type, fn) => { for (const v of Object.values(els)) v.addEventListener(type, (e) => { if (e.target === (els === execs ? exec : plan)) fn(e); }); };
   for (const type of ["canplay", "canplaythrough", "seeked", "playing"]) on(plans, type, ready);
-  on(plans, "waiting", () => { if (planOn() && !exec.paused && exec.playbackRate <= 4) hold(); });
+  on(plans, "waiting", () => { if (planOn() && !exec.paused) hold(); });
   on(plans, "loadedmetadata", () => { planBox.style.setProperty("--plan-h", String(plan.videoHeight || 274)); follow(true); });
 
   function seek(t) {
@@ -179,7 +175,7 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   const play = () => exec.play().catch(() => {});
   const pause = () => exec.pause();
   // (while the execution waits for the plan, a tap means "stop": it stays paused and stops waiting)
-  const toggleplay = () => { if (state.gated) { state.gated = false; screen.classList.remove("w-waiting"); paint(now()); return; } if (exec.paused) play(); else pause(); };
+  const toggleplay = () => { if (state.gated) { state.gated = false; clearInterval(gateTimer); screen.classList.remove("w-waiting"); paint(now()); return; } if (exec.paused) play(); else pause(); };
 
   // ---------------------------------------------------------------- speed: fast-forward between milestones, or 1-16x
   const rateAt = (t) => {
@@ -195,11 +191,11 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
     }
   }
   // the copy in front is the one playing, once it has a frame to show (until then the last one's frame stays)
+  // (the plan and the execution change copy together, so the two on screen are always one copy)
   function reveal() {
-    for (const [els, active] of [[execs, exec], [plans, plan]]) {
-      if (active.readyState < 2 || active.seeking) continue;
-      for (const v of Object.values(els)) v.style.visibility = v === active ? "" : "hidden";
-    }
+    const has = (v) => v.readyState >= 2 && !v.seeking;
+    if (!has(exec) || (state.hasPlan && plan.getAttribute("src") && !has(plan))) return;
+    for (const [els, active] of [[execs, exec], [plans, plan]]) for (const v of Object.values(els)) v.style.visibility = v === active ? "" : "hidden";
   }
   function switchCopy(k) {
     const t = now(), playing = !exec.paused || state.gated, before = [exec, plan];
@@ -215,14 +211,14 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
       exec.playbackRate = state.rate / k;
       if (playing) play();
     }
+    follow();
     reveal();
   }
   function applyRate(rate) {
     state.rate = rate;
     const k = copyFor(rate);
     if (k !== state.k) switchCopy(k);
-    else exec.playbackRate = rate / k;
-    follow(true);
+    else { exec.playbackRate = rate / k; follow(); }
   }
   // fast-forward: the copy for the next switch (into the next milestone's 1x stretch, or out of this one) waits there
   function prewarm() {
@@ -329,7 +325,7 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   on(execs, "seeked", () => { state.lastT = now(); });
   on(execs, "waiting", () => { screen.classList.add("w-waiting"); if (!plan.paused) plan.pause(); });   // (the plan waits for the execution too)
   on(execs, "playing", () => follow());
-  for (const type of ["playing", "canplay", "seeked"]) on(execs, type, () => screen.classList.remove("w-waiting"));
+  for (const type of ["playing", "canplay", "seeked"]) on(execs, type, () => { if (!state.gated) screen.classList.remove("w-waiting"); });
   for (const type of ["loadeddata", "canplay", "seeked", "playing"]) { on(execs, type, reveal); on(plans, type, reveal); }
 
   // ---------------------------------------------------------------- the moments on the scrub line: tiny item icons
@@ -428,6 +424,7 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
     // (the two play one copy, so a copy the plan lacks is not played)
     for (const k of Object.keys(state.srcs.exec)) if (state.srcs.plan && !state.srcs.plan[k]) delete state.srcs.exec[k];
     state.gated = false;
+    clearInterval(gateTimer);
     state.milestones = milestones;
     state.ticks = ticks;
     state.toasts = toasts.sort((a, b) => a.t - b.t);
@@ -468,6 +465,7 @@ function createWatchPlayer(root, { planLag = 0, autoNote = "16× between milesto
   function unload() {
     state.load++;
     state.gated = false;
+    clearInterval(gateTimer);
     state.startPlay = false;
     clear();
     screen.classList.remove("w-waiting");
