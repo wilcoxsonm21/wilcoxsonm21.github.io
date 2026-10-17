@@ -27,3 +27,9 @@ source), so time t in the copy is time k·t in the episode. Videos are H.264 (li
 execution copies and medium for the combined videos) with a
 keyframe every 2 seconds, `+faststart`, and no audio. They were built from source revision
 `efacff62f69be8367c448b1c13ee21869f56ece2`.
+
+The `frag` folder holds the same videos (every `raw`, `raw_4x`, `raw_16x`, `side*` and `stack*` file the site plays,
+including the 1x executions from the source dataset) as fragmented MP4s, so the site can stream them piece by piece.
+`frag/active_idm/raw_4x/07.mp4` is `active_idm/raw_4x/07.mp4` remuxed without re-encoding into one fragment per
+keyframe, with an empty `moov` and a global `sidx` index right after it (ffmpeg
+`-movflags +frag_keyframe+empty_moov+default_base_moof+global_sidx`), so the whole header is a few kilobytes.

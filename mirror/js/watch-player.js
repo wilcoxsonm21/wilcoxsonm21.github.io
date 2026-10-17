@@ -20,6 +20,7 @@
 //
 //   const player = createWatchPlayer(figure);
 //   player.load({ exec: { 1: url, 4: url, 16: url } (or just a url), both: { side: copies, stack: copies } or null,
+//                 frag: { exec: copies, side: copies, stack: copies } (the same videos fragmented, played where possible),
 //                 duration, startAt, milestones: [{ t, icon, title }], ticks: [{ t, title, icon, gold }],
 //                 toasts: [{ t, icon, text, death }], windows: [[start, end], …], auto, goal: (t) => text, caption });
 // x positions (px) for icons at xs (sorted) on a line `width` wide: each at least `gap` past the one before, so
@@ -30,6 +31,197 @@ function spread(xs, width, gap) {
   for (let i = out.length - 1; i >= 0; i--) out[i] = Math.max(0, Math.min(out[i], i < out.length - 1 ? out[i + 1] - gap : width));
   return out;
 }
+
+// Fragmented videos, streamed piece by piece (Media Source Extensions; on an iPhone, ManagedMediaSource from iOS 17.1).
+// A fragmented MP4 (tools/mirror_fast/worker_frag.py) opens with a few kilobytes of header and an index of its pieces
+// (sidx), each a keyframe's worth, about two seconds or less, so the player reads the index once and fetches just the
+// pieces around where a video is: a jump costs one piece, not the megabyte of index an hour-long plain MP4 opens with.
+// Pieces are kept in memory (BYTE_CAP), so a video that goes back to where it was needs nothing new. Where neither API
+// exists, the player plays the plain files instead.
+//   const s = FragStream.attach(video, url, { ahead });   s.ahead = 0;   s.detach();
+const FragStream = (() => {
+  const MS = window.ManagedMediaSource || window.MediaSource;
+  const supported = !!MS && MS.isTypeSupported?.('video/mp4; codecs="avc1.64001f"');
+  const BACK = 20, BYTE_CAP = 120e6;
+  const heads = new Map();   // url -> promise of { init, codec, duration, frags: [{ t0, t1, start, end }], resolved }
+  const pieces = new Map();  // `${url}#${i}` -> ArrayBuffer, oldest first
+  let cached = 0;
+  // the stream on screen (ahead > 0) has the connection to itself until it holds a few seconds of play: one off screen
+  // (a parked or prewarmed copy, or the last one, until the new one shows) waits, and drops what it was fetching
+  const live = new Set(), FRONT_FIRST = 4;   // s of play
+  const held = (v) => { const b = v.buffered, t = v.currentTime;
+    for (let r = 0; r < b.length; r++) if (b.start(r) <= t + 0.1 && t < b.end(r)) return b.end(r) - t; return 0; };
+  const frontLoading = () => [...live].some((o) => o.ahead > 0 && !o.dead &&
+    (!o.sb || (o.busy && held(o.video) < FRONT_FIRST * Math.max(1, o.video.playbackRate))));
+  const yieldFetch = (o) => { if (o.busy) { const b = o.busy; o.busy = null; b.abort.abort(); } };
+  const type = (d, o) => String.fromCharCode(d.getUint8(o + 4), d.getUint8(o + 5), d.getUint8(o + 6), d.getUint8(o + 7));
+  function* boxes(d, start, end) {
+    for (let o = start; o + 8 <= end;) {
+      let n = d.getUint32(o), hdr = 8;
+      if (n === 1) { n = Number(d.getBigUint64(o + 8)); hdr = 16; }
+      if (n < 8) return;
+      yield { t: type(d, o), o, n, body: o + hdr };
+      o += n;
+    }
+  }
+  const child = (d, box, t, skip = 0) => { for (const b of boxes(d, box.body + skip, box.o + box.n)) if (b.t === t) return b; return null; };
+  // fetch bytes [start, end) of the video; the first request follows the hub's redirect, later ones go straight to
+  // where it led (a signed address that lasts an hour), and an expired one is looked up again. A server may answer a
+  // range with less than was asked (the preview server sends at most a megabyte): the rest is asked for in turn.
+  async function range(head, start, end, signal) {
+    const parts = [];
+    for (let at = start, attempt = 0; at < end;) {
+      const r = await fetch(head.resolved, { headers: { Range: `bytes=${at}-${end - 1}` }, signal });
+      if (r.status !== 206 && !(r.status === 200 && at === 0)) {
+        if (attempt++ || head.resolved === head.url) throw new Error(`HTTP ${r.status}`);
+        head.resolved = head.url;
+        continue;
+      }
+      head.resolved = r.url || head.resolved;
+      let buf = await r.arrayBuffer();
+      if (r.status === 200) buf = buf.slice(0, end - start);
+      if (!buf.byteLength) throw new Error("empty reply");
+      parts.push(new Uint8Array(buf));
+      at += buf.byteLength;
+      if (r.status === 200 && buf.byteLength < end - start) break;   // the whole file, and it ends early
+    }
+    if (parts.length === 1) return parts[0].buffer.byteLength === parts[0].byteLength ? parts[0].buffer : parts[0].slice().buffer;
+    const out = new Uint8Array(parts.reduce((n, p) => n + p.byteLength, 0));
+    parts.reduce((o, p) => (out.set(p, o), o + p.byteLength), 0);
+    return out.buffer;
+  }
+  function head(url) {
+    if (!heads.has(url)) {
+      const h = { url, resolved: url };
+      heads.set(url, (async () => {
+        let buf = await range(h, 0, 65536), d = new DataView(buf);
+        const top = [...boxes(d, 0, d.byteLength)];
+        const moov = top.find((b) => b.t === "moov"), sidx0 = top.find((b) => b.t === "sidx");
+        if (!moov || !sidx0) throw new Error("not a fragmented video");
+        if (sidx0.o + sidx0.n > buf.byteLength) { buf = await range(h, 0, sidx0.o + sidx0.n); d = new DataView(buf); }
+        // the codec, from avc1/avcC: profile, compatibility, level
+        const path = ["trak", "mdia", "minf", "stbl", "stsd"].reduce((b, t) => b && child(d, b, t), moov);
+        const avc1 = path && child(d, path, "avc1", 8), avcC = avc1 && child(d, avc1, "avcC", 78);
+        const hex = (o) => d.getUint8(avcC.body + o).toString(16).padStart(2, "0");
+        const codec = avcC ? `avc1.${hex(1)}${hex(2)}${hex(3)}` : "avc1.64001f";
+        // the pieces, from sidx
+        const s = sidx0.body, v = d.getUint8(s), scale = d.getUint32(s + 8);
+        let t = v ? Number(d.getBigUint64(s + 12)) : d.getUint32(s + 12), at = s + (v ? 20 : 16);
+        let pos = sidx0.o + sidx0.n + (v ? Number(d.getBigUint64(s + 20)) : d.getUint32(s + 16));
+        at += v ? 8 : 4;
+        const count = d.getUint16(at + 2), frags = [];
+        for (let i = 0; i < count; i++) {
+          const e = at + 4 + 12 * i, size = d.getUint32(e) & 0x7fffffff, dur = d.getUint32(e + 4);
+          frags.push({ t0: t / scale, t1: (t + dur) / scale, start: pos, end: pos + size });
+          t += dur;
+          pos += size;
+        }
+        return Object.assign(h, { init: buf.slice(0, moov.o + moov.n), codec, frags, duration: t / scale });
+      })().catch((e) => { heads.delete(url); throw e; }));
+    }
+    return heads.get(url);
+  }
+  async function piece(h, i, signal) {
+    const key = `${h.url}#${i}`;
+    if (pieces.has(key)) { const b = pieces.get(key); pieces.delete(key); pieces.set(key, b); return b; }
+    const b = await range(h, h.frags[i].start, h.frags[i].end, signal);
+    pieces.set(key, b);
+    cached += b.byteLength;
+    for (const [k, old] of pieces) { if (cached <= BYTE_CAP) break; pieces.delete(k); cached -= old.byteLength; }
+    return b;
+  }
+  const find = (frags, t) => {
+    let lo = 0, hi = frags.length - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (frags[mid].t0 <= t) lo = mid; else hi = mid - 1; }
+    return lo;
+  };
+
+  function attach(video, url, { ahead = 30, at = 0 } = {}) {
+    const ms = new MS(), s = { video, ahead, at, dead: false, h: null, sb: null, have: new Set(), busy: null, streaming: true, onerror: null };
+    if (MS === window.ManagedMediaSource) video.disableRemotePlayback = true;
+    ms.addEventListener("startstreaming", () => { s.streaming = true; pump(); });
+    ms.addEventListener("endstreaming", () => { s.streaming = false; });
+    const fail = (e) => { if (!s.dead) { s.dead = true; s.onerror?.(e); } };
+    ms.addEventListener("sourceopen", async () => {
+      try {
+        s.h = await head(url);
+        if (s.dead) return;
+        s.sb = ms.addSourceBuffer(`video/mp4; codecs="${s.h.codec}"`);
+        s.sb.mode = "segments";
+        ms.duration = s.h.duration;
+        s.sb.addEventListener("updateend", pump);
+        s.sb.appendBuffer(s.h.init);
+      } catch (e) { fail(e); }
+    }, { once: true });
+    video.src = URL.createObjectURL(ms);
+    // what is buffered, piece by piece (the browser may drop some to make room: a stall checks again)
+    const holds = (i) => { const f = s.h.frags[i], b = s.sb.buffered, m = (f.t0 + f.t1) / 2;
+      for (let r = 0; r < b.length; r++) if (b.start(r) <= m && m < b.end(r)) return true; return false; };
+    function pump() {
+      if (s.dead || !s.sb || s.sb.updating || ms.readyState === "closed") return;
+      const frags = s.h.frags, t = video.readyState >= 1 ? video.currentTime : s.at, last = frags.length - 1;
+      const i0 = find(frags, t), i1 = Math.max(i0 + 1, find(frags, t + s.ahead));
+      // let go of what is far behind or far ahead
+      const b = s.sb.buffered;
+      for (let r = 0; r < b.length; r++) {
+        const lo = b.start(r), hi = b.end(r), keepLo = t - BACK, keepHi = frags[Math.min(i1, last)].t1 + 1;
+        const cut = hi < keepLo || lo > keepHi ? [lo, hi] : lo < keepLo - 1 ? [lo, keepLo] : hi > keepHi + 1 ? [keepHi, hi] : null;
+        if (cut) {
+          for (const i of [...s.have]) if (frags[i].t1 > cut[0] && frags[i].t0 < cut[1]) s.have.delete(i);
+          s.sb.remove(cut[0], cut[1]);
+          return;
+        }
+      }
+      let need = -1;
+      for (let i = i0; i <= Math.min(i1, last); i++) if (!s.have.has(i)) { need = i; break; }
+      if (need < 0) {
+        if (s.have.has(last) && ms.readyState === "open" && i1 >= last) { try { ms.endOfStream(); } catch {} }
+        return;
+      }
+      if (s.ahead <= 0 && frontLoading()) return yieldFetch(s);
+      if (s.busy?.i === need) return;
+      s.busy?.abort.abort();
+      if (!s.streaming && need !== i0) return;
+      const busy = s.busy = { i: need, abort: new AbortController() };
+      if (s.ahead > 0 && frontLoading()) for (const o of live) if (o !== s && o.ahead <= 0) yieldFetch(o);
+      piece(s.h, need, busy.abort.signal).then((buf) => {
+        if (s.busy !== busy) return;
+        s.busy = null;
+        if (s.dead || s.sb.updating || ms.readyState === "closed") return;
+        try {
+          s.sb.appendBuffer(buf);
+          s.have.add(need);
+        } catch (e) {
+          if (e.name !== "QuotaExceededError") return fail(e);
+          // full: keep only what is needed now, and try again
+          s.ahead = Math.max(4, s.ahead / 2);
+          if (t > 1) s.sb.remove(0, t - 1);
+        }
+      }).catch((e) => { if (s.busy === busy) { s.busy = null; if (e.name !== "AbortError") fail(e); } });
+    }
+    const check = () => {
+      if (!s.sb || s.sb.updating) return;
+      for (const i of [...s.have]) if (!holds(i)) s.have.delete(i);
+      pump();
+    };
+    const listeners = [["seeking", pump], ["timeupdate", pump], ["waiting", check], ["playing", pump]];
+    for (const [ev, fn] of listeners) video.addEventListener(ev, fn);
+    const timer = setInterval(pump, 500);
+    live.add(s);
+    s.detach = () => {
+      s.dead = true;
+      live.delete(s);
+      s.busy?.abort.abort();
+      clearInterval(timer);
+      for (const [ev, fn] of listeners) video.removeEventListener(ev, fn);
+      video.removeAttribute("src");
+      video.load();
+    };
+    s.buffered = (t) => { const b = video.buffered; for (let r = 0; r < b.length; r++) if (b.start(r) <= t && t < b.end(r) - 0.05) return true; return false; };
+    return s;
+  }
+  return { supported, attach, head };
+})();
 
 function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at each" } = {}) {
   const NS = "http://www.w3.org/2000/svg";
@@ -87,7 +279,7 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   // the plan starts hidden (the user, 10-16: "Show plan" brings it in, and it stays for the next episodes)
   const state = { duration: 1, hasPlan: false, planOff: true, pending: null, speed: 1, auto: false, windows: [], milestones: [], ticks: [],
     toasts: [], goal: () => null, dragging: false, lastT: 0, toastTimer: 0, shown: {},
-    intent: false, rate: 1, view: "exec", k: 1, srcs: { exec: {} } };
+    intent: false, rate: 1, view: "exec", k: 1, srcs: { exec: {} }, frag: {} };
 
   const clock = (s) => {
     if (s == null || !isFinite(s)) return "–";
@@ -102,7 +294,7 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   // with both fills the strip, and the screen shows the whole of it. Only `video` (state.view at state.k) plays.
   const pool = new Map();
   let video = null;
-  function element(view, k) {
+  function element(view, k, at = now()) {
     const key = `${view}:${k}`;
     if (!pool.has(key)) {
       const v = el("video", { playsinline: "", muted: "", preload: "auto", disablepictureinpicture: "", tabindex: "-1",
@@ -118,9 +310,22 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
       film.prepend(v);
       pool.set(key, v);
     }
-    const v = pool.get(key), src = state.srcs[view]?.[k];
-    if (src && v.getAttribute("src") !== src) v.src = src;
+    // the fragmented file where the browser can stream one, else the plain file
+    const v = pool.get(key), frag = FragStream.supported ? state.frag[view]?.[k] : null, url = frag || state.srcs[view]?.[k];
+    if (url && v.dataset.url !== url) {
+      release(v);
+      v.dataset.url = url;
+      if (frag) { v.frag = FragStream.attach(v, frag, { ahead: 0, at: at / k }); v.frag.onerror = () => lost(v); }
+      else v.src = url;
+    }
     return v;
+  }
+  // a video lets go of its file
+  function release(v) {
+    v.pause();
+    if (v.frag) { v.frag.detach(); v.frag = null; }
+    else if (v.dataset.url) { v.removeAttribute("src"); v.load(); }
+    v.dataset.url = "";
   }
   const kOf = (v) => Number(v.dataset.k);
   // the episode's time: the copy's time times its speed-up
@@ -134,21 +339,38 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   // switches to next
   function reveal() {
     if (!video || video.readyState < 2 || video.seeking) return;
-    const keep = new Set([video, ...(state.auto ? [1, FAST].map((r) => pool.get(`${state.view}:${copyFor(state.view, r)}`)) : [])]);
+    const keep = new Set([video, parked(), ...(state.auto ? [1, FAST].map((r) => pool.get(`${state.view}:${copyFor(state.view, r)}`)) : [])]);
     for (const v of pool.values()) {
       v.style.visibility = v === video ? "" : "hidden";
-      if (!keep.has(v) && v.getAttribute("src")) { v.pause(); v.removeAttribute("src"); v.load(); }
+      if (!keep.has(v) && v.dataset.url) release(v);
     }
+  }
+  // the video the next tap of the speed pill switches to, where it is a different copy: it waits, paused, at the
+  // episode's time (re-parked once a second at most, when the time has left what it holds), so the tap is instant.
+  // Only for fragmented files, where waiting costs a piece or two.
+  function parked() {
+    if (!FragStream.supported || state.auto || !video) return null;
+    const modes = [...SPEEDS, ...(state.windows.length ? ["auto"] : [])], next = modes[(modes.indexOf(state.speed) + 1) % modes.length];
+    const k = copyFor(state.view, next === "auto" ? rateAt(now()) : next);
+    return k === state.k || !state.frag[state.view]?.[k] ? null : element(state.view, k);
+  }
+  function park() {
+    const v = parked();
+    if (!v || state.pending != null || v.readyState < 1 || v.seeking || performance.now() - (v.parkedAt || 0) < 1000) return;
+    const k = kOf(v), t = now() / k;
+    if (!v.frag?.buffered(t)) { v.currentTime = t; v.parkedAt = performance.now(); }
   }
   // play view at copy k from episode time t (a video made ready for this, within a second of t, plays on from there)
   function show(view, k, t = now()) {
-    const next = element(view, k);
+    const next = element(view, k, t);
     if (next === video) return;
     const before = video;
     video = next;
     state.view = view;
     state.k = k;
     before?.pause();
+    if (before?.frag) before.frag.ahead = 0;
+    if (video.frag) video.frag.ahead = 30;
     if (video.readyState >= 1) {
       if (Math.abs(video.currentTime * k - t) > 1.5) video.currentTime = t / k;
       state.pending = null;
@@ -157,6 +379,10 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     hold();
     reveal();
   }
+  // (not while the page asks for a phone held sideways to be turned upright, js/turn.js: its note pauses the videos, and
+  // the player played them again; it looks again as the note goes)
+  const turnedAway = () => { try { return window.top.document.documentElement.classList.contains("turn"); } catch (e) { return false; } };
+  try { window.top.document.addEventListener("mirror-turn", () => hold()); } catch (e) {}
   // the video does what the reader asked for: plays (from where it is, at the speed) or not; a jump past its end stops
   function hold() {
     if (!video) return;
@@ -165,7 +391,7 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
       state.pending = null;
     }
     if (video.readyState >= 1 && video.playbackRate !== state.rate / state.k) video.playbackRate = state.rate / state.k;
-    const play = state.intent && !state.dragging && !(video.ended && now() >= state.duration - 0.5);
+    const play = state.intent && !state.dragging && !(video.ended && now() >= state.duration - 0.5) && !turnedAway();
     if (play && video.paused) video.play().catch(() => {});
     else if (!play && !video.paused) video.pause();
     // the spinner: the reader wants it playing, and it cannot yet
@@ -182,16 +408,21 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   }
   // a video that will not load is not played again: a missing sped-up copy falls back to a slower one, and without the
   // plan's videos the execution plays alone
+  // (a fragmented file that fails falls back to the plain one first)
   function lost(v) {
-    const view = v.dataset.view, k = kOf(v);
-    if (!v.getAttribute("src") || !state.srcs[view]?.[k]) return;
-    delete state.srcs[view][k];
-    v.removeAttribute("src");
-    v.load();
-    if (view !== "exec" && !state.srcs[view][1]) { state.hasPlan = false; shape(); }
-    if (v === video) { video = null; show(viewWanted(), copyFor(viewWanted(), state.rate), state.lastT); }
+    const view = v.dataset.view, k = kOf(v), wasFrag = !!v.frag;
+    if (!v.dataset.url) return;
+    const t = v === video ? now() : state.lastT;
+    release(v);
+    if (wasFrag) delete state.frag[view]?.[k];
+    else {
+      if (!state.srcs[view]?.[k]) return;
+      delete state.srcs[view][k];
+      if (view !== "exec" && !state.srcs[view][1]) { state.hasPlan = false; shape(); }
+    }
+    if (v === video) { video = null; show(viewWanted(), copyFor(viewWanted(), state.rate), t); }
   }
-  setInterval(() => { if (video && root.offsetParent !== null) hold(); }, 250);
+  setInterval(() => { if (video && root.offsetParent !== null) { hold(); park(); } }, 250);
 
   // ---------------------------------------------------------------- the screen's shape: plan | execution, or the
   // execution alone (no plan, or Hide plan); plan above execution on a phone held upright
@@ -398,10 +629,11 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   });
 
   // ---------------------------------------------------------------- an episode
-  function load({ exec: execSrc, both, duration, startAt = 0, milestones = [], ticks = [], toasts = [], windows = [], auto, goal, caption: cap = [] }) {
+  function load({ exec: execSrc, both, frag = {}, duration, startAt = 0, milestones = [], ticks = [], toasts = [], windows = [], auto, goal, caption: cap = [] }) {
     clear();
     const copies = (src) => (typeof src === "string" ? { 1: src } : { ...src });
     state.srcs = { exec: copies(execSrc), ...(both ? { side: copies(both.side), stack: copies(both.stack) } : {}) };
+    state.frag = Object.fromEntries(Object.entries(frag).filter(([view]) => view in state.srcs).map(([view, c]) => [view, { ...c }]));
     state.duration = Math.max(1, duration);
     state.hasPlan = !!both;
     state.milestones = milestones;
@@ -431,7 +663,7 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   }
   // every video of the last episode stops and lets go of its file
   function clear() {
-    for (const v of pool.values()) { v.pause(); v.style.visibility = "hidden"; if (v.getAttribute("src")) { v.removeAttribute("src"); v.load(); } }
+    for (const v of pool.values()) { v.style.visibility = "hidden"; release(v); }
     video = null;
     state.pending = null;
   }

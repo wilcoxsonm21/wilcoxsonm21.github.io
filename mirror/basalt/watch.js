@@ -12,6 +12,9 @@ const copies = (folder, view, n) => ({ 1: `${VIDEO_BASE}/${folder}/${view}/${pad
   4: `${FAST_BASE}/${folder}/${view}_4x/${pad(n)}.mp4`, 16: `${FAST_BASE}/${folder}/${view}_16x/${pad(n)}.mp4` });
 const both = (folder, n) => Object.fromEntries(["side", "stack"].map((view) => [view, { 1: `${FAST_BASE}/${folder}/${view}/${pad(n)}.mp4`,
   4: `${FAST_BASE}/${folder}/${view}_4x/${pad(n)}.mp4`, 16: `${FAST_BASE}/${folder}/${view}_16x/${pad(n)}.mp4` }]));
+// the same videos fragmented, streamed piece by piece where the browser can (FragStream in ../js/watch-player.js)
+const frag = (folder, n) => Object.fromEntries([["exec", "raw"], ["side", "side"], ["stack", "stack"]].map(([key, view]) => [key,
+  Object.fromEntries([1, 4, 16].map((k) => [k, `${FAST_BASE}/frag/${folder}/${view}${k === 1 ? "" : `_${k}x`}/${pad(n)}.mp4`]))]));
 // each task: a bold line, then the rules (the user's wording, 10-16; BASALT's own descriptions are in MineRL's
 // herobraine/env_specs/basalt_specs.py). MakeWaterfall's "picture" is the agent ending the episode while facing its
 // waterfall: its video plan turns gray there (the data's end), which is when the episode is judged; the data has no
@@ -125,6 +128,7 @@ function openEpisode(n, { version = state.version, startAt = 0 } = {}) {
   const folder = state.index[state.tab][version].folder;
   player.load({
     exec: copies(folder, "raw", n),
+    frag: frag(folder, n),
     both: episode.views.includes("plan_idm") ? both(folder, n) : null,
     duration: episode.seconds, startAt,
     ticks: at != null ? [{ t: markAt, title: `${episode.success ? task.hit : fail.note} · ${clock(at)}`, gold: episode.success }] : [],
