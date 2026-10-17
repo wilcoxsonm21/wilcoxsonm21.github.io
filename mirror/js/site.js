@@ -1280,7 +1280,6 @@
 
   // ------------------------------------------------------------------ survival mode: the lights go down
   const backdrop = $("#backdrop"), cinema = $("#survival"), cScreen = $(".cinema-screen");
-  const glassBar = $("#glass-toolbar");
   const cVideo = $(".cinema-video"), cCap = $(".cinema-caption"), segBtns = $$(".segmented button");
   let cinemaLoaded = false, cinemaOn = false;
   let heroFar = false, cinemaFar = false;   // well off the screen: their downloads give way (park)
@@ -1430,8 +1429,6 @@
     const o = smooth(.62, .12, top / vh) * (1 - smooth(.86, .42, bottom / vh));
     css(backdrop, "opacity", o.toFixed(3));
     css(backdrop, "display", o > 0 ? "block" : "none");
-    // (lit, Safari may paint its toolbar in the backdrop's colour: the glass over the dark section showed the white page)
-    css(glassBar, "display", o > .5 ? "none" : "");
     css(cinema, "--dark", smooth(.3, .7, o).toFixed(3));   // the copy flips while the light is mid-grey
     root.classList.toggle("is-dark", o > .5);
     // (landing already in view, after a reload, the clip plays as soon as its source is set)
