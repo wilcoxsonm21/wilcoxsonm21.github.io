@@ -258,6 +258,15 @@ Everything that downloads at once shares a slow connection, so the page loads in
   screen; the posters further on follow in order. The lava figure's paths (`js/lava-data.js`, 200 KB) load with its
   chapter (`data-scripts`); its screenshot, which is its first step, is its poster (`data-src`), and its first step's
   text shows from the start.
+- The poster lies over the scene's frame, and the scene loads under it fully drawn; the poster fades out once the scene
+  has drawn its opening with its clips (`Chapter.seeking`), or after `FIRST_MAX` (3 s) of its stage on the screen. iOS
+  Safari doesn't start a clip in a frame at opacity 0: while the scene faded in over its poster, every iPhone visit
+  (`?debug` logs from 10-16) waited out the old 8 s limit on its first animation, however fast the connection.
+- A scene's clips load one at a time, in the order its timeline shows them (`pump` in `scenes/scene-adapter.js`): the
+  next starts once the one before it is in, or after 2 s, and a clip a frame shows starts at once. The intro's opening
+  clip came in at 700 kbps in 0.7 s instead of 1.5 s beside its click's two larger ones. On iOS a clip that hasn't
+  played stays at readyState 1 with nothing buffered however much it has downloaded, so "in" also reads the clip's
+  resource timing entries (`clipIn`); before that, each counted as on its way for 6 s and held the next chapter back.
 - Downloads the reader has scrolled past give way to the rest: a scene's clips still on their way (`SCENE.park`), and
   the hero's montage or the survival clip once well off the screen (`park`). They go on in the background once
   everything the reader is on and coming to is in, one at a time and nearest first, and give way again whenever

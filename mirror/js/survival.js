@@ -73,7 +73,8 @@
       b.dataset.key = k;
       b.title = NAME[k];
       b.style.left = `${(100 * t) / ep.duration}%`;
-      b.innerHTML = `<img src="eval/icons/${k}.png" alt="">`;
+      // (lazy, as the strip's: they loaded with the page, eleven requests ahead of the first animations)
+      b.innerHTML = `<img src="eval/icons/${k}.png" alt="" loading="lazy">`;
       b.addEventListener("click", () => jump(k));
       return b;
     }) : []));

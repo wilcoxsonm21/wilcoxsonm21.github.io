@@ -11,7 +11,8 @@
 //   SCENE.caption()        the title on screen, as HTML (shown outside the stage on narrow screens)
 //   SCENE.setNarrow(b)     hides the in-stage titles
 //   SCENE.more()           the page shows the scene's opening: fetch the rest of its images
-//   SCENE.pending()        how many clips and images its frame needs and hasn't got (not what it fetches ahead)
+//   SCENE.pending()        how many clips and images its frame needs and hasn't got (not what it fetches ahead); it
+//                          also starts the next clip of its queue (pump)
 //   SCENE.waiting()        an image the frame on screen shows is still loading
 //   SCENE.park(), resume() the clips on their way give way to other downloads, and go on (parked(): how many)
 //   SCENE.busy()           something is on its way
@@ -27,7 +28,8 @@
 
   // A slow connection: a scene's clips (intro's 17, basalt's 10 MB) don't all download the moment it opens, ahead of
   // what the reader needs first (its opening clips, the next scenes, the gallery's posters). Each loads once the
-  // timeline is within a click of it (feed), or at once when a frame wants it (syncVideos).
+  // timeline is within a click of it (feed), one at a time in the timeline's order (pump), or at once when a frame
+  // wants it (syncVideos).
   const LAZY = new Map();
   // A phone held upright gets the scene's smaller clips where it has them (window.CLIP_PHONE, the tag of the set
   // tools/build_scenes.py encodes at the size the clips are shown there): "_d.mp4" -> "_m.mp4". Tablets (short side
@@ -48,11 +50,45 @@
     const src = v && LAZY.get(v);
     if (!src) return;
     LAZY.delete(v);
+    // (from 0: the deck shows its opening frame, (frame + .5) / FPS, before the clip has its file, and a time set then is
+    // kept as the clip's start and seeked to once the file comes, through a load() too. On an iPhone that seek, on a clip
+    // that hadn't played, never finished while its first play() waited: the intro sat behind its poster until the page
+    // gave up on it, every visit. The timeline seeks it where it wants once it can (seekable).)
+    v.currentTime = 0;
     v.preload = "auto";
     v.src = src;
     if (!ahead) asked.set(v, performance.now());
   };
   for (const v of document.querySelectorAll("video[src]")) asked.set(v, performance.now());   // (a scene's own: suites)
+  // A clip is in: its file has arrived, or as much of it as the browser fetches ahead (its download is idle). iOS Safari
+  // doesn't say so the usual way: a clip that hasn't played stays at readyState 1, with nothing buffered and its download
+  // "loading", however much it has fetched; its resource timing entries do (one per range it asked for; the first, a
+  // 2-byte probe, doesn't count). On an iPhone every clip used to count as on its way for PENDING_MAX.
+  const clipIn = v => !!v.error || v.readyState >= 4 || v.networkState === HTMLMediaElement.NETWORK_IDLE
+    || !!v.currentSrc && performance.getEntriesByName(v.currentSrc).some(e => (e.encodedBodySize || e.transferSize || 0) > 1000);
+  // The clips the timeline will want load one at a time, in its order (feed), so a click's first clip isn't sharing the
+  // line with its later ones (intro's opening clip took 1.5 s at 700 kbps beside its two big ones, against 0.4 s alone):
+  // the next starts once the one before it is in, or after CLIP_GAP seconds. A clip a frame wants starts at once
+  // (syncVideos), and those of the next click wait until this one's are in (pending).
+  const CLIP_GAP = 2;
+  const clipQ = [];          // [clip, the beat that first cues it], in the timeline's order
+  let needTo = -1;           // beats up to this one are the click being played's (feed): their clips are needed now
+  let flight = null, flightAt = 0;   // the clip the queue last started, and when
+  function pump() {
+    // (one is on its way: the one it started last, or one a frame asked for)
+    const now = performance.now();
+    if (flight && !clipIn(flight) && now - flightAt < CLIP_GAP * 1e3) return;
+    for (const [el, at] of asked) if (el.tagName === "VIDEO" && !clipIn(el) && now - at < CLIP_GAP * 1e3) return;
+    flight = null;
+    while (clipQ.length && !LAZY.has(clipQ[0][0])) clipQ.shift();   // (asked for already, by a frame)
+    if (!clipQ.length) return;
+    const [v, k] = clipQ[0], ahead = k > needTo;
+    if (ahead && need() > 0) return;
+    clipQ.shift();
+    fetchClip(v, ahead);
+    flight = v;
+    flightAt = performance.now();
+  }
   // The scene's images wait too (data-src in scroll mode, tools/build_scenes.py), so its opening doesn't wait for what
   // its later clicks show: each loads as soon as a frame shows it (showImages), and the rest once the page has shown
   // the scene's opening (SCENE.more).
@@ -73,18 +109,24 @@
   function showImages() {
     for (const im of [...LAZY_IMG]) if (shows(im)) { fetchImg(im); onShow.add(im); }
   }
-  function pending() {
+  // (need: the count, with the click's clips still waiting their turn in the queue; pending also starts the next one,
+  // as the page asks it every frame or so, whether or not the scene is on the screen and drawing)
+  function need() {
     const now = performance.now();
     for (const [el, at] of asked) {
-      const busy = el.tagName === "IMG" ? !el.complete : el.networkState === 2 && el.readyState < 4;
+      const busy = el.tagName === "IMG" ? !el.complete : !clipIn(el);
       if (!busy || now - at > PENDING_MAX * 1e3) asked.delete(el);
     }
-    return asked.size;
+    return asked.size + clipQ.filter(([v, k]) => k <= needTo && LAZY.has(v)).length;
+  }
+  function pending() {
+    pump();
+    return need();
   }
   // What is fetched ahead waits until what the frame needs is in (pending), so the two never share the line
   const aheadQ = [];
   function fetchAhead() {
-    if (aheadQ.length && pending() === 0) for (const f of aheadQ.splice(0)) f();
+    if (aheadQ.length && need() === 0) for (const f of aheadQ.splice(0)) f();
   }
   function more() {
     for (const im of LAZY_IMG) aheadQ.push(() => fetchImg(im, true));
@@ -97,7 +139,7 @@
   const RESUME = new Set();
   function park() {
     for (const v of document.querySelectorAll("video[src]")) {
-      if (v.networkState !== 2 || v.readyState >= 4) continue;   // (in, or not downloading)
+      if (clipIn(v)) continue;
       const src = v.getAttribute("src");
       v.removeAttribute("src");
       v.load();
@@ -105,7 +147,8 @@
       if (CUED.has(v)) { LAZY.set(v, src); RESUME.add(v); } else PARKED.set(v, src);
     }
     fed = -1;
-    aheadQ.length = 0;   // (fed again when the reader is back)
+    aheadQ.length = clipQ.length = 0;   // (fed again when the reader is back)
+    flight = null;
   }
   function resume() {
     for (const v of RESUME) fetchClip(v, true);
@@ -114,8 +157,10 @@
     PARKED.clear();
   }
   const parked = () => RESUME.size + PARKED.size;
-  // something is on its way: a clip or an image, or what the frame on screen fetches ahead next
-  const busy = () => aheadQ.length > 0 || [...document.querySelectorAll("video[src]")].some(v => v.networkState === 2 && v.readyState < 4)
+  // something is on its way: a clip or an image, or what the frame on screen fetches ahead next (on an iPhone a clip that
+  // hadn't played kept this true for good, and what had given way while the reader was on the scene never went on)
+  const busy = () => aheadQ.length > 0 || clipQ.some(([v]) => LAZY.has(v))
+    || [...document.querySelectorAll("video[src]")].some(v => !clipIn(v))
     || [...document.images].some(im => im.getAttribute("src") && !im.complete);
   function waiting() {
     for (const im of onShow) if (im.complete) onShow.delete(im);
@@ -226,6 +271,9 @@
   // ---------------------------------------------------------------- videos, synced to the timeline
   // Playing forward at a sane rate, a clip plays natively (with drift correction); otherwise it is paused and seeked
   // to the frame the timeline wants (scrubbing, rewinding, jumping).
+  // A clip is seeked once it has its size (a time set before is kept as its start, fetchClip) and not while a play() of
+  // it is under way (priming, starting): on iOS a seek then, on a clip that hadn't played yet, never finished
+  const seekable = v => v.readyState >= 1 && !v.priming && !v.starting;
   function syncVideos(want, ctx) {
     const playing = ctx.visible && ctx.rate > .45 && ctx.rate < 4.5;
     for (const slot in SLOT_CLIPS) {
@@ -249,9 +297,10 @@
         const r = lim(rate, .25, 8);
         if (Math.abs(v.playbackRate - r) > .02) v.playbackRate = r;
         if (v.paused) {
-          if (Math.abs(v.currentTime - target) > .04) v.currentTime = target;
-          v.play().catch(() => {});
-        } else if (Math.abs(v.currentTime - target) > .25 * Math.max(1, r)) v.currentTime = target;
+          if (seekable(v) && Math.abs(v.currentTime - target) > .04) v.currentTime = target;
+          v.starting = true;
+          v.play().then(() => { v.starting = false; }, () => { v.starting = false; });
+        } else if (seekable(v) && Math.abs(v.currentTime - target) > .25 * Math.max(1, r)) v.currentTime = target;
       } else {
         // iOS Safari decodes no frame of a paused video that hasn't played: a moment of playing makes it draw one
         if (v.readyState < 2 && !v.primed && v.currentSrc) {
@@ -259,7 +308,7 @@
           v.muted = true;
           v.play().then(() => { v.priming = false; v.pause(); }, () => { v.priming = false; });
         } else if (!v.paused && !v.priming) v.pause();
-        if (!v.seeking && Math.abs(v.currentTime - target) > .6 / FPS) v.currentTime = target;
+        if (!v.seeking && seekable(v) && Math.abs(v.currentTime - target) > .6 / FPS) v.currentTime = target;
       }
     }
   }
@@ -284,17 +333,18 @@
     }
   }
 
-  // every clip cued up to the end of the click after s (slotsAt carries a clip on through the later beats); the next
-  // click's are fetched ahead
+  // every clip cued up to the end of the click after s (slotsAt carries a clip on through the later beats), queued in
+  // the order they are cued (pump); the next click's are fetched ahead
   let fed = -1;
   function feed(s) {
     if (!LAZY.size || s <= fed) return;
     fed = s;
     const lastOf = i => SEGS[Math.min(i, SEGS.length - 1)].beats.slice(-1)[0][0];
     const now = lastOf(s), last = lastOf(s + 1);
+    needTo = now;
     for (let k = 0; k <= last; k++) for (const c of STEPS[k].cues || []) {
       const v = VIDS[c.slot] && VIDS[c.slot][c.clip];
-      if (k <= now) fetchClip(v); else aheadQ.push(() => fetchClip(v, true));
+      if (v && LAZY.has(v) && !clipQ.some(q => q[0] === v)) clipQ.push([v, k]);
     }
   }
 
@@ -310,6 +360,7 @@
     T = lim(T, 0, TOTAL);
     const s = segAt(T), sg = SEGS[s];
     feed(s);
+    pump();
     let t = T - sg.start;
     if (s === 0 && P.start) t = Math.max(t, P.start);
     fetchAhead();

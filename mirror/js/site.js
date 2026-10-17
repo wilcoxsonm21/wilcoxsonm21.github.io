@@ -331,7 +331,7 @@
       this.wanted = false;    // within reach of the reader (schedule): a scene out of reach lets go of its downloads
       this.parked = false;    // ... and has (update)
       // The animation's opening frame (scenes/posters/, tools/build_posters.py) stands in for the scene until the scene
-      // has loaded and drawn that frame, and fades out under it; the box takes the scene's shape and caption room
+      // has loaded and drawn that frame, then fades out over it; the box takes the scene's shape and caption room
       // from posters.js before then (prep), so nothing moves when the scene arrives.
       this.pinfo = !this.inline && (window.SCENE_POSTERS || {})[el.dataset.scene] || null;
       if (this.pinfo) {
@@ -340,7 +340,8 @@
         p.alt = "";
         p.decoding = "async";
         p.setAttribute("aria-hidden", "true");
-        p.addEventListener("load", () => { p.classList.add("in"); wake(); });
+        // (inAt: when it came in; it covers the frame once its own fade in, css .3 s, is done)
+        p.addEventListener("load", () => { p.classList.add("in"); this.posterInAt = performance.now(); wake(); });
         p.addEventListener("error", wake);
         this.iframe.before(p);
       }
@@ -385,9 +386,11 @@
       this.poster.src = src;
       this.posterAt = performance.now();
     }
-    // the poster stands in for the scene: until the scene has drawn its opening and faded in over it (a scene that
-    // reloads partway through, in the other layout, fades in on the click it was on instead)
-    covers() { return !!this.poster && this.shown < 1 && this.T <= this.lead + 1e-3; }
+    // the poster stands in for the scene: until the scene has loaded, drawn its opening and shown (a scene that reloads
+    // partway through, in the other layout, fades in on the click it was on instead)
+    covers() { return !!this.poster && (!this.api || this.shown < 1) && this.T <= this.lead + 1e-3; }
+    // the poster is in and fully drawn, over the scene's frame
+    posterUp() { return this.poster.classList.contains("in") && performance.now() - this.posterInAt > 320; }
     // before its scene has loaded, the box takes the shape and the caption room the scene will want
     prep() {
       const P = this.pinfo;
@@ -755,9 +758,18 @@
       const o = r * (1 - smooth(0, .55, e));
       const sc = lerp(.9, 1, r) * (1 - .05 * smooth(0, 1, e));
       this.stageO = o;
-      // (with its poster standing in, the stage comes forward as usual and the scene fades in over the poster)
+      // (with its poster standing in, the stage comes forward as usual and the poster fades out over the scene)
       const cover = this.covers(), so = o * (cover ? 1 : this.shown);
-      if (this.poster) css(this.iframe, "opacity", cover ? this.shown.toFixed(3) : "");
+      if (this.poster) {
+        // The poster lies over the scene's frame, and the frame stays fully drawn under it: iOS Safari doesn't start a
+        // clip in a frame at opacity 0, so with the scene fading in over its poster the first animation's opening clip
+        // never played, and every iPhone visit waited out the 8 s limit behind the poster (10-16). A poster still on its
+        // way (or fading in, .3 s) leaves the frame hidden until the scene shows, as without one.
+        const fade = cover && this.shown > 0;
+        css(this.poster, "transition", fade ? "none" : "");
+        css(this.poster, "opacity", fade ? (1 - this.shown).toFixed(3) : cover ? "" : "0");
+        css(this.iframe, "opacity", cover && !this.posterUp() ? this.shown.toFixed(3) : "");
+      }
       css(this.stage, "opacity", so.toFixed(3));
       // (not while it holds the focus: Chrome drops the focus from a hidden box, and a Tab onto a box lands while the
       // stage is still faint, before the glide brings it forward)
@@ -819,11 +831,15 @@
           // reloaded in the other layout: the stage fades back in once the scene has drawn the click it was on (a few
           // frames, with its videos done seeking, or 0.6 s at most)
           const w = this.swap;
-          // (a first load waits up to 4 s for slow videos, 8 s over its poster); once it shows, the rest of its images
-          // load (SCENE.more)
-          if (w && w.at !== null && (++w.n > (w.first ? this.poster ? 480 : 240 : 36) || w.n > 2 && !this.seeking())) {
-            this.swap = null;
-            if (this.api.more) this.api.more();
+          // (a first load waits up to FIRST_MAX seconds of its stage on the screen for slow videos, FIRST_MAX_BARE
+          // without a poster); once it shows, the rest of its images load (SCENE.more)
+          if (w && w.at !== null) {
+            w.n++;
+            if (this.stageO > .3) w.on = (w.on || 0) + dt;
+            if (w.n > 2 && !this.seeking(w.first) || (w.first ? w.on > (this.poster ? FIRST_MAX : FIRST_MAX_BARE) : w.n > 36)) {
+              this.swap = null;
+              if (this.api.more) this.api.more();
+            }
           }
         } else if (this.wasVisible) this.api.pause();
       } else if (visible && this.pinfo && (narrow || short) && this.capEl && this.capHTML === null && this.covers()) {
@@ -861,12 +877,15 @@
       this.stall = s ? (this.stall || 0) + dt : 0;
       return s && this.stall < 8;
     }
-    seeking() {
+    seeking(first) {
       // a video on show that is seeking, or has no frame yet; an image on show still loading; or the scene's fonts
+      // (only the videos on show: a clip fetched ahead for a later click doesn't hold the frame on the screen. For a
+      // first showing, a clip with its frame in counts even while it seeks: the opening is its first frames anyway, and
+      // on an iPhone a seek of a clip that hadn't played could hang until the page gave up, FIRST_MAX)
       try { const d = this.iframe.contentDocument;
             return d.fonts.status !== "loaded" || !!(this.api && this.api.waiting && this.api.waiting())
-              || [...d.querySelectorAll("video")].some(v => v.seeking ||
-              v.readyState < 1 && v.currentSrc && !v.error && v.style.visibility !== "hidden" && +(v.style.opacity || 1) > 0); }
+              || [...d.querySelectorAll("video")].some(v => v.currentSrc && !v.error && v.style.visibility !== "hidden"
+                && +(v.style.opacity || 1) > 0 && (v.seeking && !(first && v.readyState >= 2) || v.readyState < 1)); }
       catch (e) { return false; }
     }
     // the speed at scene time T (data-speed)
@@ -1510,9 +1529,11 @@
   $$(".gallery-track").forEach(track => {
     let lastX = track.scrollLeft;
     track.addEventListener("scroll", () => {
-      const x = track.scrollLeft, dir = Math.sign(x - lastX), mid = track.getBoundingClientRect().left + track.clientWidth / 2;
+      const x = track.scrollLeft, dir = Math.sign(x - lastX), tr = track.getBoundingClientRect(), mid = tr.left + track.clientWidth / 2;
       lastX = x;
-      if (!dir) return;
+      // (only with the gallery near the screen: on an iPhone the track moves by itself as the page lays out, and that
+      // fetched a 1 MB clip, Walker's, with the page's first animations)
+      if (!dir || tr.bottom < -innerHeight || tr.top > 2 * innerHeight) return;
       const ahead = $$("video.lazy", track).filter(v => !v.getAttribute("src") && v.dataset.src)
         .map(v => ({ v, d: (v.getBoundingClientRect().left + v.getBoundingClientRect().width / 2 - mid) * dir }))
         .filter(o => o.d > 0).sort((a, b) => a.d - b.d)[0];
@@ -1790,6 +1811,9 @@
   const LOAD_AHEAD = 2.5;   // screens
   const BUFFER_AHEAD = 6, FILL_MAX = 8;   // seconds
   const LOAD_MAX = 8, POSTER_MAX = 3;     // seconds a stalled scene or poster holds the others back, at most
+  // seconds of its stage on the screen a scene's first showing waits for its opening's clips, over its poster or without
+  // one (Chapter.update): past that it shows and plays, holding a click whose clip has no frame yet (starved)
+  const FIRST_MAX = 3, FIRST_MAX_BARE = 4;
   const loadScripts = srcs => Promise.all(srcs.map(src => new Promise((ok, no) => {
     const s = document.createElement("script");
     s.src = src;

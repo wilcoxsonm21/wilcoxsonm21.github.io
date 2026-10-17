@@ -180,6 +180,34 @@
     let t; addEventListener("scroll", () => { clearTimeout(t); t = setTimeout(() => { edge(); clips(); }, 250); }, { passive: true });
     addEventListener("load", () => setTimeout(edge, 500));
   }
+  // each animation's first showing: "waited", the seconds its stage was on the screen before the scene showed (0: it was
+  // ready before the reader got there), and meanwhile, once a second, what it waits for (its state; Chapter.seeking: the
+  // scene's fonts, an image on show, a clip on show seeking or without its size; each clip as [name, readyState, seeking,
+  // paused, priming, on show, currentTime])
+  const shownOnce = new Set(), stageAt = new Map(), askedAt = new Map();
+  const pollReveal = () => {
+    for (const c of chapters()) {
+      const id = c.el.id;
+      if (c.inline || shownOnce.has(id)) continue;
+      const up = c.stageO > .3;
+      if (up && !stageAt.has(id)) stageAt.set(id, now());
+      if (c.api && c.shown >= 1 && !c.swap) {
+        shownOnce.add(id);
+        log("reveal", { ch: id, waited: stageAt.has(id) ? +((now() - stageAt.get(id)) / 1000).toFixed(2) : 0, at: where().ch });
+        continue;
+      }
+      if (!up || now() - (askedAt.get(id) || -1e9) < 1000) continue;
+      askedAt.set(id, now());
+      const w = c.swap || {};
+      let d = null; try { d = c.iframe.contentDocument; } catch (e) {}
+      const vids = d ? [...d.querySelectorAll("video")].filter(v => v.currentSrc).map(v => [v.currentSrc.split("/").pop(),
+        v.readyState, v.seeking ? 1 : 0, v.paused ? 1 : 0, v.priming || v.starting ? 1 : 0, v.style.visibility === "hidden" ? 0 : 1, +v.currentTime.toFixed(2)]) : [];
+      log("waiting", { ch: id, state: c.state, ready: w.at != null, on: +(w.on || 0).toFixed(2), fonts: d && d.fonts && d.fonts.status,
+                       img: !!(c.api && c.api.waiting && c.api.waiting()), seeking: c.api ? c.seeking(w.first) : null,
+                       frame: c.iframe.style.opacity, poster: c.poster && c.poster.style.opacity, vids });
+    }
+  };
   setInterval(pollFetches, 1000);
   setInterval(pollVideos, 3000);
+  setInterval(pollReveal, 100);
 })();

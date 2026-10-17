@@ -322,8 +322,9 @@ html.hero-wait .hero-mark { filter: opacity(0); }
 .stage-caption { display: none; }
 /* each animation's opening frame (scenes/posters/, tools/build_posters.py) while its scene loads. It sits where the
    scene's frame draws that frame (site.js gives it the frame's width and left), at its own height, cut to what the box
-   shows at the start; the scene fades in over it */
-.stage-frame .poster { position: absolute; left: 0; top: 0; width: 100%; height: auto; display: block; pointer-events: none;
+   shows at the start. It lies over the frame, which loads fully drawn under it (iOS Safari doesn't start a clip in a
+   frame at opacity 0), and fades out once the scene has drawn its opening (site.js, Chapter.style) */
+.stage-frame .poster { position: absolute; z-index: 1; left: 0; top: 0; width: 100%; height: auto; display: block; pointer-events: none;
                        opacity: 0; transition: opacity .3s; }
 .stage-frame .poster.in { opacity: 1; }
 /* a slow connection: a spinner over the box waiting for its scene, a click for its videos, or a figure for its code
