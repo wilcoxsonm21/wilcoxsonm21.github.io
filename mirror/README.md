@@ -50,8 +50,9 @@ is the `SHOTS` list in that file, and `--sheet` previews it without encoding.
 **Chapters.** A `<section class="chapter" data-scene="…" data-segs="…">` is a tall track with a sticky,
 viewport-sized stage. Scrolling moves from chapter to chapter and only drives the focus changes: the headline rises
 in, holds, and lifts away as the stage comes forward, and the stage dissolves as it scrolls on. A reader who stops
-partway between the headline and the stage is carried on to one of them, the way they were scrolling. The scroll
-position no longer scrubs the animation.
+partway between the headline and the stage is carried on to one of them, the way they were scrolling, or to the stage
+within 1.5 s of using the animation (`USED`: a swipe's first pixels can move the page either way, and one that had moved
+it up was carried back to the headline, as if taken for a scroll). The scroll position no longer scrubs the animation.
 
 Once the stage is in focus, the chapter plays like a video. Each click of the talk runs at normal speed, videos
 included. Its last frame then holds until its text has had time to be read (the step in the list, or the scene's
@@ -76,7 +77,8 @@ are drawn a few per cent narrower), on a wide one with room under the frame (`ht
 iPad held sideways, a tall window), and under the figures beside their copy, which always have room. In a short window
 (`html.short`) it stands beside the box as a column (`fitShort` keeps `CTL_SIDE` at either side and sets `--ctl-x`/`--ctl-y`).
 The first chapter's old "Click to pause · arrow keys to step" hint is gone; the transport's note replaces it. Fingers go
-through touch events: the first 8 px of a move decide its direction, and a sideways one cancels its touchmoves so the
+through touch events: the first 8 px of a move decide its direction (sideways: 1.5 times as far as up or down, also for
+the first touchmove, which Safari decides by), and a sideways one cancels its touchmoves so the
 page can't scroll under it (`touch-action: pan-y` alone let slightly diagonal swipes scroll); a vertical swipe that
 starts on the box scrolls the page. The box (`.ctl-box.selected`) lets go when it leaves the screen, when its animation
 ends, or when another box is

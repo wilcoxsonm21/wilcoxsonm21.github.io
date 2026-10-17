@@ -163,9 +163,17 @@
   addEventListener("wheel", () => takeOver(MOVE_HOLD), { passive: true });
   addEventListener("keydown", e => { if (SCROLL_KEYS.has(e.key)) takeOver(MOVE_HOLD); });
   // a finger landing stops a glide where it is, even if it doesn't move
-  addEventListener("touchstart", e => { touching = e.touches.length > 0; if (touching) glide = null; }, { passive: true });
+  let touchAt = 0;
+  addEventListener("touchstart", e => { touching = e.touches.length > 0; if (touching) { glide = null; touchAt = performance.now(); } }, { passive: true });
+  // (a glide the gesture began itself, a swipe bringing its stage forward, goes on when the finger lifts)
   for (const ev of ["touchend", "touchcancel"])
-    addEventListener(ev, e => { touching = e.touches.length > 0; if (!touching) takeOver(MOVE_HOLD); }, { passive: true });
+    addEventListener(ev, e => {
+      touching = e.touches.length > 0;
+      if (touching) return;
+      const own = glide && glide.t0 >= touchAt ? glide : null;
+      takeOver(MOVE_HOLD);
+      glide = own;
+    }, { passive: true });
   document.addEventListener("visibilitychange", () => takeOver(MOVE_HOLD));   // back on the tab: a moment first
 
   function scrollSelf(y) { ownAt = y; scrollTo({ top: y, behavior: "instant" }); }
@@ -236,6 +244,7 @@
   const SETTLE = .3;   // headline lengths in: past this, a reader who stops is carried through to the stage
   // pacing: when a played-out click moves on by itself
   const HOLD = .25;    // seconds on its last frame
+  const USED = 1.5;    // seconds after the reader used an animation (a swipe, a tap, a key) that a settle takes them to its stage
   const WPS = 6;       // the statements' pace (words per second) as they fill in (autoplayWords)
   // A click waits until its text has been read in full: the step's text, or the scene's title, at READ_WPS from when
   // it showed. There is no cap: a reader who has read it can swipe on (controls).
@@ -543,6 +552,7 @@
     // a step picked from the list, or stepped to, plays from its start (with reduced motion it shows its last frame);
     // a stage still coming forward is brought forward
     goto(i) {
+      this.usedAt = performance.now();   // (settle: the stage is what they want now)
       this.k = i;
       this.T = this.segs[i].start + (REDUCED && this.held ? this.segs[i].dur : 0);
       if (i === 0 && !(REDUCED && this.held)) this.fromLead();
@@ -562,6 +572,7 @@
     // ends the chapter. A swipe right goes back to the previous click and plays it again. With reduced motion each shows
     // the click's last frame.
     step(dir) {
+      this.usedAt = performance.now();
       if (!this.api) return;
       this.select();
       const last = this.segs.length - 1;
@@ -577,6 +588,7 @@
     // A tap pauses or plays (one that has ended plays from the start); the first one on a box also shows what the
     // gestures do
     tap() {
+      this.usedAt = performance.now();
       const first = !this.selected;
       this.select();
       if (!REDUCED) {
@@ -999,16 +1011,20 @@
       // (not while a jump to an #anchor lands: the browser's jump reads as a move up when the anchor is above, and the
       // chapter before it would pull the reader back into its stage. With reduced motion the carry is a jump, glideTo)
       if (glide || scrolling(now) || comeBack || now < noSnapUntil) return;
+      // Just after the reader used the animation (USED: a swipe, a tap, a key), it is the stage they want, whichever way
+      // the page last moved. A swipe's first pixels can scroll the page, as often up as down; short of its stage, a swipe
+      // that had moved the page a pixel or two up was then carried back to the headline, as if taken for a scroll.
+      const toStage = now - (this.usedAt ?? -1e9) < USED * 1e3;
       // ... and one who stops while the stage scrolls away is carried on to what follows, or back to the full stage
       // (the strip under the nav doesn't count: an #anchor lands with the stage that much short of gone, faded out)
       if (y > this.pinLen + 2 && y < this.pinLen + vh - $(".localnav").offsetHeight - 2) {
-        glideTo(readerDir < 0 ? topOf(this.el) + this.pinLen : topOf(this.el) + this.pinLen + vh, 450);
+        glideTo(readerDir < 0 || toStage ? topOf(this.el) + this.pinLen : topOf(this.el) + this.pinLen + vh, 450);
         return;
       }
       if (this.noHead) return;
       const a = y / this.headLen;
       if (a <= SETTLE || a >= REST - .01) return;
-      glideTo(readerDir < 0 ? topOf(this.el) + .1 * this.headLen : this.restY(), 450);
+      glideTo(readerDir < 0 && !toStage ? topOf(this.el) + .1 * this.headLen : this.restY(), 450);
     }
     updateBeats() {
       // the scene's title, and when it last changed
@@ -1191,8 +1207,10 @@
       // (only a clearly sideways start is a swipe: a thumb's scroll often arcs sideways for its first few px)
       if (!f.dir && Math.max(Math.abs(dx), Math.abs(dy)) > LOCK) f.dir = Math.abs(dx) > LOCK_RATIO * Math.abs(dy) ? "x" : "y";
       // (before the direction is decided, only a clearly sideways move: Safari lets a swipe scroll or not by its first
-      // touchmove, and a finger's first pixel or two of jitter at the start of a scroll up or down is often sideways)
-      const side = !f.dir && Math.abs(dx) >= 3 && Math.abs(dx) > 2 * Math.abs(dy);
+      // touchmove, and a finger's first pixel or two of jitter at the start of a scroll up or down is often sideways.
+      // "Clearly" is LOCK_RATIO, as for the decision itself: at twice, a thumb's swipe that set off at -5, +3 (an iPhone,
+      // 10-17) was left to scroll)
+      const side = !f.dir && Math.abs(dx) >= 3 && Math.abs(dx) > LOCK_RATIO * Math.abs(dy);
       if ((f.dir === "x" || side) && e.cancelable) e.preventDefault();   // the box's: no scrolling
       f.dx = dx; f.dy = dy;
     }, { passive: false });
