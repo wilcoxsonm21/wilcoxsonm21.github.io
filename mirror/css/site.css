@@ -137,6 +137,7 @@ h2, h3 { font-family: var(--serif); font-weight: 600; letter-spacing: -0.02em; m
 @media (hover: hover) { .localnav-links a:hover { color: var(--ink); } }
 .localnav-cta { height: clamp(30px, calc(var(--frame-w) * .0215), 40px); padding: 0 clamp(16px, calc(var(--frame-w) * .0115), 23px);
                 font-size: clamp(13px, calc(var(--frame-w) * .0093), 17px); border-width: 0; }
+.localnav-cta:focus-visible { outline: 2px solid var(--mirror); outline-offset: 3px; }   /* (the default dark ring on the dark pill barely showed) */
 .localnav-progress { position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; }
 .localnav-progress span { display: block; height: 100%; width: 100%; transform-origin: 0 50%; transform: scaleX(0);
                           background: var(--ink); opacity: .55; will-change: transform; }   /* (perf2 10-16: its own layer, so the
@@ -751,6 +752,8 @@ html.modal-open.is-dark { background: #080707; }
           font-size: clamp(14px, calc(var(--frame-w) * .01), 22px); color: var(--muted); }
 .footer-inner { width: var(--frame-w); max-width: 100%; margin: 0 auto; }
 .footer p { margin: 4px 0; }
+.footer-names { text-wrap: balance; }
+.footer-names span { white-space: nowrap; }   /* (a name never splits: "Vincent / Sitzmann" on a phone, "· MIT" alone) */
 .footer a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--line); }
 .footer-mark { font-family: var(--serif); font-size: clamp(22px, calc(var(--frame-w) * .0158), 34px); font-weight: 700; color: var(--ink); margin-bottom: 10px !important; }
 
@@ -939,6 +942,10 @@ html.short .cinema-figure { max-width: none; margin-inline: calc(max(12px, env(s
 html.narrow .cinema-screen { --sv-room: 16px; }
 /* (a short window, now a laptop at 200% zoom or 1600x500, keeps the strip under the video on the screen with it: the
    wide layout's room, 140px) */
+/* ... and the figure is as wide as the video, so the scrub line, goal, milestones and caption line up with it rather
+   than running the window's width (at 990x352 the caption started 197 px left of the video) */
+html.short .cinema-figure { width: min(calc(100vw - 2 * max(12px, env(safe-area-inset-left, 0px))),
+                                       calc((100svh - var(--nav-h) - 140px) * (var(--ar, 960 / 576)))); margin-inline: auto; }
 html.narrow .cinema-caption, html.short .cinema-caption { margin-left: 2px; }
 html.narrow .segmented { margin: 32px auto 24px; }
 html.narrow .segmented button { padding: 7px 22px 8px; line-height: 1.15; }

@@ -913,9 +913,25 @@
     // behind it at --cap-top, css/site.css) and its text glide to the new height together, so the box never jumps.
     caption(c = this.api.caption()) {
       // a resize of the caption block (fitCard, fitShort, fonts) has it re-measure its grey top
-      if (!this.capRO) (this.capRO = new ResizeObserver(() => { this.capHTML = null; })).observe(this.capEl);
+      // (only re-measures: rewriting the text on each resize had the live region announce the same caption ~37 times in
+      // a second on a phone, with every step of fitCard's settling)
+      if (!this.capRO) (this.capRO = new ResizeObserver(() => { this.capMeasure = true; })).observe(this.capEl);
       const html = c ? `<div class="cap-in"><span class="cap-t">${joinDash(c.html)}</span>${c.sub ? `<span class="sub"${c.subColor ? ` style="color:${c.subColor}"` : ""}>${c.sub}</span>` : ""}</div>` : "";
+      // a title that reveals word by word (its spans' inline opacity, copied every frame) changes only its styles: those
+      // are set in place, as rewriting it all had the live region announce the same caption ~37 times in a second
+      const key = html.replace(/ style="[^"]*"/g, "");
+      if (html !== this.capHTML && this.capHTML !== null && key === this.capKey) {
+        const t = document.createElement("template");
+        t.innerHTML = html;
+        // (matched by the scene's span ids: the page sets styles of its own on the wrapper, .cap-in and .cap-t)
+        const want = t.content.querySelectorAll("[id]"), have = this.capEl.querySelectorAll("[id]");
+        if (want.length && want.length === have.length && [...want].every((w, i) => w.id === have[i].id)) {
+          want.forEach((w, i) => { const st = w.getAttribute("style") || ""; if ((have[i].getAttribute("style") || "") !== st) have[i].setAttribute("style", st); });
+          this.capHTML = html;
+        }
+      }
       if (html !== this.capHTML) {
+        this.capKey = key;
         const old = this.capEl.firstElementChild, tf = old ? getComputedStyle(old).transform : "none";
         const from = old ? old.offsetTop + (tf === "none" ? 0 : new DOMMatrix(tf).m42) : null;
         this.capHTML = html;
@@ -932,7 +948,11 @@
           el.style.transition = el.style.transform = "";
         }
         this.capO = this.capSO = null;
+      } else if (this.capMeasure) {
+        const el = this.capEl.firstElementChild;
+        this.capEl.style.setProperty("--cap-top", (el ? el.offsetTop : this.capEl.offsetHeight) + "px");
       }
+      this.capMeasure = false;
       if (!c) return;
       const el = this.capEl.firstElementChild;
       const o = c.o.toFixed(2), so = c.so.toFixed(2);
@@ -1013,6 +1033,15 @@
   const boxIO = new IntersectionObserver(es => es.forEach(e => {
     if (!e.isIntersecting) { const c = chapters.find(x => x.box === e.target); if (c) c.deselect(); }
   }));
+  // Shift+Tab out of a chapter: the focus goes to whatever Tab reaches before it (the stand-ins below take a Shift+Tab
+  // from inside their chapter back in again: at BASALT it cycled between its link and a stand-in for ever)
+  const TABBABLE = 'a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])';
+  function focusBefore(el) {
+    const prev = $$(TABBABLE).filter(x => !el.contains(x) && (x.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING)
+      && !x.closest("[inert]") && x.getClientRects().length && getComputedStyle(x).visibility !== "hidden");
+    const x = prev[prev.length - 1];
+    if (x) x.focus(); else document.activeElement?.blur();
+  }
   function controls(c) {
     const box = c.box;
     box.classList.add("ctl-box");
@@ -1034,7 +1063,20 @@
       css(c.stage, "visibility", "visible");
       box.focus({ preventScroll: true });
     };
-    tabIn.addEventListener("focus", e => { if (!c.el.contains(e.relatedTarget)) toBox(); });
+    tabIn.addEventListener("focus", e => { if (!c.el.contains(e.relatedTarget)) toBox(); else focusBefore(c.el); });
+    const headLink = c.head ? $("a[href]", c.head) : null;
+    const toLink = () => {
+      glide = null;
+      scrollSelf(topOf(c.el) + .1 * c.headLen);
+      css(c.head, "visibility", "visible");
+      headLink.focus({ preventScroll: true });
+    };
+    // Shift+Tab from the box: to the headline's link where there is one, else out of the chapter
+    box.addEventListener("keydown", e => {
+      if (e.key !== "Tab" || !e.shiftKey || e.altKey || e.ctrlKey || e.metaKey || e.target !== box) return;
+      e.preventDefault();
+      if (headLink) toLink(); else focusBefore(c.el);
+    });
     // a link in the headline (BASALT's "Watch all 44 evaluation episodes") is hidden while the stage is forward, so Tab
     // skipped it: a stand-in before the box's brings the headline back and hands the focus on, and Tab from the link
     // goes on to the box
@@ -1044,14 +1086,17 @@
       standIn.className = "visually-hidden";
       standIn.textContent = link.textContent;
       c.el.prepend(standIn);
-      standIn.addEventListener("focus", () => {
+      standIn.addEventListener("focus", e => {
+        if (c.el.contains(e.relatedTarget)) { focusBefore(c.el); return; }
         glide = null;
         scrollSelf(topOf(c.el) + .1 * c.headLen);
         css(c.head, "visibility", "visible");
         link.focus({ preventScroll: true });
       });
       link.addEventListener("keydown", e => {
-        if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); toBox(); }
+        if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey) return;
+        e.preventDefault();
+        if (e.shiftKey) focusBefore(c.el); else toBox();
       });
     }
     box.insertAdjacentHTML("beforeend", '<div class="ctl" aria-hidden="true"><span class="ctl-side ctl-prev">' + CHEVRON +
@@ -1244,6 +1289,7 @@
     cScreen.style.width = cScreen.style.height = "";
     cScreen.style.setProperty("--film", ar);
     cScreen.style.setProperty("--ar", planOff ? "16 / 9" : ar);
+    cFig.style.setProperty("--ar", planOff ? "16 / 9" : ar);   // (a short window sizes the figure by it: css html.short)
     const w1 = cScreen.offsetWidth, h1 = cScreen.offsetHeight;
     if (!glideIt || REDUCED || Math.abs(h1 - h0) < 1 && Math.abs(w1 - w0) < 1) return;
     cScreen.style.width = w0 + "px";
@@ -1261,7 +1307,6 @@
   function setPlan(off) {
     planOff = off;
     cFig.classList.toggle("plan-off", planOff);
-    planBtn?.setAttribute("aria-pressed", String(planOff));
     if (planBtn) planBtn.lastElementChild.textContent = planOff ? "Show plan" : "Hide plan";
   }
   let keepGen = 0;   // (one keep loop at a time: three quick taps ran three, and their corrections added up past lim)
@@ -1310,7 +1355,7 @@
     if (playing) cVideo.play().catch(() => {});
   }
   function pick(btn, play = true) {
-    segBtns.forEach(b => b.setAttribute("aria-selected", String(b === btn)));
+    segBtns.forEach(b => { b.setAttribute("aria-selected", String(b === btn)); b.tabIndex = b === btn ? 0 : -1; });   // (one tab stop: ← → move)
     cVideo.style.opacity = 0;
     cCap.style.opacity = 0;
     shape(clip(btn)[1], cinemaLoaded);
@@ -1421,7 +1466,12 @@
   }), { rootMargin: "150px 0px", threshold: [0, .5] });
   $$("video.lazy").forEach(v => vio.observe(v));
   // (off the screen but inside that margin it played on: 70 px above a phone's screen at the BibTeX)
-  const offIo = new IntersectionObserver(es => es.forEach(e => { if (!e.isIntersecting && !e.target.paused) e.target.pause(); }));
+  // ... and plays again on coming back, if this paused it (the other observer, its margin never left, doesn't fire again)
+  const offIo = new IntersectionObserver(es => es.forEach(e => {
+    const v = e.target;
+    if (!e.isIntersecting) { if (!v.paused) { v.pause(); v.dataset.offPaused = "1"; } }
+    else if (v.dataset.offPaused) { delete v.dataset.offPaused; if (!v.dataset.held && !covered()) v.play().catch(() => {}); }
+  }));
   $$("video.lazy").forEach(v => offIo.observe(v));
   // turned upright again: the page looks afresh at what is on the screen and plays it (observing again reports each
   // video's place anew; lastSy -1 runs the hero and the survival video's checks)
@@ -1510,7 +1560,7 @@
     // a card reached by Tab comes into view (the track didn't follow the focus: Pong took it 19% on the screen)
     track.addEventListener("focusin", e => {
       const c = e.target.closest(".card");
-      if (!c) return;
+      if (!c || !e.target.matches(":focus-visible")) return;   // (Tab only: a tap's focus scrolled the track to a peeking card)
       // (to the card's own place, a snap point: scrollIntoView's "nearest" was snapped back to a place showing 21% of it)
       const t = track.getBoundingClientRect(), r = c.getBoundingClientRect();
       if (r.left >= t.left - 1 && r.right <= t.right + 1) return;

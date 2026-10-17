@@ -99,6 +99,12 @@
       toastEl.classList.toggle("on", on);
     });
     const got = new Set(ep.milestones.filter(m => m[1] <= t).map(m => m[0]));
+    // (the list is "Milestones reached": each says whether it is, or that this episode never gets there)
+    PAPER.forEach((k, idx) => {
+      const name = NAME[k], inEp = ep.milestones.some(m => m[0] === k);
+      set("a" + k, `${inEp}|${got.has(k)}`, () => items[idx].firstChild.setAttribute("aria-label",
+        !inEp ? `${name}: not reached in this episode` : `${name}: ${got.has(k) ? "reached" : "not reached yet"}. Jump to it`));
+    });
     PAPER.forEach((k, idx) => set("m" + k, got.has(k), v => {
       items[idx].classList.toggle("got", v);
       marks.querySelector(`[data-key="${k}"]`)?.classList.toggle("got", v);

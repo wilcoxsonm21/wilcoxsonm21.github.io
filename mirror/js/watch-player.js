@@ -269,7 +269,7 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   const goalEl = el("p", { class: "sv-goal", "aria-live": "off" });
   const list = el("ol", { class: "sv-milestones", "aria-label": "Milestones: each lights up when reached; click to jump there" });
   const extra = el("div", { class: "w-extra" });
-  const toggle = el("button", { class: "sv-toggle", type: "button", "aria-pressed": "false" },
+  const toggle = el("button", { class: "sv-toggle", type: "button" },
     svg("svg", { viewBox: "0 0 20 14", "aria-hidden": "true" }, svg("rect", { class: "sv-toggle-plan", x: 1, y: 1, width: 8, height: 12, rx: 2 }),
       svg("rect", { x: 11, y: 1, width: 8, height: 12, rx: 2 })), el("span", { text: "Hide plan" }));
   const caption = el("p", { class: "cinema-caption" });
@@ -433,7 +433,6 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     root.style.setProperty("--ar", planOn() ? (tall.matches ? "16 / 18" : "32 / 9") : "16 / 9");
     root.classList.toggle("plan-off", state.hasPlan && state.planOff);
     root.classList.toggle("no-plan", !state.hasPlan);
-    toggle.setAttribute("aria-pressed", String(state.planOff));
     toggle.lastChild.textContent = state.planOff ? "Show plan" : "Hide plan";
   }
   function reshape() {
@@ -631,6 +630,7 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   scrub.addEventListener("keydown", (e) => {
     const step = { ArrowLeft: -5, ArrowRight: 5, PageDown: -60, PageUp: 60 }[e.key];
     if (step) { e.preventDefault(); e.stopPropagation(); seek(now() + step); }
+    else if (e.key === "Home" || e.key === "End") { e.preventDefault(); e.stopPropagation(); seek(e.key === "Home" ? 0 : state.duration); }
   });
 
   // ---------------------------------------------------------------- the rest

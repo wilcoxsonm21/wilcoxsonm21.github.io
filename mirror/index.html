@@ -13,9 +13,9 @@
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <!-- the text face starts loading with the page, so it is usually in before the first paint (no layout shift) -->
   <link rel="preload" href="fonts/sourcesans3-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="css/theme.css?v=20261016b">
-  <link rel="stylesheet" href="css/site.css?v=20261016b">
-  <script src="js/turn.js?v=20261016b"></script>
+  <link rel="stylesheet" href="css/theme.css?v=20261016c">
+  <link rel="stylesheet" href="css/site.css?v=20261016c">
+  <script src="js/turn.js?v=20261016c"></script>
   <!-- the hero's letters wait for their face (at most 2.5 s): "Mirror" never shows in a fallback font -->
   <script>
     (function () {
@@ -116,7 +116,7 @@
 
     <!-- ======================================================== abstract -->
     <section class="prose" id="abstract">
-      <p class="eyebrow reveal">Abstract</p>
+      <p class="eyebrow reveal" role="heading" aria-level="2">Abstract</p>
       <div class="prose-body reveal">
         <p>
           Video generative models are an emerging tool for embodied agents: they can serve as scalable visual
@@ -278,7 +278,7 @@
         <div class="sv-strip">
           <p class="sv-goal" aria-live="off"></p>
           <ol class="sv-milestones" aria-label="Milestones reached"></ol>
-          <button class="sv-toggle" type="button" aria-pressed="false"><svg viewBox="0 0 20 14" aria-hidden="true">
+          <button class="sv-toggle" type="button"><svg viewBox="0 0 20 14" aria-hidden="true">
             <rect class="sv-toggle-plan" x="1" y="1" width="8" height="12" rx="2"/><rect x="11" y="1" width="8" height="12" rx="2"/></svg><span>Hide plan</span></button>
         </div>
         <figcaption class="cinema-caption"></figcaption>
@@ -487,7 +487,7 @@
 
     <!-- ======================================================== citation -->
     <section class="prose" id="bibtex">
-      <p class="eyebrow reveal">BibTeX</p>
+      <p class="eyebrow reveal" role="heading" aria-level="2">BibTeX</p>
       <!-- TODO: replace with the final citation once the paper is public -->
       <div class="bibtex reveal">
         <button class="bibtex-copy" type="button">Copy</button>
@@ -506,21 +506,21 @@
   <footer class="footer">
     <div class="footer-inner">
       <p class="footer-mark">Mirror</p>
-      <p>Hyunwoo Ryu, Eric Ming Chen, Max Wilcoxson, Vincent Sitzmann &middot; MIT</p>
+      <p class="footer-names"><span>Hyunwoo Ryu,</span> <span>Eric Ming Chen,</span> <span>Max Wilcoxson,</span> <span>Vincent Sitzmann</span> <span>&middot; MIT</span></p>
       <p><a href="#top">Back to top</a></p>
     </div>
   </footer>
 
-  <script src="js/replan-geometry.js?v=20261016b"></script>
-  <script src="js/replan.js?v=20261016b"></script>
-  <script src="js/survival-data.js?v=20261016b"></script>
-  <script src="js/modal.js?v=20261016b"></script>
+  <script src="js/replan-geometry.js?v=20261016c"></script>
+  <script src="js/replan.js?v=20261016c"></script>
+  <script src="js/survival-data.js?v=20261016c"></script>
+  <script src="js/modal.js?v=20261016c"></script>
   <script src="scenes/posters/posters.js"></script>
-  <script src="js/site.js?v=20261016b"></script>
-  <script src="js/split.js?v=20261016b"></script>
-  <script src="js/controls.js?v=20261016b"></script>
-  <script src="js/survival.js?v=20261016b"></script>
-  <script>if (/[?&]debug\b/.test(location.search)) document.write('<script src="js/debug.js?v=20261016b"><\/script>')</script>
+  <script src="js/site.js?v=20261016c"></script>
+  <script src="js/split.js?v=20261016c"></script>
+  <script src="js/controls.js?v=20261016c"></script>
+  <script src="js/survival.js?v=20261016c"></script>
+  <script>if (/[?&]debug\b/.test(location.search)) document.write('<script src="js/debug.js?v=20261016c"><\/script>')</script>
 </body>
 
 </html>

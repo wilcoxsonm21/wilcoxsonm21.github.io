@@ -177,7 +177,7 @@ html:not(.ev-embed) .w-figure { --sv-room: 380px; }
 .w-jump.w-ok .w-jump-mark { color: #5ee08a; }
 .w-jump.w-no .w-jump-mark { color: rgba(255, 255, 255, .5); }
 @media (hover: hover) { .w-jump:hover { background: rgba(255, 255, 255, .18); } }
-:is(.w-jump, .sv-toggle):focus-visible, .w-scrub:focus-visible .w-fill { outline: 2px solid var(--on-dark); outline-offset: 2px; }
+:is(.w-jump, .sv-toggle):focus-visible, .w-scrub:focus-visible .w-rail { outline: 2px solid var(--on-dark); outline-offset: 3px; }   /* (the whole line: on its played part the ring was a sliver at the start) */
 .w-figure .cinema-caption { margin: 18px 0 0 2px; max-width: none; }   /* (as wide as the video: one line where it fits, the user 10-16) */
 
 /* ------------------------------------------------------------------ phones held upright: plan above execution */
