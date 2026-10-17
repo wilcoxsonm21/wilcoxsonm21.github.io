@@ -41,9 +41,10 @@ section[id] { scroll-margin-top: var(--nav-h); }
    with the section before it showing above) */
 section.chapter[id] { scroll-margin-top: 0; }
 
-/* the lights go down for the survival-mode episodes. Hidden while unlit: iOS Safari tints its toolbar from fixed
-   layers touching the screen edge, even transparent ones, so a lingering one shows as a black bar over the page */
-#backdrop { position: fixed; inset: 0; background: var(--dark); opacity: 0; visibility: hidden; pointer-events: none; z-index: 0; }
+/* the lights go down for the survival-mode episodes. Out of the layout while unlit: iOS Safari tints its toolbar from
+   fixed layers touching the screen edge, even transparent or visibility: hidden ones, so a lingering one shows as a
+   black bar under the page instead of the see-through glass toolbar */
+#backdrop { position: fixed; inset: 0; background: var(--dark); opacity: 0; display: none; pointer-events: none; z-index: 0; }
 
 /* ------------------------------------------------------------------ shared type */
 .eyebrow {
