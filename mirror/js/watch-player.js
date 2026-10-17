@@ -476,23 +476,25 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     if (video) show(viewWanted(), copyFor(viewWanted(), state.rate));
   }
   tall.addEventListener("change", reshape);
-  // The screen grows or shrinks around the button (a phone's stacked 16:18, a desktop's 32:9, over the width's .5 s
-  // transition), so the page scrolls with it: the button stays where it was tapped and the controls under the screen
-  // stay on it (on a 659-tall iPhone they fell below the bottom edge, with the button just tapped)
-  function keepInPlace(target, y0, ms = 650) {
+  // The screen grows around the button (a phone's stacked 16:18, over the width's .5 s transition), which pushed the
+  // controls under it off the bottom of a phone's screen. The page scrolls only as far as keeps the button on the
+  // screen, and never so far that the screen's top leaves it (pinning the button where it was tapped scrolled the
+  // title and the top bar off a phone, the user 10-16)
+  function keepOnScreen(target, ms = 650) {
     const end = performance.now() + ms;
     const step = () => {
-      const dy = target.getBoundingClientRect().top - y0;
-      if (Math.abs(dy) > 0.5) window.scrollBy(0, dy);
+      const over = target.getBoundingClientRect().bottom - (innerHeight - 12);
+      const room = screen.getBoundingClientRect().top - 8;
+      const d = Math.min(over, room);
+      if (d > 0.5) window.scrollBy(0, d);
       if (performance.now() < end) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   }
   toggle.addEventListener("click", () => {
-    const y0 = toggle.getBoundingClientRect().top;
     state.planOff = !state.planOff;
     reshape();
-    keepInPlace(toggle, y0);
+    keepOnScreen(toggle);
   });
 
   function seek(t) {
