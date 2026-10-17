@@ -349,6 +349,15 @@
       this.pics = this.inline ? $$("img[data-src]", el) : [];
       // a slow connection: a spinner over the box while it waits (css .wait)
       this.box.insertAdjacentHTML("beforeend", '<i class="spin" aria-hidden="true"></i>');
+      // ... and where it failed (an error from the server, its script missing, or no connection), a note in its place
+      // with a way to try again: over its poster it looked finished, with controls that did nothing (css .failed)
+      const fail = document.createElement("button");
+      fail.type = "button";
+      fail.className = "fail-note";
+      fail.textContent = "Couldn’t load · Try again";
+      fail.addEventListener("click", e => { e.stopPropagation(); this.retryLoad(); });
+      fail.addEventListener("pointerdown", e => e.stopPropagation());
+      this.box.append(fail);
       controls(this);
     }
     // the poster for the layout of now; whether it is in (or failed, or is taking over POSTER_MAX: the chapters after
@@ -832,10 +841,16 @@
         || this.inline && this.state === "loading");
       this.waitAt = spin ? this.waitAt ?? now : null;
       this.el.classList.toggle("wait", spin && now - this.waitAt > 600);
+      this.el.classList.toggle("failed", this.state === "failed");
       this.busy ||= spin;
       // a phone held sideways: the nav makes way while the stage holds the screen (relayout, the frame loop)
       this.staged = visible && (this.noHead ? y > -.2 * vh && y < this.pinLen + .2 * vh : this.stageO > .5);
       this.wasVisible = visible;
+    }
+    retryLoad() {
+      if (this.state !== "failed") return;
+      if (this.inline) this.state = "idle"; else this.reset();
+      wake();
     }
     starved(dt) {
       let s = false;
@@ -1745,11 +1760,24 @@
     rT = setTimeout(relayout, 120);
   });
   // a phone's connection back: a scene that failed to load while it was gone loads again when it next comes near
-  addEventListener("online", () => chapters.forEach(c => {
-    if (c.state !== "failed") return;
-    if (c.inline) c.state = "idle"; else c.reset();
-    wake();
-  }));
+  addEventListener("online", () => {
+    chapters.forEach(c => c.retryLoad());
+    // ... and the videos and stills that failed while it was gone ask again (a video with an error was never given its
+    // file again, so the gallery's and the survival clip stayed black), playing on if they are on the screen
+    for (const v of $$("video")) {
+      const src = v.getAttribute("src");
+      if (v.poster) v.poster = v.getAttribute("poster");
+      if (v.style.backgroundImage) v.style.backgroundImage = v.style.backgroundImage;
+      if (!src || !(v.error || v.networkState === HTMLMediaElement.NETWORK_NO_SOURCE)) continue;
+      const t = v.currentTime;
+      v.removeAttribute("src");
+      v.src = src;
+      if (t) v.addEventListener("loadedmetadata", () => { v.currentTime = Math.min(t, v.duration || t); }, { once: true });
+      const r = v.getBoundingClientRect();
+      if (r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth && !v.dataset.held && !covered()) v.play().catch(() => {});
+    }
+    for (const img of $$("img")) if (img.complete && !img.naturalWidth && img.getAttribute("src")) img.src = img.getAttribute("src");
+  });
   document.fonts.ready.then(layoutHero);
 
   // ------------------------------------------------------------------ loading, in reading order

@@ -68,6 +68,7 @@ const outcome = (e) => (e.success ? `${TASKS[state.tab].hit} at ${clock(verdictA
 
 // ------------------------------------------------------------------ the list
 function showTab(tab) {
+  if (!state.index) return;   // (the list hasn't loaded: its note says so, and it tries again)
   state.tab = tab;
   for (const b of $("tabs").children) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   $("note").replaceChildren(el("strong", { text: TASKS[tab].lead }), ` ${TASKS[tab].blurb}`);
@@ -193,12 +194,21 @@ function route(hash) {
 // an address changed by hand (or a link within the page) on the viewer's own page
 window.addEventListener("hashchange", () => { if (state.index) route(location.hash); });
 
-(async () => {
-  const response = await fetch("data/index.json");
-  if (!response.ok) throw new Error(`episode list: HTTP ${response.status}`);
-  state.index = await response.json();
+// the list; if it can't load, a plain note, and it tries again when the connection is back (it showed the browser's raw
+// error, and a tab clicked then threw)
+async function loadList() {
+  try {
+    const response = await fetch("data/index.json");
+    if (!response.ok) throw new Error(`episode list: HTTP ${response.status}`);
+    state.index = await response.json();
+  } catch (error) {
+    $("sections").replaceChildren(el("p", { class: "w-empty", text: navigator.onLine
+      ? "The episodes couldn’t load. Reload the page to try again."
+      : "The episodes need a connection. They load once you’re back online." }));
+    addEventListener("online", loadList, { once: true });
+    return;
+  }
   route(location.hash);
   requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add("w-ready")));
-})().catch((error) => {
-  $("sections").replaceChildren(el("p", { class: "w-empty", text: `The episodes could not be loaded: ${error.message ?? error}` }));
-});
+}
+loadList();

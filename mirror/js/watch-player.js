@@ -262,7 +262,11 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     svg("svg", { viewBox: "0 0 36 36", "aria-hidden": "true" }, svg("circle", { class: "vbtn-track", cx: 18, cy: 18, r: R }), ring, icon));
   film.append(el("div", { class: "sv-pane sv-plan", "aria-hidden": "true" }, el("span", { class: "sv-tag", text: "Video plan" })),
     el("div", { class: "sv-pane sv-exec", "aria-hidden": "true" }, el("span", { class: "sv-tag" }, "Execution", speedEl), toastEl));
-  const screen = el("div", { class: "cinema-screen" }, film, el("div", { class: "w-spinner", "aria-hidden": "true" }), speedBtn, vbtn);
+  // shown when no copy of the episode will load (a spinner turning for ever said nothing): Try again starts over
+  const retryBtn = el("button", { class: "w-retry", type: "button", text: "Try again" });
+  const failedEl = el("div", { class: "w-failed", role: "status", hidden: "" },
+    el("p", { text: "This episode couldn’t load." }), retryBtn);
+  const screen = el("div", { class: "cinema-screen" }, film, el("div", { class: "w-spinner", "aria-hidden": "true" }), speedBtn, vbtn, failedEl);
   const fill = el("div", { class: "w-fill" }), ticksBox = el("div", { class: "w-ticks" }), tip = el("div", { class: "w-tip", "aria-hidden": "true" });
   const rail = el("div", { class: "w-rail" }, fill, ticksBox);
   const scrub = el("div", { class: "w-scrub", role: "slider", tabindex: "0", "aria-label": "Episode time", "aria-valuemin": "0" }, rail, tip);
@@ -410,9 +414,12 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   // a video that will not load is not played again: a missing sped-up copy falls back to a slower one, and without the
   // plan's videos the execution plays alone
   // (a fragmented file that fails falls back to the plain one first)
+  // Without a connection a copy isn't lost, only out of reach: it stays, and the episode starts again from where it was
+  // when the connection is back (offline, every copy failed in turn and the episode never played again)
   function lost(v) {
     const view = v.dataset.view, k = kOf(v), wasFrag = !!v.frag;
     if (!v.dataset.url) return;
+    if (!navigator.onLine) { if (v === video) state.resumeAt = now(); return; }
     const t = v === video ? now() : state.lastT;
     release(v);
     if (wasFrag) delete state.frag[view]?.[k];
@@ -421,8 +428,37 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
       delete state.srcs[view][k];
       if (view !== "exec" && !state.srcs[view][1]) { state.hasPlan = false; shape(); }
     }
-    if (v === video) { video = null; show(viewWanted(), copyFor(viewWanted(), state.rate), t); }
+    if (v === video) {
+      video = null;
+      show(viewWanted(), copyFor(viewWanted(), state.rate), t);
+      if (!video?.dataset.url) failed(t);
+    }
   }
+  function failed(t) {
+    state.resumeAt = t;
+    state.intent = false;
+    screen.classList.remove("w-waiting");
+    failedEl.hidden = false;
+    paint(t);
+  }
+  // every copy back, from where it was
+  function retry() {
+    if (!state.srcs0) return;
+    // (from where the video is, if it played on from what it held: a dropped connection is noticed before the buffer runs out)
+    const t = video?.dataset.url && video.readyState >= 1 ? now() : state.resumeAt ?? state.lastT;
+    state.srcs = structuredClone(state.srcs0);
+    state.frag = structuredClone(state.frag0);
+    state.hasPlan = state.hasPlan0;
+    state.resumeAt = null;
+    failedEl.hidden = true;
+    clear();
+    shape();
+    state.intent = true;
+    show(viewWanted(), copyFor(viewWanted(), state.rate), t);
+    paint(t);
+  }
+  retryBtn.addEventListener("click", (e) => { e.stopPropagation(); retry(); });
+  addEventListener("online", () => { if (state.srcs0 && (state.resumeAt != null || !failedEl.hidden)) retry(); });
   setInterval(() => { if (video && root.offsetParent !== null) { hold(); park(); } }, 250);
 
   // ---------------------------------------------------------------- the screen's shape: plan | execution, or the
@@ -664,8 +700,12 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     const copies = (src) => (typeof src === "string" ? { 1: src } : { ...src });
     state.srcs = { exec: copies(execSrc), ...(both ? { side: copies(both.side), stack: copies(both.stack) } : {}) };
     state.frag = Object.fromEntries(Object.entries(frag).filter(([view]) => view in state.srcs).map(([view, c]) => [view, { ...c }]));
+    state.srcs0 = structuredClone(state.srcs);
+    state.frag0 = structuredClone(state.frag);
+    state.resumeAt = null;
+    failedEl.hidden = true;
     state.duration = Math.max(1, duration);
-    state.hasPlan = !!both;
+    state.hasPlan = state.hasPlan0 = !!both;
     state.milestones = milestones;
     state.ticks = ticks;
     state.toasts = toasts.sort((a, b) => a.t - b.t);

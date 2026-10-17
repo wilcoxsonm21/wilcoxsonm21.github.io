@@ -125,6 +125,41 @@
     log("frames", { at: where().ch, n: fr.length, p50: q(.5), p95: q(.95), max: q(1), over50: fr.filter(x => x > 50).length });
     fr = [];
   }, 3000);
+
+  // ?glasstest: stripes wherever the page is blank (glass toolbar shows them, a painted strip hides them), and on every
+  // scroll stop Safari's own rule for that strip (WebKit LocalFrameView::fixedContainerEdges) run here, on the phone
+  if (/[?&]glasstest\b/.test(location.search)) {
+    document.head.appendChild(document.createElement("style")).textContent =
+      "html,body{background:repeating-linear-gradient(45deg,#e33 0 14px,#36f 14px 28px) fixed !important}";
+    const probe = (css) => { const d = document.body.appendChild(document.createElement("div"));
+      d.style.cssText = "position:fixed;top:0;left:0;width:0;visibility:hidden;pointer-events:none;height:" + css;
+      const h = d.offsetHeight; d.remove(); return h; };
+    const edge = () => {
+      const pe = document.head.appendChild(document.createElement("style"));
+      pe.textContent = "*{pointer-events:auto !important}";
+      const vw = innerWidth, vh = innerHeight, x = vw / 2, y = vh - 4;
+      const pinned = el => { for (let a = el; a && a.nodeType === 1; a = a.parentElement) { const p = getComputedStyle(a).position; if (p === "fixed" || p === "sticky") return true; } return false; };
+      const all = document.elementsFromPoint(x, y), hit = all.find(pinned);
+      pe.remove();
+      const nm = a => a ? (a.id ? "#" + a.id : a.tagName.toLowerCase() + (a.classList[0] ? "." + a.classList[0] : "")) : null;
+      let verdict = "glass";
+      if (hit) for (let a = hit; a && a.nodeType === 1; a = a.parentElement) {
+        const cs = getComputedStyle(a), p = cs.position;
+        if (p !== "fixed" && p !== "sticky") continue;
+        const r = a.getBoundingClientRect(), bg = !/rgba\(.*, 0\)$/.test(cs.backgroundColor) || cs.backgroundImage !== "none";
+        if (cs.visibility === "hidden" || +cs.opacity < .1 || (!bg && cs.backdropFilter === "none" && !a.firstChild)) continue;
+        const c = (l, v) => l < v * .9 ? "S" : l < v * 1.05 ? "M" : "L", w = c(r.width, vw), h = c(r.height, vh);
+        if (w === "S") { if (h !== "S") { verdict = "strip:" + nm(a); break; } continue; }
+        if (h === "L" || (w === "M" && h === "M" && parseInt(cs.zIndex) < 0)) continue;
+        verdict = "strip:" + nm(a) + " " + cs.backgroundColor; break;
+      }
+      const sec = [...document.querySelectorAll("main > section, body > section, section[id]")].find(s => { const r = s.getBoundingClientRect(); return r.top <= vh / 2 && r.bottom > vh / 2; });
+      log("glass", { section: nm(sec), verdict, top: nm(hit), under: all.slice(0, 3).map(nm), sy: Math.round(scrollY),
+        inner: vh, svh: probe("100svh"), lvh: probe("100lvh"), dvh: probe("100dvh"), vv: visualViewport && Math.round(visualViewport.height), screen: screen.height });
+    };
+    let t; addEventListener("scroll", () => { clearTimeout(t); t = setTimeout(edge, 250); }, { passive: true });
+    addEventListener("load", () => setTimeout(edge, 500));
+  }
   setInterval(pollFetches, 1000);
   setInterval(pollVideos, 3000);
 })();

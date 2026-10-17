@@ -77,6 +77,7 @@ const clock = player.clock;
 
 // ------------------------------------------------------------------ the list
 function showTab(tab) {
+  if (!state.index) return;   // (the list hasn't loaded: its note says so, and it tries again)
   state.tab = tab;
   for (const b of $("tabs").children) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
   const arm = state.index[tab], total = arm.episodes.length;
@@ -137,8 +138,16 @@ function windows(episode) {
 let firstOpen = true;
 async function openEpisode(n, { startAt = 0 } = {}) {
   const tab = state.tab, ticket = ++state.loading;
-  const episode = await episodeData(tab, n);
+  let episode;
+  try { episode = await episodeData(tab, n); }
+  catch (error) {   // (a click did nothing at all: it says so, and tries again once the connection is back)
+    if (ticket !== state.loading) return;
+    $("note").textContent = navigator.onLine ? "That episode couldn’t load. Try it again." : "That episode needs a connection. It opens once you’re back online.";
+    if (!navigator.onLine) addEventListener("online", () => { if (ticket === state.loading) openEpisode(n, { startAt }); }, { once: true });
+    return;
+  }
   if (ticket !== state.loading) return;   // a later click won
+  $("note").textContent = TAB[state.tab].note;
   const opening = $("episode").hidden;
   if (opening) state.listScroll = window.scrollY;
   state.number = n;
@@ -237,12 +246,21 @@ function route(hash) {
 // an address changed by hand (or a link within the page) on the viewer's own page
 window.addEventListener("hashchange", () => { if (state.index) route(location.hash); });
 
-(async () => {
-  const response = await fetch("data/index.json");
-  if (!response.ok) throw new Error(`episode list: HTTP ${response.status}`);
-  state.index = await response.json();
+// the list; if it can't load, a plain note, and it tries again when the connection is back (it showed the browser's raw
+// error, and a tab clicked then threw)
+async function loadList() {
+  try {
+    const response = await fetch("data/index.json");
+    if (!response.ok) throw new Error(`episode list: HTTP ${response.status}`);
+    state.index = await response.json();
+  } catch (error) {
+    $("grid").replaceChildren(el("li", { class: "w-empty", text: navigator.onLine
+      ? "The episodes couldn’t load. Reload the page to try again."
+      : "The episodes need a connection. They load once you’re back online." }));
+    addEventListener("online", loadList, { once: true });
+    return;
+  }
   route(location.hash);
   requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add("w-ready")));
-})().catch((error) => {
-  $("grid").replaceChildren(el("li", { class: "w-empty", text: `The episodes could not be loaded: ${error.message ?? error}` }));
-});
+}
+loadList();
