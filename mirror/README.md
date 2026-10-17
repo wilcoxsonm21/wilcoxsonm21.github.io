@@ -272,7 +272,11 @@ Everything that downloads at once shares a slow connection, so the page loads in
 - Downloads the reader has scrolled past give way to the rest: a scene's clips still on their way (`SCENE.park`), and
   the hero's montage or the survival clip once well off the screen (`park`). They go on in the background once
   everything the reader is on and coming to is in, one at a time and nearest first, and give way again whenever
-  something else needs the line (`background`); the browser keeps what they had. While the hero's montage or the
+  something else needs the line (`background`); the browser keeps what they had. A download the browser has only
+  deferred counts as under way (Chrome reports it idle), and so do a gallery card's once it leaves the screen and every one
+  still going as an episode modal opens: on GitHub Pages the page's files share one HTTP/2 connection, and five deferred
+  video downloads (the hero's, the survival clip's, three of the gallery's) used up its flow-control window, so the
+  modal's page got its headers and no body for 10 s and more (8 of 8 opens after the gallery, 10-17; none since). While the hero's montage or the
   survival clip plays on the screen, it gets 6 s buffered before anything else loads.
 - The survival clips need 1.7-2.5 Mbps, more than slow 4G has (it stalled every second or two there). Each has a light
   copy, `media/survival/*_light.mp4` (20 fps at 896 x 252, or 448 x 504 stacked; ~0.3 Mbps, peaks capped at 0.6). The

@@ -1519,17 +1519,21 @@
   const vio = new IntersectionObserver(es => es.forEach(e => {
     const v = e.target;
     if (e.isIntersecting && e.intersectionRatio >= .5) {
-      if (!v.getAttribute("src") && v.dataset.src) v.src = v.dataset.src;
+      if (v.dataset.park !== undefined) unpark(v);
+      else if (!v.getAttribute("src") && v.dataset.src) v.src = v.dataset.src;
       if (!v.dataset.held && !covered()) v.play().catch(refusal);   // held: the reader paused it (js/controls.js)
     } else if (!e.isIntersecting && !v.paused) v.pause();
   }), { rootMargin: "150px 0px", threshold: [0, .5] });
   $$("video.lazy").forEach(v => vio.observe(v));
   // (off the screen but inside that margin it played on: 70 px above a phone's screen at the BibTeX)
   // ... and plays again on coming back, if this paused it (the other observer, its margin never left, doesn't fire again)
+  // (and off the screen its download stops too, park: paused, a gallery card's download only held on to its part of the
+  // connection; back on the screen it goes on from where it was)
   const offIo = new IntersectionObserver(es => es.forEach(e => {
     const v = e.target;
-    if (!e.isIntersecting) { if (!v.paused) { v.pause(); v.dataset.offPaused = "1"; } }
-    else if (v.dataset.offPaused) { delete v.dataset.offPaused; if (!v.dataset.held && !covered()) v.play().catch(() => {}); }
+    if (!e.isIntersecting) { if (!v.paused) { v.pause(); v.dataset.offPaused = "1"; } park(v); return; }
+    if (v.dataset.park !== undefined) unpark(v);
+    if (v.dataset.offPaused) { delete v.dataset.offPaused; if (!v.dataset.held && !covered()) v.play().catch(() => {}); }
   }));
   $$("video.lazy").forEach(v => offIo.observe(v));
   // turned upright again: the page looks afresh at what is on the screen and plays it (observing again reports each
@@ -1613,9 +1617,23 @@
   // and as an episode modal closes (js/modal.js pauses the page's videos as it opens, and plays those on as it closes;
   // one that came into view under it, as on a link straight to the modal, starts now)
   let modalWas = false;
+  // (and as one opens, the page's downloads under way stop, park: paused under it, they held on to their parts of the
+  // connection, and the modal's own page and videos waited behind them; as it closes, those on the screen go on)
+  const videoOnScreen = v => { const r = v.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; };
   new MutationObserver(() => {
     const open = root.classList.contains("modal-open");
-    if (open !== modalWas) { modalWas = open; if (!open && !turned()) lookAgain(); }
+    if (open === modalWas) return;
+    modalWas = open;
+    if (open) {
+      for (const v of $$("video")) if (v.dataset.park === undefined) { park(v); if (v.dataset.park !== undefined) v.dataset.modalPark = "1"; }
+      return;
+    }
+    for (const v of $$("video[data-modal-park]")) {
+      delete v.dataset.modalPark;
+      if (v === heroVideo ? heroFar : v === cVideo ? cinemaFar : !videoOnScreen(v)) continue;   // (the far ones wait for the reader)
+      unpark(v, v === cVideo ? clip(segBtns.find(b => b.getAttribute("aria-selected") === "true") || segBtns[0])[0] : undefined);
+    }
+    if (!turned()) lookAgain();
   }).observe(root, { attributes: true, attributeFilter: ["class"] });
   // with reduced motion, no video plays by itself (as the hero's): the survival video and the gallery's start held, and
   // a tap or a tab plays them
@@ -1646,6 +1664,7 @@
       const src = portrait ? v.dataset.portraitSrc : v.dataset.landscapeSrc;
       if (v.dataset.src === src) return;
       v.dataset.src = src;
+      if (v.dataset.park !== undefined) { v.dataset.park = src; return; }   // (parked: the new one, when it is back)
       if (!v.getAttribute("src")) return;
       const t = v.currentTime, playing = !v.paused;
       if (v.preload === "none") v.preload = "metadata";   // so a paused video shows its frame
@@ -1986,11 +2005,14 @@
     if (behind) {
       const done = behind.c ? !behind.c.api || !behind.c.api.busy() : behind.v.networkState !== 2 || bufferedAhead(behind.v) === Infinity;
       if (!done) return false;
+      // (one the browser only deferred stops again, rather than hold on to its part of the connection, and waits for the
+      // reader to come back: unpark)
+      if (behind.v && passed(behind.v) && bufferedAhead(behind.v) !== Infinity) { park(behind.v); behind.v.dataset.deferred = "1"; }
       behind = null;
     }
     const left = [
       ...order.filter(o => o.c.parked && o.c.api && o.c.api.parked && o.c.api.parked() > 0),
-      ...[[heroVideo, heroEl], [cVideo, cinema]].filter(([v]) => v.dataset.park !== undefined).map(([v, el]) => ({ v, d: dist(el) })),
+      ...[[heroVideo, heroEl], [cVideo, cinema]].filter(([v]) => v.dataset.park !== undefined && !v.dataset.deferred).map(([v, el]) => ({ v, d: dist(el) })),
     ].sort((a, b) => a.d - b.d)[0];
     if (!left) return true;
     behind = left.c ? { c: left.c } : { v: left.v };
@@ -2005,8 +2027,12 @@
   // (park); they go on in the background once the rest is in (background), or as soon as the reader is back (unpark;
   // src: the clip to play then). They keep their place in the clip, and the browser keeps what they had.
   function park(v) {
-    // (only a download under way: a clip the reader never started has nothing to go on with)
-    if (v.dataset.park !== undefined || !v.getAttribute("src") || v.networkState !== 2 || bufferedAhead(v) === Infinity) return;
+    // (only a download under way: a clip the reader never started has nothing to go on with. Under way is not just
+    // networkState loading: Chrome reports idle for a download it has deferred, and a deferred download still holds its
+    // part of the connection's flow-control window. Five of them, the hero's, the survival clip's and three of the
+    // gallery's, left none for the episodes modal on GitHub Pages: its page got its headers and no body, for 10 s on)
+    const started = v.networkState === 2 || v.readyState > 0 || v.buffered.length > 0;
+    if (v.dataset.park !== undefined || !v.getAttribute("src") || !started || bufferedAhead(v) === Infinity) return;
     v.dataset.park = v.getAttribute("src");
     v.dataset.parkT = v.currentTime;
     v.removeAttribute("autoplay");   // (the page plays it while it is on the screen: updateHero, updateCinema)
@@ -2016,6 +2042,7 @@
   }
   function unpark(v, src = v.dataset.park, behindScreen = false) {
     if (v.dataset.park === undefined) return;
+    delete v.dataset.deferred;
     const t = +v.dataset.parkT || 0;
     delete v.dataset.park;
     delete v.dataset.parkT;
