@@ -43,8 +43,9 @@ section.chapter[id] { scroll-margin-top: 0; }
 
 /* the lights go down for the survival-mode episodes. Out of the layout while unlit: iOS Safari tints its toolbar from
    fixed layers touching the screen edge, even transparent or visibility: hidden ones, so a lingering one shows as a
-   black bar under the page instead of the see-through glass toolbar */
-#backdrop { position: fixed; inset: 0; background: var(--dark); opacity: 0; display: none; pointer-events: none; z-index: 0; }
+   black bar under the page instead of the see-through glass toolbar.
+   Taller than the screen, not inset: 0, which stops where that toolbar starts and leaves the page white under it */
+#backdrop { position: fixed; top: 0; left: 0; right: 0; height: calc(100lvh + 100px); background: var(--dark); opacity: 0; display: none; pointer-events: none; z-index: 0; }
 /* keeps iOS 26 Safari's see-through toolbar. Safari looks at the bottom-centre point of the screen: when the topmost thing
    there sits in a fixed or sticky box about the size of the screen (every pinned stage here), it paints a solid strip
    of that colour under the toolbar. A small fixed box on top at that point (not empty, so it counts) makes it give up,
