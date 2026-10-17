@@ -278,10 +278,7 @@ html.hero-wait .hero-mark { filter: opacity(0); }
 
 /* ------------------------------------------------------------------ chapters: a pinned talk animation each */
 .chapter { position: relative; height: 600vh; }   /* the real height comes from site.js */
-.chapter-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden;
-  /* (laid out for the screen with the toolbar showing, but drawn on under iOS 26's see-through toolbar, as the text
-     between chapters is, instead of stopping at a hard edge above it) */
-  overflow: clip visible; clip-path: inset(0 0 calc(100svh - 100lvh - env(safe-area-inset-bottom, 0px) - 40px) 0); }
+.chapter-sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
 
 .chapter-head {
   position: absolute;

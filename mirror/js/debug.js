@@ -157,7 +157,27 @@
       log("glass", { section: nm(sec), verdict, top: nm(hit), under: all.slice(0, 3).map(nm), sy: Math.round(scrollY),
         inner: vh, svh: probe("100svh"), lvh: probe("100lvh"), dvh: probe("100dvh"), vv: visualViewport && Math.round(visualViewport.height), screen: screen.height });
     };
-    let t; addEventListener("scroll", () => { clearTimeout(t); t = setTimeout(edge, 250); }, { passive: true });
+    // and every clip: visible text that runs past an ancestor that clips it (overflow, clip-path, contain), with both boxes
+    const clips = () => {
+      const nm = a => a.id ? "#" + a.id : a.tagName.toLowerCase() + (a.classList[0] ? "." + a.classList[0] : "");
+      const box = r => [Math.round(r.top), Math.round(r.bottom)];
+      const out = [];
+      for (const el of document.querySelectorAll("h2, h3, h4, p, .eyebrow, figure")) {
+        const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+        if (!r.height || r.bottom < 0 || r.top > innerHeight + 200 || cs.visibility === "hidden") continue;
+        for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
+          const c = getComputedStyle(a), q = a.getBoundingClientRect();
+          const clipsY = c.overflowY !== "visible" || c.clipPath !== "none" || /paint|strict|content/.test(c.contain)
+            || (c.maskImage || c.webkitMaskImage || "none") !== "none";
+          if (clipsY && r.bottom > q.bottom + 1 && r.top < q.bottom) {
+            out.push({ el: nm(el), elBox: box(r), by: nm(a), byBox: box(q), ov: c.overflowX + "/" + c.overflowY, clip: c.clipPath, contain: c.contain, mask: (c.maskImage || c.webkitMaskImage || "").slice(0, 60), h: c.height });
+            break;
+          }
+        }
+      }
+      log("clips", { inner: innerHeight, sy: Math.round(scrollY), cut: out.slice(0, 8) });
+    };
+    let t; addEventListener("scroll", () => { clearTimeout(t); t = setTimeout(() => { edge(); clips(); }, 250); }, { passive: true });
     addEventListener("load", () => setTimeout(edge, 500));
   }
   setInterval(pollFetches, 1000);
