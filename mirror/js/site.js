@@ -10,6 +10,8 @@
 // Everything else on the page (hero, statements, headlines, the dark interlude) is driven from the same frame loop.
 (() => {
   "use strict";
+  // the asset tag this script came with (?v=, index.html), for the scripts it loads later
+  const ASSET_V = ((document.currentScript && /[?&]v=([^&#]+)/.exec(document.currentScript.src)) || [])[1] || "";
   // (a malformed % in the address, "#%", threw "URI malformed" and broke the page; it reads as no address)
   const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return ""; } };
   const $ = (s, r = document) => r.querySelector(s);
@@ -86,7 +88,7 @@
     const end = topOf(heroEl) + heightOf(heroEl), on = sy < end && p < .97, far = sy > end + vh / 2;   // (on: not faded out)
     // (half a screen past it, its download gives way to the rest: park)
     if (far !== heroFar) { heroFar = far; if (far) park(heroVideo); else unpark(heroVideo); }
-    if (on && heroVideo.paused && !REDUCED && !covered()) heroVideo.play().catch(() => {});
+    if (on && heroVideo.paused && !REDUCED && !covered()) heroVideo.play().catch(e => refusal(e, heroVideo));
     else if (!on && !heroVideo.paused) heroVideo.pause();
   }
 
@@ -397,7 +399,8 @@
     }
     // the poster stands in for the scene: until the scene has loaded, drawn its opening and shown (a scene that reloads
     // partway through, in the other layout, fades in on the click it was on instead)
-    covers() { return !!this.poster && (!this.api || this.shown < 1) && this.T <= this.lead + 1e-3; }
+    // (and while its clips are refused, Low Power Mode: they would draw nothing)
+    covers() { return !!this.poster && (!this.api || this.shown < 1 || this.refused) && this.T <= this.lead + 1e-3; }
     // the poster is in and fully drawn, over the scene's frame
     posterUp() { return this.poster.classList.contains("in") && performance.now() - this.posterInAt > 320; }
     // before its scene has loaded, the box takes the shape and the caption room the scene will want
@@ -589,6 +592,8 @@
     // gestures do
     tap() {
       this.usedAt = performance.now();
+      // (the tap that lifted Low Power Mode's refusal, unlockVideos, plays: the animation hadn't started to be paused)
+      if (performance.now() - (this.thawedAt ?? -1e9) < 400) { this.thawedAt = null; this.select(); this.held = false; this.flash("toggle"); return; }
       const first = !this.selected;
       this.select();
       if (!REDUCED) {
@@ -616,9 +621,10 @@
     }
     // the box's classes, and what its controls say, for the state it is in now
     sync() {
-      const play = this.held || this.ended;
+      const play = this.held || this.ended || this.refused;
       this.box.classList.toggle("selected", this.selected);
-      this.box.classList.toggle("paused", this.selected && play && !REDUCED);
+      // (a refused animation shows the play glyph whether selected or not: a tap is what it waits for)
+      this.box.classList.toggle("paused", (this.selected || this.refused) && play && !REDUCED);
       this.glyph.innerHTML = play ? ICON_PLAY : ICON_PAUSE;
       const steps = TAP === "Tap" ? "swipe \u2190 next \u00b7 swipe \u2192 back" : "arrow keys or swipe to step";
       const what = `${TAP} to ${this.ended ? "replay" : play ? "play" : "pause"}`;
@@ -630,7 +636,7 @@
     }
     // the transport's middle button says what pressing it does: pause, play, or play again
     syncTransport() {
-      const s = this.ended ? "replay" : this.held ? "play" : "pause";
+      const s = this.ended ? "replay" : this.held || this.refused ? "play" : "pause";
       if (s === this.tpState) return;
       this.tpState = s;
       this.tpPlay.innerHTML = s === "pause" ? ICON_PAUSE : s === "play" ? ICON_PLAY : ICON_REPLAY;
@@ -732,6 +738,7 @@
           if (!info) { this.state = "failed"; return; }
           this.api = S;
           this.state = "ready";
+          this.refused = this.unlocked = false;   // (a new scene page: new clips, Low Power Mode, unlockVideos)
           S.setNarrow(narrow || short);
           if (!this.inline) this.frameShape(info.h > info.w ? info.w : 0, info.h);
           this.caps = S.captions ? S.captions() : null;
@@ -777,7 +784,7 @@
         // clip in a frame at opacity 0, so with the scene fading in over its poster the first animation's opening clip
         // never played, and every iPhone visit waited out the 8 s limit behind the poster (10-16). A poster still on its
         // way (or fading in, .3 s) leaves the frame hidden until the scene shows, as without one.
-        const fade = cover && this.shown > 0;
+        const fade = cover && this.shown > 0 && !this.refused;
         css(this.poster, "transition", fade ? "none" : "");
         css(this.poster, "opacity", fade ? (1 - this.shown).toFixed(3) : cover ? "" : "0");
         css(this.iframe, "opacity", cover && !this.posterUp() ? this.shown.toFixed(3) : "");
@@ -825,7 +832,7 @@
       // (a scene that failed to load shows its poster, or its empty box)
       if (this.state === "failed") { this.swap = null; if (this.poster) this.shown = 0; }
       // (it holds its opening while the stage fades in after a load)
-      this.live = !!this.api && !this.swap && this.shown >= 1 && visible && this.wasVisible && this.inFocus(y) && !this.held && !this.ended && !covered();   // (covered: a modal opened by Forward or a typed #hash ran the chapter behind it)
+      this.live = !!this.api && !this.swap && this.shown >= 1 && visible && this.wasVisible && this.inFocus(y) && !this.held && !this.ended && !this.refused && !covered();   // (covered: a modal opened by Forward or a typed #hash ran the chapter behind it)
       // coming into focus, the transport shows for a while, until the reader has used the controls (cue, below)
       const foc = !!this.api && this.shown >= 1 && visible && this.inFocus(y);
       if (foc && !this.foc && !tapped) this.cue(0, 3.2);
@@ -860,7 +867,7 @@
       if (!this.swap && this.shown < 1 && !(this.poster && this.state === "failed"))
         this.shown = REDUCED ? 1 : Math.min(1, this.shown + dt / .25);
       // the poster goes once the scene has faded in over it
-      if (this.poster) css(this.poster, "display", this.api && this.shown >= 1 ? "none" : "");
+      if (this.poster) css(this.poster, "display", this.api && this.shown >= 1 && !this.refused ? "none" : "");
       // the frame loop keeps running while this chapter plays (or holds between clicks), or fades back in (wake)
       this.busy = this.live || (!this.swap ? this.shown < 1 : visible && this.swap.at !== null);
       // a slow connection: a spinner shows once the stage, in place, has waited 0.6 s for its scene (over its poster), a
@@ -1481,7 +1488,7 @@
     const on = r.top < vh * .85 && r.bottom > vh * .15;
     if (on !== cinemaOn) {
       cinemaOn = on;
-      if (on) { if (!cVideo.dataset.held && !covered()) cVideo.play().catch(() => {}); } else cVideo.pause();
+      if (on) { if (!cVideo.dataset.held && !covered()) cVideo.play().catch(e => refusal(e, cVideo)); } else cVideo.pause();
     }
   }
 
@@ -1513,7 +1520,7 @@
     const v = e.target;
     if (e.isIntersecting && e.intersectionRatio >= .5) {
       if (!v.getAttribute("src") && v.dataset.src) v.src = v.dataset.src;
-      if (!v.dataset.held && !covered()) v.play().catch(() => {});   // held: the reader paused it (js/controls.js)
+      if (!v.dataset.held && !covered()) v.play().catch(refusal);   // held: the reader paused it (js/controls.js)
     } else if (!e.isIntersecting && !v.paused) v.pause();
   }), { rootMargin: "150px 0px", threshold: [0, .5] });
   $$("video.lazy").forEach(v => vio.observe(v));
@@ -1533,6 +1540,75 @@
     $$("video.lazy").forEach(v => { vio.unobserve(v); vio.observe(v); });
     wake();
   };
+  // Low Power Mode, and iOS's mitigation for a hot phone, refuse every video a page plays by itself (NotAllowedError) until
+  // the reader taps, and the scenes' clips then drew nothing: every animation was a set of empty boxes. A scene whose clip
+  // is refused says so (MIRROR_REFUSED, scenes/scene-adapter.js) and its chapter holds on its poster with the play glyph
+  // (Chapter.refused). From the first refusal on, each tap or key, in the capture phase so before the box acts on it, lets
+  // the page's own videos and the clips of every scene loaded so far play: a play() within the tap lifts the refusal,
+  // video by video. The animations then go on (the tapped one plays, rather than pausing: tap).
+  let lowPower = false, pageUnlocked = false;
+  const refusal = (e, v) => { if (!e || e.name !== "NotAllowedError") return; lowPower = true; if (v) drawVideo(v); };
+  // ... and where WebCodecs decodes video (iOS Safari 16.4 on), the hero's montage and the survival clip are drawn by the
+  // page instead (scenes/scene-draw.js, SceneDraw.takeOver): a canvas over each shows the frame of a clock that the
+  // element's own play(), pause() and currentTime run, with the media events they fire, so the rest of the page (the
+  // survival labels, milestones, bar, tabs, tap to pause) goes on as it was. The survival clip plays its light copy then
+  // (a fifth of the decoding). The scenes draw their clips the same way (scenes/scene-adapter.js).
+  const CAN_DRAW = typeof VideoDecoder === "function" && typeof EncodedVideoChunk === "function";
+  let drawLib = null;
+  function drawVideo(v) {
+    if (!CAN_DRAW || v.drawnBy) return;
+    v.drawnBy = "loading";
+    drawLib = drawLib || new Promise((ok, no) => {
+      const sc = document.createElement("script");
+      sc.src = "scenes/scene-draw.js" + (ASSET_V ? "?v=" + ASSET_V : "");
+      sc.onload = () => (window.SceneDraw ? ok() : no());
+      sc.onerror = no;
+      document.head.append(sc);
+    });
+    drawLib.then(() => {
+      v.drawnBy = SceneDraw.takeOver(v);
+      if (v === cVideo && !light) { light = true; swapCinema(); }   // (the light copy, from the same moment)
+      lastSy = -1;   // (the frame loop plays what is on the screen: updateHero, updateCinema)
+      wake();
+    }, () => { v.drawnBy = null; });
+  }
+  window.MIRROR_REFUSED = w => {
+    lowPower = true;
+    const c = chapters.find(c => c.iframe && frameAt(c.iframe)?.w === w);
+    if (!c || c.refused) return;
+    c.refused = true;
+    c.unlocked = false;
+    // (refused in its first click: back to its opening, where its poster stands in, rather than a frame of empty boxes)
+    if (c.k === 0 && c.T > c.lead) { c.fromLead(); c.cur = -1; c.doneAt = null; }
+    c.sync();
+    wake();
+  };
+  function unlockVideos() {
+    if (!lowPower) return;
+    const now = performance.now();
+    if (!pageUnlocked) {
+      let ok = false;
+      for (const v of $$("video")) {
+        if (v.drawnBy) continue;   // (drawn by the page: nothing to lift)
+        if (!v.paused) { ok = true; continue; }
+        const p = v.play();
+        if (p) p.catch(() => {});
+        if (!v.paused) ok = true;
+        v.pause();
+      }
+      if (ok) { pageUnlocked = true; lookAgain(); }   // (what is on the screen plays)
+    }
+    for (const c of chapters) {
+      if (c.unlocked || !c.api || !c.api.unlock) continue;
+      let ok = false;
+      try { ok = c.api.unlock(); } catch (e) {}
+      if (!ok) continue;
+      c.unlocked = true;
+      if (c.refused) { c.refused = false; c.thawedAt = now; c.sync(); }
+    }
+    wake();
+  }
+  for (const ev of ["touchend", "click", "keydown"]) addEventListener(ev, unlockVideos, { capture: true });
   document.addEventListener("mirror-turn", e => { if (!e.detail.on) lookAgain(); else wake(); });
   // and as an episode modal closes (js/modal.js pauses the page's videos as it opens, and plays those on as it closes;
   // one that came into view under it, as on a link straight to the modal, starts now)

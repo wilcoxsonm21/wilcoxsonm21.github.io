@@ -112,6 +112,10 @@
         vids.push([v.currentSrc.split("/").pop(), v.readyState, +v.currentTime.toFixed(1), +end.toFixed(1), +(v.duration || 0).toFixed(1), v.paused ? 0 : 1]);
       }
     }
+    // (a scene drawing its clips, Low Power Mode, scene-draw.js: each clip's state, whether its decoder is up, frames held)
+    const drawn = [];
+    for (const w of docs()) { try { if (w.SceneDraw) for (const c of w.SceneDraw.Clip.all) drawn.push([c.url.split("/").pop(), c.state, c.dec ? 1 : 0, c.out.length]); } catch (e) {} }
+    if (drawn.length) log("drawn", { at: where().ch, clips: drawn });
     log("videos", { at: where(), v: vids,
                     ch: chapters().map(c => { const f = c.el.querySelector("iframe"); return [c.el.id, c.state || null, !!c.api, f ? (f.getAttribute("src") || "-") : null, c.shown]; }) });
   };
@@ -210,4 +214,14 @@
   setInterval(pollFetches, 1000);
   setInterval(pollVideos, 3000);
   setInterval(pollReveal, 100);
+  // Low Power Mode: an animation whose clips were refused, and the tap that let them play (site.js unlockVideos)
+  const wasRefused = new Map();
+  setInterval(() => {
+    for (const c of chapters()) {
+      const r = !!c.refused;
+      if (r === !!wasRefused.get(c.el.id)) continue;
+      wasRefused.set(c.el.id, r);
+      log(r ? "refused" : "unlocked", { ch: c.el.id, at: where().ch });
+    }
+  }, 200);
 })();

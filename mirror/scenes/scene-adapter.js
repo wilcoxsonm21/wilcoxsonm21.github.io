@@ -16,6 +16,7 @@
 //   SCENE.waiting()        an image the frame on screen shows is still loading
 //   SCENE.park(), resume() the clips on their way give way to other downloads, and go on (parked(): how many)
 //   SCENE.busy()           something is on its way
+//   SCENE.unlock()         within the reader's tap: lets clips Low Power Mode refused play (true if it did)
 (function () {
   "use strict";
   if (!window.SCENE_SCROLL) {         // opened on its own: the page steps on clicks and arrow keys, as in the deck
@@ -50,6 +51,11 @@
     const src = v && LAZY.get(v);
     if (!src) return;
     LAZY.delete(v);
+    if (drawing && drawing.ok) {
+      drawing.clips.set(v, new SceneDraw.Clip(src));
+      if (!ahead) asked.set(v, performance.now());
+      return;
+    }
     // (from 0: the deck shows its opening frame, (frame + .5) / FPS, before the clip has its file, and a time set then is
     // kept as the clip's start and seeked to once the file comes, through a load() too. On an iPhone that seek, on a clip
     // that hadn't played, never finished while its first play() waited: the intro sat behind its poster until the page
@@ -64,7 +70,8 @@
   // doesn't say so the usual way: a clip that hasn't played stays at readyState 1, with nothing buffered and its download
   // "loading", however much it has fetched; its resource timing entries do (one per range it asked for; the first, a
   // 2-byte probe, doesn't count). On an iPhone every clip used to count as on its way for PENDING_MAX.
-  const clipIn = v => !!v.error || v.readyState >= 4 || v.networkState === HTMLMediaElement.NETWORK_IDLE
+  const clipIn = v => drawing && drawing.clips.has(v) ? drawing.clips.get(v).state !== "loading"
+    : !!v.error || v.readyState >= 4 || v.networkState === HTMLMediaElement.NETWORK_IDLE
     || !!v.currentSrc && performance.getEntriesByName(v.currentSrc).some(e => (e.encodedBodySize || e.transferSize || 0) > 1000);
   // The clips the timeline will want load one at a time, in its order (feed), so a click's first clip isn't sharing the
   // line with its later ones (intro's opening clip took 1.5 s at 700 kbps beside its two big ones, against 0.4 s alone):
@@ -138,6 +145,7 @@
   const PARKED = new Map(), CUED = new Set(LAZY.keys());   // (CUED: the clips the timeline asks for itself)
   const RESUME = new Set();
   function park() {
+    if (drawing) return;
     for (const v of document.querySelectorAll("video[src]")) {
       if (clipIn(v)) continue;
       const src = v.getAttribute("src");
@@ -151,6 +159,7 @@
     flight = null;
   }
   function resume() {
+    if (drawing) return;
     for (const v of RESUME) fetchClip(v, true);
     RESUME.clear();
     for (const [v, src] of PARKED) v.src = src;
@@ -164,7 +173,9 @@
     || [...document.images].some(im => im.getAttribute("src") && !im.complete);
   function waiting() {
     for (const im of onShow) if (im.complete) onShow.delete(im);
-    return onShow.size > 0;
+    // (and while drawing, a slot on show that has drawn nothing yet, unless its clip failed)
+    return onShow.size > 0 || !!drawing && Object.values(drawing.canvases).some(c => c.style.visibility === "visible"
+      && c.ts == null && !(c.clip && drawing.clips.get(c.clip) && drawing.clips.get(c.clip).state === "failed"));
   }
 
   // How each page hands a chained beat over (beat seconds after it starts) and what else it needs per frame.
@@ -274,8 +285,109 @@
   // A clip is seeked once it has its size (a time set before is kept as its start, fetchClip) and not while a play() of
   // it is under way (priming, starting): on iOS a seek then, on a clip that hadn't played yet, never finished
   const seekable = v => v.readyState >= 1 && !v.priming && !v.starting;
+  // Low Power Mode, and iOS's mitigation for a hot phone, refuse a clip the page plays by itself (NotAllowedError) until
+  // the reader taps: the clip then draws nothing. The first refusal tells the page (MIRROR_REFUSED, js/site.js), which
+  // holds the animation on its poster with the play glyph; within the reader's tap it calls unlock, and a play() then
+  // lifts the refusal, clip by clip (whether it did: the play() left the clip playing). Until then nothing is retried.
+  let refused = false;
+  const refusal = e => {
+    if (!e || e.name !== "NotAllowedError" || refused || drawing) return;
+    if (CAN_DRAW) { startDrawing(); return; }
+    refused = true;
+    // (a scene of its own videos, suites's, shows their posters meanwhile; one of slots holds on the page's poster)
+    if (typeof SLOT_CLIPS !== "undefined") try { parent.MIRROR_REFUSED && parent.MIRROR_REFUSED(window); } catch (x) {}
+  };
+  // Where WebCodecs can decode the clips (iOS Safari 16.4 on), a refused scene draws them itself instead, and nothing waits
+  // for a tap (scene-draw.js, loaded then): a canvas in each slot shows the frame the timeline wants, from the clip's own
+  // decoded MP4. The clip elements stay, paused and hidden, keeping the time drawn as their currentTime (the scenes read
+  // it: intro's action bars, BASALT's overlays). A tap later changes nothing: the scene goes on drawing.
+  const CAN_DRAW = typeof SLOT_CLIPS !== "undefined" && typeof VideoDecoder === "function" && typeof EncodedVideoChunk === "function";
+  let drawing = null;   // once drawing: { ok: scene-draw.js is in, canvases: slot -> canvas, clips: clip element -> its SceneDraw.Clip }
+  function startDrawing() {
+    drawing = { ok: false, canvases: {}, clips: new Map() };
+    const sc = document.createElement("script");
+    sc.src = "scene-draw.js";
+    sc.onload = () => { drawing.ok = !!window.SceneDraw; };
+    sc.onerror = () => {   // (no drawing after all: the page holds the animation on its poster)
+      drawing = null;
+      refused = true;
+      try { parent.MIRROR_REFUSED && parent.MIRROR_REFUSED(window); } catch (x) {}
+    };
+    document.head.append(sc);
+    for (const slot in SLOT_CLIPS) {
+      const first = Object.values(VIDS[slot])[0], c = document.createElement("canvas");
+      c.style.objectFit = "cover";
+      c.style.visibility = "hidden";
+      first.parentNode.insertBefore(c, first);   // (where the clips are: under whatever the slot lays over them)
+      drawing.canvases[slot] = c;
+    }
+    for (const slot in VIDS) for (const clip in VIDS[slot]) {
+      const v = VIDS[slot][clip];
+      let t = 0;
+      Object.defineProperty(v, "currentTime", { configurable: true, get: () => t, set: x => { t = +x || 0; } });
+      if (!v.paused) v.pause();
+      v.style.visibility = "hidden";
+    }
+  }
+  // a slot's clip, drawn at the time the timeline wants (as syncVideos would have the clip play or show it)
+  function drawSlot(slot, w) {
+    const c = drawing.canvases[slot];
+    for (const clip in VIDS[slot]) VIDS[slot][clip].style.visibility = "hidden";
+    c.style.visibility = w ? "visible" : "hidden";
+    if (!w) return;
+    const v = VIDS[slot][w.clip], n = CLIPS[w.clip].frames, dur = n / FPS;
+    let t;
+    if (w.mode === "show") t = (w.frame + .5) / FPS;
+    else {
+      const wrap = w.loop || w.wrap, tt = wrap ? ((w.t % dur) + dur) % dur : w.t;
+      t = !wrap && tt >= dur - .5 / FPS ? (n - .5) / FPS : Math.max(tt, 0);
+    }
+    v.currentTime = t;
+    if (!drawing.ok) return;
+    let d = drawing.clips.get(v);
+    if (!d) {
+      const src = LAZY.get(v) || v.getAttribute("src");
+      if (!src) return;
+      LAZY.delete(v);
+      drawing.clips.set(v, d = new SceneDraw.Clip(src));
+    }
+    d.used = performance.now();
+    if (c.clip !== v) {   // (the slot's other clip: nothing until its frame is in, as for a clip loading)
+      c.clip = v;
+      c.ts = null;
+      c.getContext("2d").clearRect(0, 0, c.width, c.height);
+    }
+    const f = d.frame(t);
+    if (!f || f.timestamp === c.ts) return;
+    if (c.width !== d.width || c.height !== d.height) { c.width = d.width; c.height = d.height; }
+    c.getContext("2d").drawImage(f, 0, 0, c.width, c.height);
+    c.ts = f.timestamp;
+  }
+  // (a clip not drawn for a while lets go of its decoder and frames; its file stays)
+  function idle(now) {
+    for (const d of drawing.clips.values()) if (d.dec && now - (d.used || 0) > 4000) d.release();
+  }
+  function unlock() {
+    if (drawing) return true;   // (nothing to unlock: the scene draws its clips itself)
+    let ok = false;
+    for (const v of document.querySelectorAll("video")) {
+      if (!v.paused) { ok = true; continue; }
+      const p = v.play();
+      if (p) p.catch(() => {});
+      if (!v.paused) ok = true;
+      v.pause();
+      v.primed = false;   // (its refused priming drew nothing)
+    }
+    if (ok) refused = false;
+    return ok;
+  }
   function syncVideos(want, ctx) {
     const playing = ctx.visible && ctx.rate > .45 && ctx.rate < 4.5;
+    if (drawing) {
+      for (const slot in SLOT_CLIPS) drawSlot(slot, want[slot]);
+      if (drawing.ok) idle(performance.now());
+      return;
+    }
     for (const slot in SLOT_CLIPS) {
       const w = want[slot];
       for (const clip in VIDS[slot]) {
@@ -298,15 +410,17 @@
         if (Math.abs(v.playbackRate - r) > .02) v.playbackRate = r;
         if (v.paused) {
           if (seekable(v) && Math.abs(v.currentTime - target) > .04) v.currentTime = target;
-          v.starting = true;
-          v.play().then(() => { v.starting = false; }, () => { v.starting = false; });
+          if (!refused) {
+            v.starting = true;
+            v.play().then(() => { v.starting = false; }, e => { v.starting = false; refusal(e); });
+          }
         } else if (seekable(v) && Math.abs(v.currentTime - target) > .25 * Math.max(1, r)) v.currentTime = target;
       } else {
         // iOS Safari decodes no frame of a paused video that hasn't played: a moment of playing makes it draw one
-        if (v.readyState < 2 && !v.primed && v.currentSrc) {
+        if (v.readyState < 2 && !v.primed && v.currentSrc && !refused) {
           v.primed = v.priming = true;
           v.muted = true;
-          v.play().then(() => { v.priming = false; v.pause(); }, () => { v.priming = false; });
+          v.play().then(() => { v.priming = false; v.pause(); }, e => { v.priming = false; refusal(e); });
         } else if (!v.paused && !v.priming) v.pause();
         if (!v.seeking && seekable(v) && Math.abs(v.currentTime - target) > .6 / FPS) v.currentTime = target;
       }
@@ -328,7 +442,7 @@
     for (const v of document.querySelectorAll("video")) {
       if (STILL) { v.autoplay = false; if (!v.paused) v.pause(); continue; }
       const play = on && onStage(v);
-      if (play && v.paused) v.play().catch(() => {});
+      if (play && v.paused && !refused) v.play().catch(refusal);
       else if (!play && !v.paused) v.pause();
     }
   }
@@ -389,6 +503,7 @@
   }
   function pause() {
     for (const v of document.querySelectorAll("video")) if (!v.paused) v.pause();
+    if (drawing && drawing.ok) for (const d of drawing.clips.values()) d.release();   // (off the screen: decoders and frames go)
   }
 
   // ---------------------------------------------------------------- captions (narrow screens)
@@ -456,7 +571,7 @@
   };
   window.SCENE = {
     ready: readyP,
-    render, pause, caption, captions, more, pending, waiting, park, resume, parked, busy,
+    render, pause, caption, captions, more, pending, waiting, park, resume, parked, busy, unlock,
     setNarrow: b => document.documentElement.classList.toggle("narrow", !!b),
     get total() { return TOTAL; },
   };

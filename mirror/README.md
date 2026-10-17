@@ -286,6 +286,25 @@ Everything that downloads at once shares a slow connection, so the page loads in
   and as its portrait stage cut to what the box shows at the start. `posters.js` also holds the scene's titles and its
   portrait stage's size, so the box has its final shape and caption before the scene arrives.
 
+## Low Power Mode
+
+iOS Low Power Mode (and iOS's mitigation for a hot phone; macOS on battery likewise) refuses every video a page plays
+by itself (`NotAllowedError`) until the reader taps, and every animation's clips were empty boxes. Where WebCodecs
+decodes video (iOS Safari 16.4 on), a refused video is drawn instead, and nothing waits for a tap:
+
+- a scene draws its clips on a canvas in each slot (`startDrawing` in `scenes/scene-adapter.js`), its clip elements kept,
+  paused and hidden, for their time (intro's action bars and BASALT's overlays read it);
+- the page draws the hero's montage and the survival clip (`drawVideo` in `js/site.js`): `SceneDraw.takeOver` lays a canvas
+  over the `<video>` and runs the element's own `play()`, `pause()`, `currentTime` and media events on a clock of its own,
+  so the survival labels, milestones, bar, tabs and tap to pause work on unchanged. The survival clip plays its light
+  copy then.
+
+`scenes/scene-draw.js` (loaded on the first refusal) reads each MP4 by 512 KB ranges, decodes it with a `VideoDecoder` as
+the clock moves, and holds a few frames at a time; a jump starts again from the keyframe before it (about one a second in
+these clips). Without WebCodecs, an animation with clips waits on its poster with the play glyph, and the reader's tap
+lets every video on the page and in the scenes loaded so far play (`unlockVideos`). Test it in Chromium by refusing
+`play()` outside a tap (the harness's init script); `?debug` logs `refused`, `unlocked` and the drawn clips (`drawn`).
+
 ## Fonts
 
 Everything is set in Source Sans 3 (SIL Open Font License), self-hosted in `fonts/` as variable-weight woff2
