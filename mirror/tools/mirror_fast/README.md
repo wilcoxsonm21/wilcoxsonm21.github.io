@@ -5,18 +5,25 @@ tags:
 - minecraft
 ---
 
-# Sped-up episode videos for the project website
+# Episode videos for the project website
 
-These are 4x and 16x copies of the evaluation episode videos in
+These are videos made for the website's episode viewers from the evaluation episode videos in
 [hwryu/mirror_diamond_eval](https://huggingface.co/datasets/hwryu/mirror_diamond_eval). The website's episode viewers
-play them when a reader speeds an episode up, so the browser does not have to stream and decode the full-rate video at
-16 times its normal pace.
+play them so the browser never has to stream and decode a full-rate video at 16 times its normal pace, and so the
+video plan and the execution can never drift apart.
 
-Each file mirrors a source path with the speed added to the folder name. For example,
-`active_idm/raw/07.mp4` becomes `active_idm/raw_4x/07.mp4` and `active_idm/raw_16x/07.mp4`, and the same holds for
-the `plan_idm` views.
+The `raw_4x` and `raw_16x` folders hold sped-up copies of each execution. The `side` and `stack` folders hold the
+plan and the execution in one video, at 1x and as `_4x` and `_16x` copies. In `side` the plan sits to the left of the
+execution (1280x360), and in `stack` it sits above it (640x720). The plan is the right half of the `plan_idm` video
+below its 20 px label row, stretched back to 640x360. In the Diamond episodes it is one frame behind the execution,
+because the recording starts one frame before the first executed step, and in BASALT the two are aligned.
+
+Each file mirrors a source path. For example, `active_idm/raw/07.mp4` has copies at `active_idm/raw_4x/07.mp4` and
+`active_idm/raw_16x/07.mp4`, and its combined videos are `active_idm/side/07.mp4`, `active_idm/side_4x/07.mp4` and
+so on. The older `plan_idm_4x` and `plan_idm_16x` copies are no longer used by the site.
 
 A k-times copy keeps every k-th frame of the source at the source's 20 fps (frame n of the copy is frame k·n of the
-source), so time t in the copy is time k·t in the episode. Copies are H.264 (libx264, CRF 23, preset slow) with a
+source), so time t in the copy is time k·t in the episode. Videos are H.264 (libx264, CRF 23; preset slow for the
+execution copies and medium for the combined videos) with a
 keyframe every 2 seconds, `+faststart`, and no audio. They were built from source revision
 `efacff62f69be8367c448b1c13ee21869f56ece2`.

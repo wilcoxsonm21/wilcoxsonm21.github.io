@@ -5,10 +5,13 @@
 // a switch to the other model on the same world. Every value from the data file is set with textContent or an attribute.
 
 const VIDEO_BASE = "https://huggingface.co/datasets/hwryu/mirror_diamond_eval/resolve/main";
-// the 4x and 16x copies of each video, for playing fast without streaming the whole video (tools/mirror_fast/)
+// the website's own videos (tools/mirror_fast/): 4x and 16x copies of each execution, and the plan and the execution
+// in one video, side by side and stacked, at 1x, 4x and 16x
 const FAST_BASE = "https://huggingface.co/datasets/mwilcoxson/selfimprovingvisiontoactionmodelswebsitevideos/resolve/main";
 const copies = (folder, view, n) => ({ 1: `${VIDEO_BASE}/${folder}/${view}/${pad(n)}.mp4`,
   4: `${FAST_BASE}/${folder}/${view}_4x/${pad(n)}.mp4`, 16: `${FAST_BASE}/${folder}/${view}_16x/${pad(n)}.mp4` });
+const both = (folder, n) => Object.fromEntries(["side", "stack"].map((view) => [view, { 1: `${FAST_BASE}/${folder}/${view}/${pad(n)}.mp4`,
+  4: `${FAST_BASE}/${folder}/${view}_4x/${pad(n)}.mp4`, 16: `${FAST_BASE}/${folder}/${view}_16x/${pad(n)}.mp4` }]));
 // each task: a bold line, then the rules (the user's wording, 10-16; BASALT's own descriptions are in MineRL's
 // herobraine/env_specs/basalt_specs.py). MakeWaterfall's "picture" is the agent ending the episode while facing its
 // waterfall: its video plan turns gray there (the data's end), which is when the episode is judged; the data has no
@@ -122,7 +125,7 @@ function openEpisode(n, { version = state.version, startAt = 0 } = {}) {
   const folder = state.index[state.tab][version].folder;
   player.load({
     exec: copies(folder, "raw", n),
-    plan: episode.views.includes("plan_idm") ? copies(folder, "plan_idm", n) : null,
+    both: episode.views.includes("plan_idm") ? both(folder, n) : null,
     duration: episode.seconds, startAt,
     ticks: at != null ? [{ t: markAt, title: `${episode.success ? task.hit : fail.note} · ${clock(at)}`, gold: episode.success }] : [],
     toasts: at != null ? [episode.success ? { t: markAt, text: task.hit } : { t: markAt, death: true, text: fail.note }] : [],

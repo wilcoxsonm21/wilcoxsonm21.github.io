@@ -5,11 +5,13 @@
 // with textContent or an attribute: no HTML is built from data.
 
 const VIDEO_BASE = "https://huggingface.co/datasets/hwryu/mirror_diamond_eval/resolve/main";
-// the 4x and 16x copies of each video, for playing fast without streaming the whole video (tools/mirror_fast/)
+// the website's own videos (tools/mirror_fast/): 4x and 16x copies of each execution, and the plan and the execution
+// in one video, side by side and stacked, at 1x, 4x and 16x
 const FAST_BASE = "https://huggingface.co/datasets/mwilcoxson/selfimprovingvisiontoactionmodelswebsitevideos/resolve/main";
 const copies = (folder, view, n) => ({ 1: `${VIDEO_BASE}/${folder}/${view}/${pad(n)}.mp4`,
   4: `${FAST_BASE}/${folder}/${view}_4x/${pad(n)}.mp4`, 16: `${FAST_BASE}/${folder}/${view}_16x/${pad(n)}.mp4` });
-const PLAN_LAG = 0.05;   // the recording starts one frame (the world's first view) before the first executed step
+const both = (folder, n) => Object.fromEntries(["side", "stack"].map((view) => [view, { 1: `${FAST_BASE}/${folder}/${view}/${pad(n)}.mp4`,
+  4: `${FAST_BASE}/${folder}/${view}_4x/${pad(n)}.mp4`, 16: `${FAST_BASE}/${folder}/${view}_16x/${pad(n)}.mp4` }]));
 // what each setting was trained on (the user's wording, 10-16)
 const TAB = {
   offline: { name: "Offline", plans: "generated plans", note: "Trained on human gameplay with action labels, no environment interaction during training." },
@@ -65,7 +67,7 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-const player = createWatchPlayer($("player"), { planLag: PLAN_LAG });
+const player = createWatchPlayer($("player"));
 const clock = player.clock;
 
 // ------------------------------------------------------------------ the list
@@ -163,7 +165,7 @@ async function openEpisode(n, { startAt = 0 } = {}) {
   const reached = PAPER.filter((m) => m in episode.milestones);
   player.load({
     exec: copies(folder, "raw", n),
-    plan: views.includes("plan_idm") ? copies(folder, "plan_idm", n) : null,
+    both: views.includes("plan_idm") ? both(folder, n) : null,
     duration: Number(episode.seconds), startAt, milestones,
     ticks: reached.map((m) => ({ t: episode.milestones[m], title: `${cap(NAME[m])} · ${clock(episode.milestones[m])}`, icon: icon(m) })),
     toasts: [...reached.map((m) => ({ t: episode.milestones[m], icon: icon(m), text: m === "diamond" ? "Diamond!" : cap(NAME[m]) })),
