@@ -129,10 +129,16 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   // the copy for a speed: the fastest no faster than it
   const copyFor = (view, rate) => Math.max(1, ...Object.keys(state.srcs[view] ?? {}).map(Number).filter((k) => k <= rate));
 
-  // the video in front is the one playing, once it has a frame to show (until then the last one's frame stays)
+  // the video in front is the one playing, once it has a frame to show (until then the last one's frame stays); the
+  // rest let go of their files, so nothing off screen takes the connection from it, but for the copy fast-forward
+  // switches to next
   function reveal() {
     if (!video || video.readyState < 2 || video.seeking) return;
-    for (const v of pool.values()) v.style.visibility = v === video ? "" : "hidden";
+    const keep = new Set([video, ...(state.auto ? [1, FAST].map((r) => pool.get(`${state.view}:${copyFor(state.view, r)}`)) : [])]);
+    for (const v of pool.values()) {
+      v.style.visibility = v === video ? "" : "hidden";
+      if (!keep.has(v) && v.getAttribute("src")) { v.pause(); v.removeAttribute("src"); v.load(); }
+    }
   }
   // play view at copy k from episode time t (a video made ready for this, within a second of t, plays on from there)
   function show(view, k, t = now()) {
@@ -191,7 +197,8 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   // execution alone (no plan, or Hide plan); plan above execution on a phone held upright
   const tall = matchMedia("(max-width: 699px)");
   function shape() {
-    screen.style.setProperty("--ar", planOn() ? (tall.matches ? "16 / 18" : "32 / 9") : "16 / 9");
+    // (on the figure: the scrub line, the strip and the caption under the screen take its width too, css/watch.css)
+    root.style.setProperty("--ar", planOn() ? (tall.matches ? "16 / 18" : "32 / 9") : "16 / 9");
     root.classList.toggle("plan-off", state.hasPlan && state.planOff);
     root.classList.toggle("no-plan", !state.hasPlan);
     toggle.setAttribute("aria-pressed", String(state.planOff));
