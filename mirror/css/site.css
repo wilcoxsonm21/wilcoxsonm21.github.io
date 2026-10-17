@@ -45,6 +45,13 @@ section.chapter[id] { scroll-margin-top: 0; }
    fixed layers touching the screen edge, even transparent or visibility: hidden ones, so a lingering one shows as a
    black bar under the page instead of the see-through glass toolbar */
 #backdrop { position: fixed; inset: 0; background: var(--dark); opacity: 0; display: none; pointer-events: none; z-index: 0; }
+/* keeps iOS 26 Safari's see-through toolbar. Safari looks at the bottom-centre point of the screen: when the topmost thing
+   there sits in a fixed or sticky box about the size of the screen (every pinned stage here), it paints a solid strip
+   of that colour under the toolbar. A small fixed box on top at that point (not empty, so it counts) makes it give up,
+   the way Reddit's page never offers one. Invisible and untouchable. */
+#glass-toolbar { position: fixed; left: 50%; bottom: 0; width: 48px; height: 24px; margin-left: -24px;
+                 pointer-events: none; z-index: 2147483647; }
+#glass-toolbar i { display: block; width: 100%; height: 100%; }
 
 /* ------------------------------------------------------------------ shared type */
 .eyebrow {
