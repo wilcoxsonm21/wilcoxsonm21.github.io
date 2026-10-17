@@ -242,6 +242,11 @@ the execution's edge, and `shape()` in `js/site.js` glides the screen's size). `
   first frame, until the video has loaded; cut one for a new card (and its `data-portrait-src`) with
   `ffmpeg -i <video> -frames:v 1 -q:v 4 media/posters/<video name>.jpg`.
 
+**Publishing.** GitHub Pages lets browsers keep a file for 10 minutes, so every CSS and JS file the page and the
+viewers load carries one version tag (`?v=...` in `index.html`, `eval/index.html`, `basalt/index.html`): a reader whose
+page refreshed never mixes it with old scripts. Bump it on every publish:
+`sed -i -E 's/\?v=[0-9a-z]+"/?v=NEW"/g' mirror/index.html mirror/eval/index.html mirror/basalt/index.html`.
+
 ## Loading on a slow connection
 
 Everything that downloads at once shares a slow connection, so the page loads in reading order, one thing at a time
