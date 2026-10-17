@@ -10,6 +10,8 @@
 // Everything else on the page (hero, statements, headlines, the dark interlude) is driven from the same frame loop.
 (() => {
   "use strict";
+  // (a malformed % in the address, "#%", threw "URI malformed" and broke the page; it reads as no address)
+  const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return ""; } };
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
@@ -17,6 +19,10 @@
   const smooth = (a, b, x) => { const u = clamp((x - a) / (b - a)); return u * u * (3 - 2 * u); };
   const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const root = document.documentElement;
+  // a phone held sideways is covered by a note asking to turn it upright (js/turn.js): the page holds still under it
+  const turned = () => root.classList.contains("turn");
+  // a video of the page plays only while nothing covers the page: the note, or an episode modal (js/modal.js)
+  const covered = () => turned() || root.classList.contains("modal-open");
 
   // style writes that skip unchanged values, so a page at rest invalidates nothing
   const memo = new WeakMap();
@@ -36,7 +42,8 @@
 
   let vh = innerHeight, vw = innerWidth, narrow = false;
   let portrait = false;   // a phone held upright: the animations load their tall layouts (scenes/portrait/)
-  let short = false;      // a phone held sideways: a screen too short for the desktop layout (fitCard, css "fix: short landscape")
+  let short = false;      // a window too short for the desktop layout, a laptop at 200% zoom (fitShort, css "fix: short
+                          // landscape"); a phone held sideways is asked to turn upright instead (js/turn.js)
   let sy = scrollY, lastSy = -1;
 
   // ------------------------------------------------------------------ hero: "Mirror", seen through its letters
@@ -48,6 +55,15 @@
     // the cue steps aside on short screens, where it would touch the links above it or the TL;DR peeking in below
     cue.classList.remove("off");
     const st = $(".statement-sticky");
+    // the TL;DR waits below the fold: where the hero's copy runs to the screen's bottom (a small phone, large text), it
+    // starts further down, so its first faint words never draw over the hero's links
+    const stEl = st && st.parentElement;
+    if (stEl) {
+      stEl.style.paddingTop = "";
+      const natural = docTop(stEl) + parseFloat(getComputedStyle(stEl).paddingTop) - st.offsetHeight / 2;
+      const need = docTop(heroCopy) + heroCopy.offsetHeight + 32 - natural;
+      if (need > 0) stEl.style.paddingTop = `calc(16vh + ${Math.ceil(need)}px)`;
+    }
     const cueTop = cue.offsetTop, cueBottom = cueTop + cue.offsetHeight;   // in the hero's box, which starts at its top
     const copyBottom = heroCopy.offsetTop + heroCopy.offsetHeight;
     const nextTop = st ? docTop(st) - st.offsetHeight / 2 - docTop(heroEl) : Infinity;   // it is drawn raised by half
@@ -56,7 +72,8 @@
   }
   function updateHero() {
     // with reduced motion the hero only fades: no zoom or drift, and the montage holds its poster
-    const p = clamp(sy / (.5 * vh));                  // it fades over the first half screen of scrolling
+    // it fades over the first half screen of scrolling (after the part of it below the screen, if it is taller)
+    const p = clamp((sy - Math.max(0, heightOf(heroEl) - vh)) / (.5 * vh));
     css(mark, "opacity", (1 - smooth(.4, .97, p)).toFixed(3));
     if (!REDUCED) {
       css(mark, "transform", `translate3d(0,${(-p * 8).toFixed(2)}vh,0) scale(${(1 - .07 * p).toFixed(4)})`);
@@ -66,10 +83,10 @@
     css(heroCopy, "opacity", (1 - smooth(.02, .42, p)).toFixed(3));
     css(cue, "opacity", (1 - smooth(0, .08, p)).toFixed(3));
     cue.classList.toggle("still", p >= .08);          // its looping line stops once it has faded (css "fix: perf")
-    const end = topOf(heroEl) + heightOf(heroEl), on = sy < end, far = sy > end + vh / 2;
+    const end = topOf(heroEl) + heightOf(heroEl), on = sy < end && p < .97, far = sy > end + vh / 2;   // (on: not faded out)
     // (half a screen past it, its download gives way to the rest: park)
     if (far !== heroFar) { heroFar = far; if (far) park(heroVideo); else unpark(heroVideo); }
-    if (on && heroVideo.paused && !REDUCED) heroVideo.play().catch(() => {});
+    if (on && heroVideo.paused && !REDUCED && !covered()) heroVideo.play().catch(() => {});
     else if (!on && !heroVideo.paused) heroVideo.pause();
   }
 
@@ -180,6 +197,8 @@
     if (!snapArmed || REDUCED || glide || comeBack || scrolling(now) || now < holdUntil + SNAP_WAIT * 1e3) return;
     snapArmed = false;
     if (now < noSnapUntil || wordBlocks.some(b => b.autoY != null)) return;
+    // (a reader at the very bottom, with End or a long scroll, stays there: centring the BibTeX pulled the page up)
+    if (scrollY >= root.scrollHeight - innerHeight - 2) return;
     const navH = $(".localnav").offsetHeight, mid = (navH + vh) / 2, room = vh - navH;
     const near0 = Math.min(64, SNAP_NEAR * vh);
     let best = null, near = near0;
@@ -228,7 +247,14 @@
   // click plays, at least the click's own length), and the word count still applies: a title that shows late in a long
   // click gets its full reading time.
 
-  const TAP = matchMedia("(hover: none)").matches ? "Tap" : "Click";
+  // (it follows the pointer: an iPad gaining a trackpad, or losing it, changes the transport's note, below)
+  const hoverNone = matchMedia("(hover: none)");
+  let TAP = hoverNone.matches ? "Tap" : "Click";
+  const tipText = () => TAP === "Tap" ? "or swipe" : `or press ${KEY(-1)}${KEY(1)}`;
+  hoverNone.addEventListener?.("change", () => {
+    TAP = hoverNone.matches ? "Tap" : "Click";
+    $$(".ctl-tip").forEach(t => { t.innerHTML = tipText(); });
+  });
 
   // narrow screens: the box around a scene keeps CARD_SIDE from the screen's sides and at least CARD_EDGE from the nav.
   // Under it are its controls (the transport, below): CTL_ROOM for them and the gap above them, then CTL_FOOT.
@@ -237,6 +263,8 @@
   const CTL_SIDE = 48;    // ... and the room it keeps at either side for the transport, which stands beside it
   let meter = null;
   // a hidden caption block at width w, for measuring titles in the caption's own type
+  // a title's "video–action" doesn't break after its dash (a word joiner), leaving "action data?" alone on a line
+  const joinDash = h => h.replace(/(\w)\u2013(?=\w)/g, "$1\u2013\u2060");
   function captionMeter(w) {
     if (!meter) {
       meter = document.createElement("div");
@@ -495,7 +523,7 @@
       const high = h => { m.innerHTML = `<div class="cap-in">${h}</div>`; return m.offsetHeight; };
       const tallest = (list, wrap) => Math.max(0, ...list.map(h => high(wrap(h))));
       if (!caps || !caps.titles.length) return high("x<br>x<br>x");
-      const t = tallest(caps.titles, h => h);
+      const t = tallest(caps.titles, joinDash);
       if (!caps.subs.length) return t;
       return t + tallest(caps.subs, h => `x<span class="sub">${h}</span>`) - high("x");
     }
@@ -764,7 +792,7 @@
       // (a scene that failed to load shows its poster, or its empty box)
       if (this.state === "failed") { this.swap = null; if (this.poster) this.shown = 0; }
       // (it holds its opening while the stage fades in after a load)
-      this.live = !!this.api && !this.swap && this.shown >= 1 && visible && this.wasVisible && this.inFocus(y) && !this.held && !this.ended;
+      this.live = !!this.api && !this.swap && this.shown >= 1 && visible && this.wasVisible && this.inFocus(y) && !this.held && !this.ended && !covered();   // (covered: a modal opened by Forward or a typed #hash ran the chapter behind it)
       // coming into focus, the transport shows for a while, until the reader has used the controls (cue, below)
       const foc = !!this.api && this.shown >= 1 && visible && this.inFocus(y);
       if (foc && !this.foc && !tapped) this.cue(0, 3.2);
@@ -886,7 +914,7 @@
     caption(c = this.api.caption()) {
       // a resize of the caption block (fitCard, fitShort, fonts) has it re-measure its grey top
       if (!this.capRO) (this.capRO = new ResizeObserver(() => { this.capHTML = null; })).observe(this.capEl);
-      const html = c ? `<div class="cap-in"><span class="cap-t">${c.html}</span>${c.sub ? `<span class="sub"${c.subColor ? ` style="color:${c.subColor}"` : ""}>${c.sub}</span>` : ""}</div>` : "";
+      const html = c ? `<div class="cap-in"><span class="cap-t">${joinDash(c.html)}</span>${c.sub ? `<span class="sub"${c.subColor ? ` style="color:${c.subColor}"` : ""}>${c.sub}</span>` : ""}</div>` : "";
       if (html !== this.capHTML) {
         const old = this.capEl.firstElementChild, tf = old ? getComputedStyle(old).transform : "none";
         const from = old ? old.offsetTop + (tf === "none" ? 0 : new DOMMatrix(tf).m42) : null;
@@ -914,9 +942,12 @@
     // A reader who stops while the headline lifts away and the stage comes forward is carried through the change, the
     // way they were scrolling: on to the stage, fully forward, or back to the headline.
     settle(y, now) {
-      if (glide || scrolling(now) || REDUCED) return;
+      // (not while a jump to an #anchor lands: the browser's jump reads as a move up when the anchor is above, and the
+      // chapter before it would pull the reader back into its stage. With reduced motion the carry is a jump, glideTo)
+      if (glide || scrolling(now) || comeBack || now < noSnapUntil) return;
       // ... and one who stops while the stage scrolls away is carried on to what follows, or back to the full stage
-      if (y > this.pinLen + 2 && y < this.pinLen + vh - 2) {
+      // (the strip under the nav doesn't count: an #anchor lands with the stage that much short of gone, faded out)
+      if (y > this.pinLen + 2 && y < this.pinLen + vh - $(".localnav").offsetHeight - 2) {
         glideTo(readerDir < 0 ? topOf(this.el) + this.pinLen : topOf(this.el) + this.pinLen + vh, 450);
         return;
       }
@@ -990,6 +1021,39 @@
     box.setAttribute("aria-roledescription", "animation");
     const name = c.iframe ? c.iframe.title : `Figure: ${($(".eyebrow", c.el) || {}).textContent || ""}`;
     box.setAttribute("aria-label", `${name}. Enter pauses or plays it, and the arrow keys step through it.`);
+    // Tab reaches the box through a stand-in: the stage is hidden while its chapter is off the screen, and Tab skips a
+    // hidden box. The stand-in brings the stage forward and hands the focus on (not on a Shift+Tab back out of the box)
+    const tabIn = document.createElement("button");
+    tabIn.type = "button";
+    tabIn.className = "visually-hidden";
+    tabIn.textContent = name;
+    c.el.prepend(tabIn);
+    const toBox = () => {
+      glide = null;
+      scrollSelf(c.restY());
+      css(c.stage, "visibility", "visible");
+      box.focus({ preventScroll: true });
+    };
+    tabIn.addEventListener("focus", e => { if (!c.el.contains(e.relatedTarget)) toBox(); });
+    // a link in the headline (BASALT's "Watch all 44 evaluation episodes") is hidden while the stage is forward, so Tab
+    // skipped it: a stand-in before the box's brings the headline back and hands the focus on, and Tab from the link
+    // goes on to the box
+    for (const link of c.head ? $$("a[href]", c.head) : []) {
+      const standIn = document.createElement("button");
+      standIn.type = "button";
+      standIn.className = "visually-hidden";
+      standIn.textContent = link.textContent;
+      c.el.prepend(standIn);
+      standIn.addEventListener("focus", () => {
+        glide = null;
+        scrollSelf(topOf(c.el) + .1 * c.headLen);
+        css(c.head, "visibility", "visible");
+        link.focus({ preventScroll: true });
+      });
+      link.addEventListener("keydown", e => {
+        if (e.key === "Tab" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); toBox(); }
+      });
+    }
     box.insertAdjacentHTML("beforeend", '<div class="ctl" aria-hidden="true"><span class="ctl-side ctl-prev">' + CHEVRON +
       '</span><span class="ctl-glyph"></span><span class="ctl-side ctl-next">' + CHEVRON + '</span><span class="ctl-hint">' +
       '</span></div><div class="pbar" aria-hidden="true"></div>');
@@ -1008,7 +1072,7 @@
     tp.innerHTML = `<button type="button" class="ctl-btn ctl-b-prev" data-dir="-1" aria-label="Previous step">${chev}</button>` +
       '<button type="button" class="ctl-btn ctl-b-play"></button>' +
       `<button type="button" class="ctl-btn ctl-b-next" data-dir="1" aria-label="Next step">${chev}</button>` +
-      `<span class="ctl-tip" aria-hidden="true">${TAP === "Tap" ? "or swipe" : `or press ${KEY(-1)}${KEY(1)}`}</span>`;
+      `<span class="ctl-tip" aria-hidden="true">${tipText()}</span>`;
     (c.inline ? box : c.stage).append(tp);
     c.tp = tp;
     c.tpPlay = $(".ctl-b-play", tp);
@@ -1161,8 +1225,15 @@
   let heroFar = false, cinemaFar = false;   // well off the screen: their downloads give way (park)
   // each tab names its clip and the clip's shape (data-ar); a two-up clip also has a stacked version, plan above
   // execution, that a phone held upright plays (data-portrait-video, built by tools/build_gallery_portrait.py)
-  const clip = btn => portrait && btn.dataset.portraitVideo ? [btn.dataset.portraitVideo, btn.dataset.portraitAr]
-    : [btn.dataset.video, btn.dataset.ar];
+  // On a connection too slow for the clip (slow 4G, ~1.4 Mbps: the clips need 1.7-2.5) it stalled every second or two,
+  // so a light copy of each (*_light.mp4: 20 fps, a third the pixels, ~0.3 Mbps) takes over, from the same moment, once
+  // the clip stalls (stallWatch below), or from the start where the browser says the connection is slow (the hero's
+  // test, index.html). The clips' shapes are the same
+  const conn = navigator.connection || {};
+  let light = !!conn.saveData || /2g|3g/.test(conn.effectiveType || "");
+  const lite = src => light ? src.replace(/\.mp4(?=$|\?)/, "_light.mp4") : src;
+  const clip = btn => portrait && btn.dataset.portraitVideo ? [lite(btn.dataset.portraitVideo), btn.dataset.portraitAr]
+    : [lite(btn.dataset.video), btn.dataset.ar];
   // the screen takes the clip's shape before the clip loads, so nothing below it jumps; between tabs, and when the
   // plan is hidden or shown, its size glides. --film is the clip's shape, --ar the screen's: the clip's, or with the
   // plan hidden the execution's alone (16:9), which crops the clip to its execution half (css .sv-film)
@@ -1193,11 +1264,26 @@
     planBtn?.setAttribute("aria-pressed", String(planOff));
     if (planBtn) planBtn.lastElementChild.textContent = planOff ? "Show plan" : "Hide plan";
   }
+  let keepGen = 0;   // (one keep loop at a time: three quick taps ran three, and their corrections added up past lim)
   planBtn?.addEventListener("click", () => {
     planChosen = true;
+    const gen = ++keepGen;
+    const b0 = planBtn.getBoundingClientRect().top, s0 = cScreen.getBoundingClientRect().top;
     setPlan(!planOff);
     const btn = segBtns.find(b => b.getAttribute("aria-selected") === "true") || segBtns[0];
     shape(clip(btn)[1], true);
+    // the button stays where it was pressed while the screen above it grows or shrinks, as far as the screen's top stays
+    // clear of the nav (it was the snap that followed: the page bobbed, and Show plan pushed the button off the screen)
+    noSnapUntil = performance.now() + 1200;
+    const lim = s0 - $(".localnav").offsetHeight - 8, t0 = performance.now();
+    let moved = 0;
+    const keep = now => {
+      if (gen !== keepGen) return;
+      const d = Math.min(planBtn.getBoundingClientRect().top - b0 + moved, Math.max(0, lim)) - moved;
+      if (Math.abs(d) >= .5) { moved += d; scrollSelf(scrollY + d); }
+      if (now - t0 < 700 && !touching && gen === keepGen) requestAnimationFrame(keep);
+    };
+    requestAnimationFrame(keep);
   });
   shape(clip(segBtns.find(b => b.getAttribute("aria-selected") === "true") || segBtns[0])[1], false);
   // turning the phone swaps the stacked clip in or out on the spot, keeping its time and whether it plays
@@ -1205,7 +1291,7 @@
   // black while a phone fetches it. It is the video's background, not its poster: WebKit didn't fetch the first clip's
   // poster, and drew a later one at another place than the clip's first frame
   function setClip(src) {
-    const p = "media/posters/" + src.split("?")[0].split("/").pop().replace(/\.\w+$/, ".jpg");
+    const p = "media/posters/" + src.split("?")[0].split("/").pop().replace(/(_light)?\.\w+$/, ".jpg");
     cVideo.removeAttribute("poster");
     cVideo.style.background = `#000 url("${p}") center / contain no-repeat`;
     delete cVideo.dataset.park;
@@ -1228,16 +1314,54 @@
     cVideo.style.opacity = 0;
     cCap.style.opacity = 0;
     shape(clip(btn)[1], cinemaLoaded);
+    cVideo.dataset.swapping = "1";   // (a milestone jump made meanwhile waits for the new clip: js/survival.js)
     setTimeout(() => {
       setClip(clip(btn)[0]);
+      const j = cVideo.dataset.jumpTo;
+      delete cVideo.dataset.swapping;
+      delete cVideo.dataset.jumpTo;
+      if (j) cVideo.addEventListener("loadedmetadata", () => { cVideo.currentTime = +j; }, { once: true });
       cCap.innerHTML = btn.dataset.caption;
       cVideo.style.opacity = 1;
       cCap.style.opacity = 1;
-      if (play && cinemaOn && !cVideo.dataset.held) cVideo.play().catch(() => {});
+      // (not under a modal: opened by a deep link, or a tab clicked just before it opened, it played behind the sheet)
+      if (play && cinemaOn && !cVideo.dataset.held && !covered()) cVideo.play().catch(() => {});
     }, cinemaLoaded ? 260 : 0);
     cinemaLoaded = true;
   }
   segBtns.forEach(b => b.addEventListener("click", () => { delete cVideo.dataset.held; pick(b); }));
+  // stallWatch: a wait for data that lasts 2.5 s (4 s just after a seek or a new clip), or a third within 20 s, switches to the light copies for the rest of
+  // the visit (waits right after a seek or a new clip don't count: a milestone jump or a tab fetches anew on any line)
+  {
+    let since = 0, stalls = [], timer = 0;
+    const toLight = () => {
+      if (light) return;
+      light = true;
+      clearTimeout(timer);
+      swapCinema();   // (the same moment, playing on if it was)
+    };
+    cVideo.addEventListener("seeking", () => { since = performance.now(); });
+    cVideo.addEventListener("emptied", () => { since = performance.now(); });
+    cVideo.addEventListener("waiting", () => {
+      if (light || cVideo.paused) return;
+      const now = performance.now(), fresh = now - since < 1500;
+      clearTimeout(timer);
+      timer = setTimeout(toLight, fresh ? 4000 : 2500);   // (a fresh fetch gets longer: a first frame takes a moment anywhere)
+      if (fresh) return;
+      stalls = stalls.filter(t => now - t < 20000).concat(now);
+      if (stalls.length >= 3) toLight();
+    });
+    ["playing", "pause", "emptied"].forEach(e => cVideo.addEventListener(e, () => clearTimeout(timer)));
+  }
+  // ← → move between the tabs, as a tablist's do (they did nothing)
+  segBtns.forEach((b, i) => b.addEventListener("keydown", e => {
+    const d = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    const to = segBtns[(i + d + segBtns.length) % segBtns.length];
+    to.focus();
+    to.click();
+  }));
   function updateCinema() {
     // (the frame loop runs this before the frame's other style writes, so reading the screen's box costs no style pass)
     const r = cScreen.getBoundingClientRect(), u = smooth(1.05, .5, r.top / vh);
@@ -1260,7 +1384,7 @@
     const on = r.top < vh * .85 && r.bottom > vh * .15;
     if (on !== cinemaOn) {
       cinemaOn = on;
-      if (on) { if (!cVideo.dataset.held) cVideo.play().catch(() => {}); } else cVideo.pause();
+      if (on) { if (!cVideo.dataset.held && !covered()) cVideo.play().catch(() => {}); } else cVideo.pause();
     }
   }
 
@@ -1280,6 +1404,11 @@
     if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
   }), { rootMargin: "0px 0px -10% 0px" });
   $$(".reveal").forEach(el => io.observe(el));
+  // (a Tab can bring one into the bottom strip the observer leaves out: it shows as it takes the focus)
+  document.addEventListener("focusin", e => {
+    const r = e.target.closest?.(".reveal:not(.in)");
+    if (r) { r.classList.add("in"); io.unobserve(r); }
+  });
   // A gallery video loads and plays once at least half of it is on the screen, so the card peeking in at the side of a
   // phone's gallery doesn't download too (it was 4-8 MB). When the reader starts moving the track, the next card's video
   // in that direction fetches its first frames (preload="metadata"), so it starts at once when it arrives.
@@ -1287,10 +1416,32 @@
     const v = e.target;
     if (e.isIntersecting && e.intersectionRatio >= .5) {
       if (!v.getAttribute("src") && v.dataset.src) v.src = v.dataset.src;
-      if (!v.dataset.held) v.play().catch(() => {});   // held: the reader paused it (js/controls.js)
+      if (!v.dataset.held && !covered()) v.play().catch(() => {});   // held: the reader paused it (js/controls.js)
     } else if (!e.isIntersecting && !v.paused) v.pause();
   }), { rootMargin: "150px 0px", threshold: [0, .5] });
   $$("video.lazy").forEach(v => vio.observe(v));
+  // (off the screen but inside that margin it played on: 70 px above a phone's screen at the BibTeX)
+  const offIo = new IntersectionObserver(es => es.forEach(e => { if (!e.isIntersecting && !e.target.paused) e.target.pause(); }));
+  $$("video.lazy").forEach(v => offIo.observe(v));
+  // turned upright again: the page looks afresh at what is on the screen and plays it (observing again reports each
+  // video's place anew; lastSy -1 runs the hero and the survival video's checks)
+  const lookAgain = () => {
+    cinemaOn = null;
+    lastSy = -1;
+    $$("video.lazy").forEach(v => { vio.unobserve(v); vio.observe(v); });
+    wake();
+  };
+  document.addEventListener("mirror-turn", e => { if (!e.detail.on) lookAgain(); else wake(); });
+  // and as an episode modal closes (js/modal.js pauses the page's videos as it opens, and plays those on as it closes;
+  // one that came into view under it, as on a link straight to the modal, starts now)
+  let modalWas = false;
+  new MutationObserver(() => {
+    const open = root.classList.contains("modal-open");
+    if (open !== modalWas) { modalWas = open; if (!open && !turned()) lookAgain(); }
+  }).observe(root, { attributes: true, attributeFilter: ["class"] });
+  // with reduced motion, no video plays by itself (as the hero's): the survival video and the gallery's start held, and
+  // a tap or a tab plays them
+  if (REDUCED) [cVideo, ...$$("video.lazy")].forEach(v => { v.dataset.held = "1"; });
   $$(".gallery-track").forEach(track => {
     let lastX = track.scrollLeft;
     track.addEventListener("scroll", () => {
@@ -1343,14 +1494,29 @@
     const track = $(".gallery-track", g), [prev, next] = $$(".paddle", g);
     // a paddle goes to the next card's place (the cards differ in width, so a fixed step skipped some), as the dots do
     // (js/controls.js): stacked rows' cards less than 60 px apart count as one place
+    // (from where the last tap is taking it while it glides: read mid-glide, fast taps lost steps)
+    let aim = null, aimTimer = 0;
     const go = dir => {
-      const max = track.scrollWidth - track.clientWidth, x = track.scrollLeft;
+      const max = track.scrollWidth - track.clientWidth, x = aim ?? track.scrollLeft;
       const pad = parseFloat(getComputedStyle(track).scrollPaddingLeft) || 0;
       const xs = $$(".card", track).map(c => clamp(c.offsetLeft - pad, 0, max)).sort((a, b) => a - b);
       const to = dir > 0 ? xs.find(v => v > x + 60) : xs.reverse().find(v => v < x - 60);
-      track.scrollTo({ left: to ?? (dir > 0 ? max : 0), behavior: REDUCED ? "auto" : "smooth" });
+      aim = to ?? (dir > 0 ? max : 0);
+      clearTimeout(aimTimer);
+      aimTimer = setTimeout(() => { aim = null; }, 700);
+      track.scrollTo({ left: aim, behavior: REDUCED ? "auto" : "smooth" });
     };
     prev.addEventListener("click", () => go(-1));
+    // a card reached by Tab comes into view (the track didn't follow the focus: Pong took it 19% on the screen)
+    track.addEventListener("focusin", e => {
+      const c = e.target.closest(".card");
+      if (!c) return;
+      // (to the card's own place, a snap point: scrollIntoView's "nearest" was snapped back to a place showing 21% of it)
+      const t = track.getBoundingClientRect(), r = c.getBoundingClientRect();
+      if (r.left >= t.left - 1 && r.right <= t.right + 1) return;
+      const pad = parseFloat(getComputedStyle(track).scrollPaddingLeft) || 0;
+      track.scrollTo({ left: clamp(c.offsetLeft - pad, 0, track.scrollWidth - track.clientWidth), behavior: REDUCED ? "auto" : "smooth" });
+    });
     next.addEventListener("click", () => go(1));
     // the track ends where the last card snaps into place, or at the end of the scroll if that comes first
     const last = [...track.querySelectorAll(".card")].pop();
@@ -1418,7 +1584,7 @@
     let t = null;
     try {
       // a modal's #hash (js/modal.js): the section the modal belongs to
-      const id = window.MIRROR_MODAL?.section(location.href) || decodeURIComponent(location.hash.slice(1));
+      const id = window.MIRROR_MODAL?.section(location.href) || safeDecode(location.hash.slice(1));
       t = location.hash.length > 1 && document.getElementById(id);
     } catch (e) {}
     return t ? { el: t, dy: -(parseFloat(getComputedStyle(t).scrollMarginTop) || 0) } : null;
@@ -1452,14 +1618,27 @@
   const svh = document.createElement("div");
   svh.style.cssText = "position:fixed;top:0;left:0;width:0;height:100vh;height:100svh;visibility:hidden;pointer-events:none";
   document.body.append(svh);
+  let laidOut = false;
   function relayout() {
+    // under the note to turn the phone upright (js/turn.js) the page keeps the layout it had, so turning back finds
+    // every chapter as it was, with no scene reloading in the sideways layout and back
+    if (laidOut && turned()) return;
+    laidOut = true;
     vh = Math.min(innerHeight, svh.offsetHeight || innerHeight);
     vw = innerWidth;
-    // a phone held sideways (too short for the desktop layout, and not narrow even when under 760 wide): the animations
+    // a short window (too short for the desktop layout, and not narrow even when under 760 wide): the animations
     // get the narrow layout's box with the title drawn by the page, and the figure chapters a compact layout
     // (fitShort, css "fix: short landscape")
-    const s = vh < 500 && vw > vh;
-    const n = !s && (vw < 760 || vw / vh < .82);
+    // (not a tiny screen about as tall as wide, a Z Flip's cover at 350x330: there the figures had no width left beside
+    // their steps, and the narrow layout stacks them)
+    // (and a very wide window not much taller, 1600x500 or 1920x600: the wide layout drew a small frame with wide
+    // margins, and the gallery and survival didn't fit)
+    const s = (vh < 500 || vh < 620 && vw / vh > 2.4) && vw > vh && vw >= 440;
+    // (and a window under 1000 wide that is about square or taller: a foldable's inner screen, a tablet's split view,
+    // where the wide layout's 16:9 frame left most of the height empty and drew its text at half size)
+    // (and any window about square or taller, 1200x1200 or a 1280x1400 half-screen snap: the 16:9 frame left a third of
+    // the height empty above and below, and drew its text at half size)
+    const n = !s && (vw < 760 || vw / vh < 1.05);
     if (n !== narrow) {
       narrow = n;
       root.classList.toggle("narrow", narrow);
@@ -1493,11 +1672,22 @@
     glide = null;   // its target moved
     geo.clear();
     wake();
+    // a phone folding shut (or turning) can report its old, wider viewport at its one resize, before the browser has
+    // laid the page out again, and then fire none: look again once it has settled
+    clearTimeout(rcT);
+    rcT = setTimeout(() => {
+      if (innerWidth === vw && (toolbars && Math.abs(innerHeight - lastH) < 140 || innerHeight === lastH)) return;
+      lastW = innerWidth; lastH = innerHeight; placeHeld = true;
+      relayout();
+    }, 400);
   }
-  let rT = null, lastW = vw, lastH = vh;
+  let rT = null, rcT = null, lastW = vw, lastH = vh;
+  // (a touch screen's browser resizes the viewport as its toolbars slide. A desktop window dragged taller does too, in
+  // small steps, and each counts: ignored, the page kept the old height's layout and lost the reader's place)
+  const toolbars = matchMedia("(pointer: coarse)").matches;
   addEventListener("resize", () => {
     // mobile browsers resize the viewport as their toolbars slide: ignore small height-only changes
-    if (innerWidth === lastW && Math.abs(innerHeight - lastH) < 140) return;
+    if (innerWidth === lastW && (toolbars ? Math.abs(innerHeight - lastH) < 140 : innerHeight === lastH)) return;
     lastW = innerWidth;
     lastH = innerHeight;
     placeHeld = true;
@@ -1552,6 +1742,7 @@
   let loadsWaiting = true;
   function schedule(now) {
     loadsWaiting = true;
+    if (turned()) return;   // (under the note to turn the phone upright: nothing loads in the layout it would leave)
     const order = chapters.map(c => ({ c, t: topOf(c.el), below: topOf(c.el) >= sy + vh, d: dist(c.el) })).sort((a, b) => a.d - b.d);
     const next = order.find(o => o.below);   // (the first chapter below the screen)
     for (const o of order) o.c.wanted = o.d < LOAD_AHEAD || o === next;
@@ -1566,9 +1757,10 @@
       if (c.state === "idle") {
         // A scene's page takes one long task to parse (Minecraft's: 70-150 ms on a phone), so it loads at a moment when
         // nothing moves: no animation plays (between clicks or chapters, or once a chapter has ended), the page doesn't
-        // glide, and the reader has stopped scrolling or is past LOAD_SOON screens from it, where no chapter is in focus.
-        // Within LOAD_NOW screens it loads whatever moves, and so does a figure drawn in the page with nothing to fetch.
-        const y = sy - t, wait = moving || scrolling(now) && y < -LOAD_SOON * vh;
+        // glide, and the reader has stopped scrolling (a parse landing mid-swipe was a 60-170 ms hitch on a mid-range
+        // phone; readers stop at every chapter). Within LOAD_NOW screens it loads whatever moves, and so does a figure
+        // drawn in the page with nothing to fetch.
+        const y = sy - t, wait = moving || scrolling(now);
         if (!wait || y > -LOAD_NOW * vh || c.inline && !c.el.dataset.scripts) c.load();
         return true;
       }
@@ -1641,7 +1833,6 @@
   // coming back, a section changing size, a scene loading and its videos seeking or loading wake it (wake).
   const IDLE = 1;        // seconds
   const LOAD_NOW = 1.2;  // screens: a scene this close loads even while something moves (schedule)
-  const LOAD_SOON = 1.8; // screens: a scene this close loads while the reader scrolls, if nothing else moves
   let lastNow = performance.now(), rafId = 0, quietAt = 0;
   let moving = false;    // in the last frame an animation played or the page scrolled itself: a scene load waits (schedule)
   function wake() {
@@ -1675,8 +1866,8 @@
     schedule(now);
     for (const c of chapters) c.update(now, dt);
     if (short) root.classList.toggle("stage-on", chapters.some(c => c.staged));
-    // under an episode modal (js/modal.js) the page holds still: a glide or snap under way stops where it is
-    if (root.classList.contains("modal-open")) { glide = null; snapArmed = false; wordBlocks.forEach(b => { b.autoY = null; }); }
+    // under an episode modal (js/modal.js), or the note to turn the phone upright (js/turn.js), the page holds still: a glide or snap under way stops where it is
+    if (root.classList.contains("modal-open") || turned()) { glide = null; snapArmed = false; wordBlocks.forEach(b => { b.autoY = null; }); }
     else {
       wordBlocks.forEach(b => autoplayWords(b, now, dt));
       snapNear(now);

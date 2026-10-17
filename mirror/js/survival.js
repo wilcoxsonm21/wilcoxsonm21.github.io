@@ -37,7 +37,9 @@
   function jump(k) {
     const m = ep?.milestones.find(x => x[0] === k);
     if (!m) return;
-    video.currentTime = Math.max(0, m[1] - LEAD);
+    const t = Math.max(0, m[1] - LEAD);
+    // (just after a tab is picked its clip is still swapping in, and setting its src would lose the jump: js/site.js pick)
+    if (video.dataset.swapping) video.dataset.jumpTo = String(t); else video.currentTime = t;
     delete video.dataset.held;   // (a pause the reader made goes: they asked to watch this)
     video.play().catch(() => {});
     kick();

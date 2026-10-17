@@ -10,10 +10,12 @@
   <meta name="keywords"
     content="Mirror, Video-to-Action, Inverse Dynamics, Video Generation, Embodied Agents, Self-Improvement, Minecraft">
   <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <!-- the text face starts loading with the page, so it is usually in before the first paint (no layout shift) -->
   <link rel="preload" href="fonts/sourcesans3-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="css/theme.css">
   <link rel="stylesheet" href="css/site.css">
+  <script src="js/turn.js"></script>
   <!-- the hero's letters wait for their face (at most 2.5 s): "Mirror" never shows in a fallback font -->
   <script>
     (function () {
@@ -63,7 +65,11 @@
             <video class="hero-video" src="media/hero.mp4" poster="media/hero_poster.jpg" autoplay muted loop playsinline
               aria-hidden="true"></video>
             <!-- reduced motion: the montage holds its poster (site.js never starts it then) -->
-            <script>if (matchMedia("(prefers-reduced-motion: reduce)").matches) document.querySelector(".hero-video").removeAttribute("autoplay");</script>
+            <!-- a phone, data saver or a slow connection plays a lighter copy (960 wide, ~0.5 Mbps; the full one is 1.56 Mbps,
+                 the whole of a slow 4G link, and stalled there): set before the browser starts fetching -->
+            <script>(function () { var v = document.querySelector(".hero-video"), c = navigator.connection || {};
+              if (matchMedia("(prefers-reduced-motion: reduce)").matches) v.removeAttribute("autoplay");
+              if (Math.min(screen.width, screen.height) < 600 || c.saveData || /2g|3g/.test(c.effectiveType || "")) v.src = "media/hero_small.mp4"; })();</script>
           </div>
           <!-- the knockout needs no script: the rects fill the svg and css/site.css sizes the word (.hero-word), so the
                first paint is already "Mirror" -->
@@ -248,7 +254,7 @@
         <button role="tab" aria-selected="true" data-episode="generated"
           data-video="media/survival/survival_iron_pickaxe_generated.mp4" data-ar="1280 / 360"
           data-portrait-video="media/survival/survival_iron_pickaxe_generated_portrait.mp4" data-portrait-ar="640 / 720"
-          data-caption="<strong>From spawn to an iron pickaxe with generated plans.</strong> The generated video plan (<span class='wide-only'>left</span><span class='tall-only'>top</span>) and Mirror&rsquo;s execution (<span class='wide-only'>right</span><span class='tall-only'>bottom</span>). Shown at 1&times; the first time the agent collects, crafts, or places something new, and at up to 32&times; otherwise. Green flashes mark the plan re-syncing to the real observation.">Iron pickaxe<span class="seg-sep">
+          data-caption="<strong>From spawn to an iron pickaxe with generated plans.</strong> <span class='plan-on'>The generated video plan (<span class='wide-only'>left</span><span class='tall-only'>top</span>) and Mirror&rsquo;s execution (<span class='wide-only'>right</span><span class='tall-only'>bottom</span>).</span><span class='plan-gone'>Mirror&rsquo;s execution.</span> Shown at 1&times; the first time the agent collects, crafts, or places something new, and at up to 32&times; otherwise.<span class='plan-on'> Green flashes mark the plan re-syncing to the real observation.</span>">Iron pickaxe<span class="seg-sep">
           &middot; </span><span class="seg-sub">generated plans</span></button>
         <button role="tab" aria-selected="false" data-episode="oracle"
           data-video="media/survival/survival_diamond_oracle.mp4" data-ar="1280 / 360"
@@ -485,7 +491,7 @@
       <div class="bibtex reveal">
         <button class="bibtex-copy" type="button">Copy</button>
         <pre><code><span>@article{ryu2026mirror,
-</span><span>  title={Self-Improving Video-to-Action Models},
+</span><span>  title={Self-Improving <span class="nobr">Video-to-Action</span> Models},
 </span><span>  author={Ryu, Hyunwoo and
 </span><span>          Chen, Eric Ming and
 </span><span>          Wilcoxson, Max and

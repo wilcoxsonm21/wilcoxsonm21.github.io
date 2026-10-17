@@ -73,8 +73,8 @@ transport is in its `.stage`, beside the frame, which clips; a figure holds its 
 focus, while the pointer moves over the box and after a key (`cue`); a touch screen keeps it shown. It sits under the
 box and stays there on a narrow screen (`fitCard` keeps `CTL_ROOM` for it, so the two tallest figures on an iPhone Pro
 are drawn a few per cent narrower), on a wide one with room under the frame (`html.ctl-below`, set in `relayout`: an
-iPad held sideways, a tall window), and under the figures beside their copy, which always have room. On a phone held
-sideways it stands beside the box as a column (`fitShort` keeps `CTL_SIDE` at either side and sets `--ctl-x`/`--ctl-y`).
+iPad held sideways, a tall window), and under the figures beside their copy, which always have room. In a short window
+(`html.short`) it stands beside the box as a column (`fitShort` keeps `CTL_SIDE` at either side and sets `--ctl-x`/`--ctl-y`).
 The first chapter's old "Click to pause · arrow keys to step" hint is gone; the transport's note replaces it. Fingers go
 through touch events: the first 8 px of a move decide its direction, and a sideways one cancels its touchmoves so the
 page can't scroll under it (`touch-action: pan-y` alone let slightly diagonal swipes scroll); a vertical swipe that
@@ -124,7 +124,15 @@ keeps its size from click to click and any room left over goes to the screen's e
 scene's title and note (`SCENE.caption()` reports their opacity), and when it changes height the grey above the title
 and the text glide to the new height together (`caption()` in `js/site.js`).
 
-**Phones held sideways.** A screen under 500px tall and wider than tall gets `html.short` instead of `narrow`. The nav
+**Phones held sideways** aren't laid out for: `js/turn.js` (loaded in `<head>` of the page and both viewers) covers
+the page with a note asking the reader to turn the phone upright (`html.turn`, `.turn-note` in `css/site.css`). A phone
+is a touch screen whose shorter side is under 600px; held sideways means a landscape screen orientation and a window
+more than 1.3 times as wide as tall, so tablets, opened foldables and near-square cover screens (Z Flip) keep their
+layouts. Under the note the page holds still: the playing videos pause (also in an open modal), the chapters stop on
+their frame, nothing loads, and `relayout()` skips, so turning back finds every chapter as it was with no reload.
+
+**Short windows.** A window under 500px tall and wider than tall that isn't a phone (a laptop at 200% zoom) gets
+`html.short` instead of `narrow`. The nav
 slides away while a chapter holds the screen (`html.stage-on`), so each chapter has the full height. The animations
 use the narrow layout's box, with the title drawn by the page above the animation's 1920×880 body, and `fitShort` in
 `js/site.js` makes the box as large as the height allows, leaving any spare width at the sides. The two figure chapters
@@ -250,8 +258,15 @@ Everything that downloads at once shares a slow connection, so the page loads in
   everything the reader is on and coming to is in, one at a time and nearest first, and give way again whenever
   something else needs the line (`background`); the browser keeps what they had. While the hero's montage or the
   survival clip plays on the screen, it gets 6 s buffered before anything else loads.
+- The survival clips need 1.7-2.5 Mbps, more than slow 4G has (it stalled every second or two there). Each has a light
+  copy, `media/survival/*_light.mp4` (20 fps at 896 x 252, or 448 x 504 stacked; ~0.3 Mbps, peaks capped at 0.6). The
+  page plays it from the start where the browser reports Save-Data or a 2g/3g connection (as for `hero_small.mp4`),
+  and switches to it, at the same moment, once the clip stalls 2.5 s (4 s just after a seek or a new clip) or three
+  times in 20 s (`stallWatch` in `js/site.js`); it then keeps the light copies for the visit. Remake them from the
+  full clips with ffmpeg: `-vf "fps=20,scale=896:252:flags=lanczos"` (`448:504` for `_portrait`), `-c:v libx264
+  -preset slow -crf 30 -maxrate 600k -bufsize 1200k -g 40 -movflags +faststart -an`.
 - `python3 mirror/tools/build_posters.py` redraws the posters with Playwright: each scene at its chapter's `data-lead`,
-  as the deck's 16:9 frame with its title, as its 1920 x 880 body without one (narrow screens, phones held sideways),
+  as the deck's 16:9 frame with its title, as its 1920 x 880 body without one (narrow screens, short windows),
   and as its portrait stage cut to what the box shows at the start. `posters.js` also holds the scene's titles and its
   portrait stage's size, so the box has its final shape and caption before the scene arrives.
 

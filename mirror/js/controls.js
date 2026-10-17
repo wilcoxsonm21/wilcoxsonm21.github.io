@@ -99,6 +99,37 @@
     };
     const kick = () => { if (!raf) raf = requestAnimationFrame(follow); };
     ["timeupdate", "play", "pause", "seeked", "emptied", "loadedmetadata", "ended"].forEach(e => cinema.addEventListener(e, kick));
+    // a tap or a click on the screen (or Enter/Space) pauses or plays it, as a gallery card's does (the user, 10-16): the
+    // play glyph stays while it is paused, and site.js leaves it paused as it scrolls in and out (data-held). A tab or a
+    // milestone picked plays it again (js/site.js pick, js/survival.js jump)
+    const screen = cinema.closest(".cinema-screen");
+    const glyph = document.createElement("div");
+    glyph.className = "g-glyph";
+    glyph.setAttribute("aria-hidden", "true");
+    screen.append(glyph);
+    screen.tabIndex = 0;
+    screen.setAttribute("role", "button");
+    const state = () => {
+      const held = !!cinema.dataset.held;
+      screen.classList.toggle("paused", held);
+      glyph.innerHTML = held ? GLYPH_PLAY : GLYPH_PAUSE;
+      screen.setAttribute("aria-label", `Survival video: ${held ? "play" : "pause"}`);
+    };
+    ["play", "pause", "emptied", "ended"].forEach(e => cinema.addEventListener(e, state));
+    let popTimer = 0;
+    const toggle = () => {
+      if (cinema.dataset.held) { delete cinema.dataset.held; cinema.play().catch(() => {}); }
+      else { cinema.dataset.held = "1"; cinema.pause(); }
+      state();
+      screen.classList.remove("show-glyph");
+      void screen.offsetWidth;   // (restart the pop)
+      screen.classList.add("show-glyph");
+      clearTimeout(popTimer);
+      popTimer = setTimeout(() => screen.classList.remove("show-glyph"), 500);
+    };
+    screen.addEventListener("click", toggle);
+    screen.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } });
+    state();
   }
   document.querySelectorAll(".card-media").forEach(m => { const v = m.querySelector("video"); if (v) mini(v, m); });
 
@@ -134,16 +165,32 @@
       stops.forEach((s, i) => { if (Math.abs(s.x - track.scrollLeft) < Math.abs(stops[k].x - track.scrollLeft)) k = i; });
       return k;
     }
-    let queued = false;
+    let queued = false, onCard = 0, resizing = false;   // onCard: the card the reader is on (kept through a resize)
     function sync() {
       queued = false;
       const k = current();
+      // (not under the note to turn a phone upright, js/turn.js: the track is laid out for the sideways screen there and
+      // clamps to its first cards, which isn't where the reader is)
+      if (!resizing && stops[k] && !document.documentElement.classList.contains("turn")) onCard = stops[k].cards[0];
       btns.forEach((b, i) => b.setAttribute("aria-current", i === k ? "true" : "false"));
     }
     track.addEventListener("scroll", () => { if (!queued) { queued = true; requestAnimationFrame(sync); } }, { passive: true });
     // (after site.js has laid the page out again: the rows stack or join with html.narrow)
-    let rT = 0;
-    addEventListener("resize", () => { clearTimeout(rT); rT = setTimeout(build, 250); });
+    // A phone folding shut or turning lays the track out again, and its scroll snaps to whichever card is then nearest
+    // (two or three on): the track goes back to the card the reader was on, once site.js has laid the page out (it looks
+    // again at 400 ms, a fold's viewport settling late)
+    let rT = 0, rT2 = 0;
+    const keep = () => {
+      build();
+      const i = stops.findIndex(s => s.cards.includes(onCard));
+      if (i >= 0 && i !== current()) track.scrollTo({ left: stops[i].x, behavior: "auto" });
+    };
+    addEventListener("resize", () => {
+      resizing = true;
+      clearTimeout(rT); clearTimeout(rT2);
+      rT = setTimeout(keep, 250);
+      rT2 = setTimeout(() => { keep(); resizing = false; sync(); }, 800);
+    });
     dots.addEventListener("click", e => {
       const i = btns.indexOf(e.target.closest("button"));
       if (i >= 0) track.scrollTo({ left: stops[i].x, behavior: reduce ? "auto" : "smooth" });

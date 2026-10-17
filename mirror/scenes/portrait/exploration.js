@@ -28,3 +28,6 @@ window.PORTRAIT = !window.SCENE_PORTRAIT ? null : (() => {
     },
   };
 })();
+// A phone draws the stage at about a third of its size, so the maps' labels are drawn larger here: the training
+// progress legend was under 7 px on a 360 px phone, and Start and Goal 9 px. (The legend still fits the card's width.)
+if (window.PORTRAIT) document.head.insertAdjacentHTML("beforeend", "<style>html.portrait .legend{font-size:38px}html.portrait .lbl{font-size:44px}</style>");

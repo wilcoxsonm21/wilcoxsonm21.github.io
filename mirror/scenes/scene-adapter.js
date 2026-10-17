@@ -265,11 +265,22 @@
   }
   // with reduced motion the looping clips (suites) hold still on their first frame
   const STILL = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // ... and a clip moved out of the frame (on a phone the summary table pushes the plots and their tiles out the top)
+  // stops decoding until it is back (looked at every 0.25 s at most)
+  const onStage = v => {
+    const r = v.getBoundingClientRect();
+    return r.width > 1 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+  };
+  let loopAt = 0, wasOn = null;
   function loopVideos(on) {
+    const now = performance.now();
+    if (on === wasOn && now - loopAt < 250) return;
+    wasOn = on; loopAt = now;
     for (const v of document.querySelectorAll("video")) {
       if (STILL) { v.autoplay = false; if (!v.paused) v.pause(); continue; }
-      if (on && v.paused) v.play().catch(() => {});
-      else if (!on && !v.paused) v.pause();
+      const play = on && onStage(v);
+      if (play && v.paused) v.play().catch(() => {});
+      else if (!play && !v.paused) v.pause();
     }
   }
 

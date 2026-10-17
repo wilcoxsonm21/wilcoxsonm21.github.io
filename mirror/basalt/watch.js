@@ -1,4 +1,6 @@
 "use strict";
+// (a malformed % in the address, "#%", threw "URI malformed" and broke the page; it reads as no address)
+const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return ""; } };
 // The BASALT evaluation episodes, to browse the results by eye, in the look of the page's survival section
 // (../css/watch.css): FindCave and MakeWaterfall, each model's 11 worlds a grid of its own (one model per grid, never
 // mixed), each still marked with its verdict; an episode plays in the survival player (../js/watch-player.js), with
@@ -176,7 +178,7 @@ EMBED.listen({
 
 // #waterfall, #waterfall/self_improving, or #waterfall/self_improving/3@60: a task, a model, a world (from 1), a time
 function route(hash) {
-  const [where, at] = decodeURIComponent(hash.replace(/^#/, "")).split("@");
+  const [where, at] = safeDecode(hash.replace(/^#/, "")).split("@");
   const [tab, version, number] = where.split("/");
   closeEpisode();
   if (version in VERSIONS) state.version = version;

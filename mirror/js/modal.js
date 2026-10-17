@@ -6,12 +6,14 @@
 // link can open it (with the page under it at the modal's section). Each viewer loads once, in a
 // frame with ?embed (js/embed.js), and stays loaded; the two talk by postMessage.
 (() => {
+  // (a malformed % in the address, "#%", threw "URI malformed" and broke the page; it reads as no address)
+  const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return ""; } };
   const MODALS = {
     "diamond-episodes": { src: "eval/", section: "survival", title: "MineRL Diamond Challenge: all 384 evaluation episodes" },
     "basalt-episodes": { src: "basalt/", section: "basalt", title: "MineRL BASALT: all 44 evaluation episodes" },
   };
   const parse = (url) => {
-    const [key, ...rest] = decodeURIComponent(new URL(url, location.href).hash.slice(1)).split("/");
+    const [key, ...rest] = safeDecode(new URL(url, location.href).hash.slice(1)).split("/");
     return key in MODALS ? { key, inner: rest.join("/") } : null;
   };
   // site.js asks this: opening or leaving a modal's #hash isn't a jump to an anchor, and a link to one lands the page on
@@ -50,9 +52,11 @@
       frame.className = "xmodal-frame";
       frame.title = MODALS[key].title;
       frame.src = MODALS[key].src + "?embed" + (inner ? "#" + inner : "");
+      frame.addEventListener("load", () => checkLoaded(key));
       sheet.append(frame);
     } else send(key, { type: "mirror-route", hash: inner });
     for (const k in frames) frames[k].hidden = k !== key;
+    showFailed(failed.has(key));
     modal.setAttribute("aria-label", MODALS[key].title);
     clearTimeout(hideTimer);
     modal.hidden = false;
@@ -94,6 +98,28 @@
     if (m) { pushed = history.state?.mirrorModal === m.key; open(m.key, m.inner, { push: false }); }
     else if (current) { pushed = false; finish(); }
   });
+
+  // A viewer that couldn't load (no connection) leaves a note on the sheet in place of a blank one, and loads again on
+  // its button, or by itself once the connection is back. (A failed load is the browser's error page in the frame,
+  // which the page can't look into, or a page without the viewer.)
+  const failed = new Set();
+  const note = document.createElement("div");
+  note.className = "xmodal-failed";
+  note.hidden = true;
+  note.innerHTML = '<p>The episodes couldn\u2019t load without a connection.</p><button type="button" class="pill">Try again</button>';
+  sheet.append(note);
+  function checkLoaded(key) {
+    let ok = false;
+    try { ok = !!frames[key].contentDocument?.querySelector(".w"); } catch (e) {}
+    if (ok) failed.delete(key); else failed.add(key);
+    if (current === key) showFailed(!ok);
+  }
+  function showFailed(on) { note.hidden = !on; }
+  function retry() {
+    for (const key of failed) frames[key].src = frames[key].src;   // (the same address loads it again)
+  }
+  note.lastElementChild.addEventListener("click", retry);
+  addEventListener("online", retry);
 
   closeBtn.addEventListener("click", close);
   modal.addEventListener("click", (e) => { if (e.target === modal) close(); });

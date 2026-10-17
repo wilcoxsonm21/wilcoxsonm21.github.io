@@ -24,11 +24,12 @@
 //                 duration, startAt, milestones: [{ t, icon, title }], ticks: [{ t, title, icon, gold }],
 //                 toasts: [{ t, icon, text, death }], windows: [[start, end], …], auto, goal: (t) => text, caption });
 // x positions (px) for icons at xs (sorted) on a line `width` wide: each at least `gap` past the one before, so
-// crowded ones overlap but all show, pulled back from the right end when they would run off it
-function spread(xs, width, gap) {
+// crowded ones overlap but all show, pulled back from the right end when they would run off it. `pad` keeps each
+// centre that far inside the line, so an icon at either end stays within it (the video's width) rather than half past
+function spread(xs, width, gap, pad = 0) {
   const out = [];
-  xs.forEach((x, i) => out.push(i ? Math.max(x, out[i - 1] + gap) : x));
-  for (let i = out.length - 1; i >= 0; i--) out[i] = Math.max(0, Math.min(out[i], i < out.length - 1 ? out[i + 1] - gap : width));
+  xs.forEach((x, i) => out.push(Math.max(x, i ? out[i - 1] + gap : pad)));
+  for (let i = out.length - 1; i >= 0; i--) out[i] = Math.max(pad, Math.min(out[i], i < out.length - 1 ? out[i + 1] - gap : width - pad));
   return out;
 }
 
@@ -440,7 +441,24 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     if (video) show(viewWanted(), copyFor(viewWanted(), state.rate));
   }
   tall.addEventListener("change", reshape);
-  toggle.addEventListener("click", () => { state.planOff = !state.planOff; reshape(); });
+  // The screen grows or shrinks around the button (a phone's stacked 16:18, a desktop's 32:9, over the width's .5 s
+  // transition), so the page scrolls with it: the button stays where it was tapped and the controls under the screen
+  // stay on it (on a 659-tall iPhone they fell below the bottom edge, with the button just tapped)
+  function keepInPlace(target, y0, ms = 650) {
+    const end = performance.now() + ms;
+    const step = () => {
+      const dy = target.getBoundingClientRect().top - y0;
+      if (Math.abs(dy) > 0.5) window.scrollBy(0, dy);
+      if (performance.now() < end) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  toggle.addEventListener("click", () => {
+    const y0 = toggle.getBoundingClientRect().top;
+    state.planOff = !state.planOff;
+    reshape();
+    keepInPlace(toggle, y0);
+  });
 
   function seek(t) {
     const target = Math.max(0, Math.min(t, state.duration));
@@ -549,14 +567,15 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   const ICON = 16;
   function drawTicks() {
     const width = rail.getBoundingClientRect().width || 600, sorted = [...state.ticks].sort((a, b) => a.t - b.t);
-    const icons = sorted.filter((k) => k.icon), xs = spread(icons.map((k) => (k.t / state.duration) * width), width, ICON * 0.85);
+    const icons = sorted.filter((k) => k.icon), xs = spread(icons.map((k) => (k.t / state.duration) * width), width, ICON * 0.85, ICON / 2);
     ticksBox.replaceChildren(...sorted.filter((k) => !k.icon).map((k) =>
       el("i", { class: `w-tick${k.gold ? " w-gold" : ""}`, "data-t": String(k.t), style: `left:${pct(k.t)}` })),
     ...icons.map((k, i) => el("button", { class: "w-mark", type: "button", tabindex: "-1", title: k.title, "aria-hidden": "true",
       "data-t": String(k.t), "data-jump": String(k.t), "data-x": String(xs[i]), style: `left:${xs[i]}px` }, el("img", { src: k.icon, alt: "" }))));
     state.shown = Object.fromEntries(Object.entries(state.shown).filter(([key]) => !key.startsWith("k")));
   }
-  new ResizeObserver(() => { if (state.ticks.length) drawTicks(); }).observe(rail);
+  // (repainted at once: paused, the loop that paints doesn't run, and the icons played past went grey until play)
+  new ResizeObserver(() => { if (state.ticks.length) { drawTicks(); if (video && !state.dragging) paint(now()); } }).observe(rail);
 
   // ---------------------------------------------------------------- the scrub line
   const timeAt = (x) => { const b = rail.getBoundingClientRect(); return Math.max(0, Math.min(1, (x - b.left) / b.width)) * state.duration; };
@@ -573,28 +592,39 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     const wait = final ? 0 : 120 - (performance.now() - scrubLast);
     if (wait <= 0) { scrubLast = performance.now(); seek(t); } else scrubTimer = setTimeout(() => scrubTo(t, true), wait);
   };
+  // A press on an icon is a jump to its moment only if it lifts where it went down; one that moves is a drag like any
+  // other (the fanned-out icons cover the first ~40% of a phone's line, where drags started on them never dragged).
+  // preventDefault: no text selection or native drag starts from the line (one stray drag selected the strip's text,
+  // and every drag after it was cancelled partway by a dragstart)
+  let press = null;
   scrub.addEventListener("pointerdown", (e) => {
     if (e.button > 0) return;
+    e.preventDefault();
     const mark = e.target.closest(".w-mark");
-    if (mark) { e.preventDefault(); seek(Math.max(0, Number(mark.dataset.jump) - 3)); play(); return; }
+    press = { mark, x: e.clientX, moved: !mark };
     state.dragging = true;
     hold();   // (it waits while dragged, and plays on after if it was playing)
     root.classList.add("w-dragging");
     scrub.setPointerCapture(e.pointerId);
-    scrubTo(timeAt(e.clientX), true);
+    if (!mark) scrubTo(timeAt(e.clientX), true);
   });
   scrub.addEventListener("pointermove", (e) => {
     const mark = e.target.closest(".w-mark"), k = mark ? null : tickAt(e.clientX), t = k ? k.t : timeAt(e.clientX);
     tip.textContent = mark ? mark.title : k ? k.title : clock(t);
     tip.style.left = mark ? `${mark.dataset.x}px` : pct(t);
-    if (state.dragging) scrubTo(timeAt(e.clientX), false);
+    if (state.dragging && press && !press.moved && Math.abs(e.clientX - press.x) > 6) press.moved = true;
+    if (state.dragging && press?.moved) scrubTo(timeAt(e.clientX), false);
   });
   for (const type of ["pointerup", "pointercancel"]) {
     scrub.addEventListener(type, (e) => {
       if (!state.dragging) return;
       state.dragging = false;
       root.classList.remove("w-dragging");
-      if (type === "pointerup") scrubTo(timeAt(e.clientX), true);
+      const p = press;
+      press = null;
+      if (p?.mark && !p.moved) {
+        if (type === "pointerup") { seek(Math.max(0, Number(p.mark.dataset.jump) - 3)); play(); return; }
+      } else if (type === "pointerup") scrubTo(timeAt(e.clientX), true);
       hold();
     });
   }

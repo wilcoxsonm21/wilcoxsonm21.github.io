@@ -10,6 +10,12 @@
   --frame-h: calc(var(--frame-w) * 9 / 16);
   --edge: calc((100vw - var(--frame-w)) / 2);
 }
+/* a touch screen keeps the transport shown (css "controls"), so where the frame is held to the height (a tablet held
+   sideways) it is drawn a little smaller, leaving room for the transport under it (html.ctl-below) rather than over
+   the animation's own labels. Phones held sideways (html.short) keep theirs beside the box. */
+@media (hover: none) {
+  html:not(.short) { --frame-w: min(calc(100vw - 48px), calc((100svh - var(--nav-h) - 120px) * 16 / 9)); }
+}
 
 *, *::before, *::after { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
@@ -31,6 +37,9 @@ main { position: relative; z-index: 1; }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);
                    white-space: nowrap; }
 section[id] { scroll-margin-top: var(--nav-h); }
+/* (a chapter pins at its own top, its headline or figure placed clear of the nav: a link lands it there, not 52 px short
+   with the section before it showing above) */
+section.chapter[id] { scroll-margin-top: 0; }
 
 /* the lights go down for the survival-mode episodes. Hidden while unlit: iOS Safari tints its toolbar from fixed
    layers touching the screen edge, even transparent ones, so a lingering one shows as a black bar over the page */
@@ -133,12 +142,14 @@ html.is-dark .localnav-cta { background: var(--on-dark); color: var(--dark); }
 html.is-dark .localnav-progress span { background: var(--on-dark); }
 
 /* ------------------------------------------------------------------ hero */
-.hero { height: 100vh; height: 100svh; position: relative; }   /* not pinned: it fades as it scrolls away */
+/* (a screen too short for it all, a small phone at 150% zoom or a laptop at 200%, makes it taller than the screen, rather
+   than cutting the word off under the nav) */
+.hero { min-height: 100vh; min-height: 100svh; position: relative; }   /* not pinned: it fades as it scrolls away */
 .hero-sticky {
   position: sticky;
   top: 0;
-  height: 100vh;
-  height: 100svh;
+  min-height: 100vh;
+  min-height: 100svh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -200,8 +211,10 @@ html.is-dark .localnav-progress span { background: var(--on-dark); }
 @keyframes cue { 0% { transform: scaleY(0); opacity: 1; } 70% { transform: scaleY(1); opacity: 1; } 100% { transform: scaleY(1); opacity: 0; } }
 /* fix: hero load and short screens. Until its face has loaded (the script in index.html's head) the hero shows
    nothing rather than the letters in a fallback font, then fades in */
-.hero-video-clip, .hero-knockout { transition: opacity .5s var(--ease); }
-html.hero-wait .hero-video-clip, html.hero-wait .hero-knockout { opacity: 0; }
+/* (the letters and the video behind them fade in as one: faded apart, the half-clear veil showed the empty video's
+   box through it, a grey rectangle on a slow connection. filter, as site.js writes .hero-mark's opacity on scroll) */
+.hero-mark { transition: filter .5s var(--ease); }
+html.hero-wait .hero-mark { filter: opacity(0); }
 /* the cue steps aside when it would touch the links or the text below (site.js, layoutHero) */
 .scroll-cue.off { display: none; }
 /* the subtitle breaks between words, never at the hyphens of "Self-Improving" or "Video-to-Action" */
@@ -313,7 +326,9 @@ html.hero-wait .hero-video-clip, html.hero-wait .hero-knockout { opacity: 0; }
 .stage-frame .poster.in { opacity: 1; }
 /* a slow connection: a spinner over the box waiting for its scene, a click for its videos, or a figure for its code
    (site.js, Chapter.update) */
-.spin { position: absolute; z-index: 3; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px;
+/* (in the box's bottom right corner, above the progress bar: centred, it sat on the poster's own labels, OGBench's;
+   at the top it would sit on the title the page draws there on a phone) */
+.spin { position: absolute; z-index: 3; right: 12px; bottom: 22px; width: 40px; height: 40px;
         border-radius: 50%; background: rgba(255, 255, 255, .8); box-shadow: 0 2px 12px rgba(28, 27, 26, .14);
         opacity: 0; transition: opacity .3s; pointer-events: none; }
 .spin::before { content: ""; position: absolute; inset: 9px; border-radius: 50%; box-sizing: border-box;
@@ -355,9 +370,11 @@ html.hero-wait .hero-video-clip, html.hero-wait .hero-knockout { opacity: 0; }
 .steps li.on h4 { color: var(--ink); }
 .step-body { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows .5s var(--ease), opacity .45s; }
 .step-body > p { overflow: hidden; margin: 0; font-size: max(13.5px, 1.16cqw); line-height: 1.47; letter-spacing: -0.008em;
-                 color: var(--muted); }
+                 color: var(--muted); text-wrap: pretty; }   /* (no "horizon." alone on the last line) */
 .steps li.on .step-body { grid-template-rows: 1fr; opacity: 1; }
 .steps li.on .step-body > p { padding-top: max(5px, .42cqw); }
+/* (the gap under the heading opens and closes with the step, not at once: the steps below nudged 5 px) */
+.step-body > p { transition: padding-top .5s var(--ease); }
 .replan-figure { margin: 0; }
 .replan-svg { display: block; width: 100%; height: auto; overflow: visible; }
 .replan-svg .rp-label { font: 600 4px var(--sans); fill: var(--ink); letter-spacing: .02px; }
@@ -447,6 +464,9 @@ html.portrait .sv-film { top: auto; right: auto; bottom: 0; left: 0; width: 100%
 html.portrait .sv-pane { width: 100%; height: 50%; }
 html.portrait .sv-exec { left: 0; top: 50%; box-shadow: inset 0 2px 0 #000; }
 .plan-off .sv-plan { opacity: 0; }
+/* the survival caption describes the plan only while it shows */
+.cinema-caption .plan-gone, .plan-off .cinema-caption .plan-on { display: none; }
+.plan-off .cinema-caption .plan-gone { display: inline; }
 .sv-tag, .sv-toast { position: absolute; top: clamp(6px, 2.2cqw, 14px); padding: .28em .62em .32em; border-radius: 999px;
            font: 600 clamp(11px, 2.35cqw, 16px)/1.15 var(--sans); letter-spacing: -.005em; color: #fff; white-space: nowrap;
            background: rgba(16, 15, 14, .52); -webkit-backdrop-filter: blur(10px) saturate(1.4); backdrop-filter: blur(10px) saturate(1.4); }
@@ -513,7 +533,8 @@ html.narrow .sv-milestones li { width: auto; flex: 0 1 30px; }
    --dark as the heading does, so the caption stays readable while the lights come back up */
 .cinema-caption { grid-column: 1; grid-row: 4; max-width: min(100%, 680px); margin: 18px 0 0 4px; text-align: left;
                   font-size: clamp(14px, calc(var(--frame-w) * .0094), 19px); line-height: 1.42; letter-spacing: -.01em; font-weight: 600;
-                  color: color-mix(in srgb, #86868b calc(var(--dark) * 100%), var(--muted)); transition: opacity .35s; }
+                  color: color-mix(in srgb, #86868b calc(var(--dark) * 100%), var(--muted)); transition: opacity .35s;
+                  text-wrap: pretty; }
 .cinema-caption strong { font-weight: 600; color: color-mix(in srgb, #f5f5f7 calc(var(--dark) * 100%), var(--ink)); }
 /* the way into every evaluation episode (the Diamond Challenge modal), under the survival video */
 .cinema-more { margin: 48px 0 0; text-align: center; }
@@ -538,14 +559,21 @@ html.narrow .sv-milestones li { width: auto; flex: 0 1 30px; }
 }
 .gallery-track::-webkit-scrollbar { display: none; }
 /* the cards come in two rows (.gallery-row). On a desktop the rows stack and scroll together, two cards tall, with a
-   smaller video so both rows fit under the nav; elsewhere the rows dissolve into the track's single row */
+   smaller video so both rows and the dots fit under the nav (each card is its video and ~145 px of padding and text);
+   elsewhere, and in a window under 760 tall, where two rows of a 150 px video can't fit (a 1280x633 laptop cut the
+   second row and the dots off), the rows dissolve into the track's single row, with a larger video */
 .gallery-row { display: contents; }
-html:not(.narrow):not(.short) .gallery-track {
-  --gh: clamp(130px, min(calc(var(--frame-w) * .16), calc((100svh - var(--nav-h) - 420px) / 2)), 400px);
-  flex-direction: column;
-  align-items: flex-start;
+@media (min-height: 760px) {
+  html:not(.narrow):not(.short) .gallery-track {
+    --gh: clamp(150px, min(calc(var(--frame-w) * .16), calc((100svh - var(--nav-h) - 410px) / 2)), 400px);
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  html:not(.narrow):not(.short) .gallery-row { display: flex; align-items: stretch; gap: inherit; }
 }
-html:not(.narrow):not(.short) .gallery-row { display: flex; align-items: stretch; gap: inherit; }
+@media (max-height: 759.98px) {
+  html:not(.narrow):not(.short) .gallery-track { --gh: clamp(150px, min(calc(var(--frame-w) * .25), calc(100svh - var(--nav-h) - 240px)), 440px); }
+}
 .card {
   flex: 0 0 auto;
   width: min(calc(var(--gh) * var(--ar, 1.803) + 28px), var(--frame-w));   /* --ar: the video's width / height; never wider than the content column */
@@ -572,7 +600,7 @@ html:not(.narrow):not(.short) .gallery-row { display: flex; align-items: stretch
 .gallery-dots button { position: relative; }
 .gallery-dots button::after { content: ""; position: absolute; inset: -18px -5px; }
 @media (pointer: coarse) {
-  .gallery-dots { gap: 24px; }
+  .gallery-dots { gap: min(24px, calc((100vw - 140px) / 7)); }   /* (closer on a phone at 150% zoom, 275 wide: it fits) */
   .gallery-dots button::after { inset: -18px -12px; }   /* 32px wide (the dot's 8 and the gap's 24), meeting its neighbours' */
 }
 .gallery-dots button:focus-visible, .vbtn:focus-visible { outline: 2px solid var(--mirror); outline-offset: 2px; }
@@ -594,7 +622,9 @@ html:not(.narrow):not(.short) .gallery-row { display: flex; align-items: stretch
 
 /* ------------------------------------------------------------------ the episode modals (js/modal.js) */
 /* the way in: Apple's "+" link, a label and a round + after it, ink on the light page and near-white in the dark */
-.more-link { display: inline-flex; align-items: center; gap: .5em; font: 600 clamp(17px, calc(var(--frame-w) * .0125), 26px)/1.25 var(--sans);
+/* (one line, its + beside it, down to a 275 px screen: under 370 wide the type gives way rather than wrapping) */
+.more-link span { white-space: nowrap; }
+.more-link { display: inline-flex; align-items: center; gap: .5em; font: 600 clamp(min(17px, 4.6vw), calc(var(--frame-w) * .0125), 26px)/1.25 var(--sans);
              letter-spacing: .005em; color: inherit; text-decoration: none; }
 .more-plus { flex: none; width: 1.45em; height: 1.45em; transition: transform .3s var(--ease); }
 .more-plus circle { fill: currentColor; }
@@ -611,14 +641,24 @@ html:not(.narrow):not(.short) .gallery-row { display: flex; align-items: stretch
 /* the modal: the page dims and blurs, and a grey sheet rises from below with its close button at the top right. The
    viewer scrolls inside the sheet; the page behind holds still */
 html.modal-open { overflow: hidden; scrollbar-gutter: stable; }
+/* (the scrollbar's strip, kept so the page under the sheet doesn't shift, shows the root's background: dimmed as the
+   backdrop dims the page, white x .52, or the dark section's) */
+html { transition: background-color .42s; }
+html.modal-open { background: #858585; }
+html.modal-open.is-dark { background: #080707; }
 .xmodal { position: fixed; inset: 0; z-index: 200; overscroll-behavior: contain;
           background: rgba(0, 0, 0, 0); transition: background .3s var(--ease), -webkit-backdrop-filter .3s, backdrop-filter .3s; }
 .xmodal[hidden] { display: none; }
+/* closing (the .32 s before it is hidden) it lets taps through to the page: a tap there landed in the fading viewer and
+   started an episode playing in it, unseen */
+.xmodal:not(.is-open) { pointer-events: none; }
 .xmodal:focus { outline: none; }
 .xmodal.is-open { background: rgba(0, 0, 0, .48); -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%);
                   transition-duration: .42s; }
-.xmodal-sheet { position: absolute; left: 50%; top: max(40px, 5vh); bottom: 0; width: min(1180px, calc(100vw - 2 * var(--gutter)));
-                margin-left: calc(min(1180px, calc(100vw - 2 * var(--gutter))) / -2);
+/* (1180 wide, or wider on a big screen: as wide as 1.25 heights, so the episode's video can use a 2560x1440 or 4K
+   screen rather than playing in a column) */
+.xmodal-sheet { position: absolute; left: 50%; top: max(40px, 5vh); bottom: 0; width: min(max(1180px, 125vh), calc(100vw - 2 * var(--gutter)));
+                margin-left: calc(min(max(1180px, 125vh), calc(100vw - 2 * var(--gutter))) / -2);
                 background: var(--bg-2); border-radius: 28px 28px 0 0; overflow: hidden;
                 box-shadow: 0 -20px 80px -30px rgba(0, 0, 0, .5);
                 opacity: 0; transform: translateY(64px); transition: transform .3s var(--ease), opacity .24s var(--ease); }
@@ -626,6 +666,12 @@ html.modal-open { overflow: hidden; scrollbar-gutter: stable; }
 .xmodal.is-open .xmodal-sheet { opacity: 1; transform: none; transition: transform .5s var(--ease), opacity .32s var(--ease); }
 .xmodal-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--bg-2); }
 .xmodal-frame[hidden] { display: none; }
+/* a viewer that couldn't load (js/modal.js): a note on the dark sheet, in place of a blank one */
+.xmodal-failed { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 gap: 18px; padding: 24px; text-align: center; background: var(--bg-2); color: var(--ink); }
+.xmodal-failed[hidden] { display: none; }
+.xmodal-failed p { margin: 0; max-width: 26em; font: 500 17px/1.45 var(--sans); color: var(--ink-2); }
+.xmodal-failed .pill { background: var(--ink); color: var(--bg-2); border: 0; cursor: pointer; }
 .xmodal-close { position: absolute; z-index: 1; top: 18px; right: 18px; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%;
                 display: grid; place-items: center; cursor: pointer; color: var(--ink-2);
                 background: color-mix(in srgb, var(--ink) 9%, var(--bg-2)); transition: background .25s, transform .25s var(--ease); }
@@ -668,6 +714,8 @@ html.modal-open { overflow: hidden; scrollbar-gutter: stable; }
 }
 /* one span per line of the entry: a wrapped line continues under a hanging indent */
 .bibtex code > span { display: block; padding-left: 4ch; text-indent: -4ch; }
+.bibtex code > span:first-child { padding-right: 52px; }   /* (clear of the Copy button on a narrow phone) */
+.bibtex .nobr { white-space: nowrap; }                     /* ("Video-to- / Action" was split at its hyphen) */
 .bibtex-copy {
   position: absolute;
   top: 14px;
@@ -681,6 +729,16 @@ html.modal-open { overflow: hidden; scrollbar-gutter: stable; }
   cursor: pointer;
   box-shadow: 0 1px 0 var(--line);
 }
+/* on a narrow phone the Copy button goes to the bottom corner, beside the entry's short last line, so the first line
+   keeps its width (at 320 the button touched it; at 275 the key broke mid-word) */
+@media (max-width: 400px) {
+  .bibtex-copy { top: auto; bottom: 12px; }
+  .bibtex code > span:first-child { padding-right: 0; }
+}
+/* (and under 360 the entry's type is a little smaller, so each author's line fits on one line) */
+@media (max-width: 359.98px) { html.narrow #bibtex .bibtex pre { font-size: 12px; padding-inline: 14px; } }
+@media (max-width: 299.98px) { html.narrow #bibtex .bibtex pre { font-size: 10.5px; padding-inline: 12px; } }
+
 .footer { position: relative; z-index: 1; background: var(--bg-2); padding: 48px 0 64px;   /* lines up with the gallery and the nav */
           font-size: clamp(14px, calc(var(--frame-w) * .01), 22px); color: var(--muted); }
 .footer-inner { width: var(--frame-w); max-width: 100%; margin: 0 auto; }
@@ -696,7 +754,8 @@ html.modal-open { overflow: hidden; scrollbar-gutter: stable; }
 @media (max-width: 760px) {
   .steps li { padding: 9px 0; }
   .paddle { display: none; }
-  .hero-mark { width: 94vw; }
+  html:not(.short) .hero-mark { width: 94vw; }   /* (a short window keeps its word held by the height: at 692x280 it
+                                                  filled the whole screen) */
 }
 /* fix: split chapters stacked, solo (js/split.js). Portrait, small or narrowish windows (.split-stack) stack the figure
    chapters, figure first, in a grey box as wide as the animations' boxes (--split-w); the lava figure shows one plot
@@ -709,7 +768,7 @@ html.narrow .chapter-split.split-stack { --split-w: calc(100vw - 24px); --fp-t: 
                                           grid-template-columns: 1fr; gap: 14px; align-content: start; justify-items: center;
                                           padding: clamp(16px, 4svh, 40px) 0 0; }
 .split-stack .split-copy { width: var(--split-w); padding-inline: clamp(8px, calc(var(--gutter) - 12px), 28px); }
-.split-stack .split-copy > * { max-width: 760px; }
+.split-stack .split-copy > * { max-width: 760px; margin-inline: auto; }   /* (centred under a figure wider than it: a large iPad upright) */
 .split-stack h3 { margin-bottom: 14px; }
 .split-stack.chapter-lava .eyebrow { margin-bottom: 8px; }
 .split-stack .split-stage > figure { order: -1; width: var(--split-w); margin: 0; padding: var(--fp-t) var(--fp-x) var(--fp-b);
@@ -749,6 +808,8 @@ html.narrow .stage-caption {
 /* the grey part is only as tall as the current title and sits right on the frame, so a short title leaves its room
    above the box (white), never between the text and the figure */
 html.narrow .stage-caption .cap-in { position: relative; padding: 20px 20px 6px; transition: transform .45s var(--ease); }
+.stage-caption .cap-in { text-wrap: pretty; }   /* (no "rewards" alone on the last line) */
+.stage-caption .cap-t { display: block; text-wrap: balance; }   /* (pretty left "environments" alone on a two-line title) */
 /* the grey is a layer behind the caption, as tall as the caption block, with its top at the current text's top
    (--cap-top, set by site.js). It slides there, and the text with it, so a taller or shorter title or a note coming in
    grows or shrinks the box smoothly; the part below the block hides behind the frame */
@@ -780,6 +841,9 @@ html.portrait .gallery-track {
   scroll-padding: 0 16px;
 }
 html.portrait .results-head { width: auto; margin-inline: 16px; }
+/* held upright the clips differ in shape (tall, square, FindCave's wide grid), so each card ends under its own text rather
+   than stretching to the tallest: FindCave's was ~45% blank (the user, 10-16) */
+html.portrait .gallery-track { align-items: flex-start; }
 /* narrow screens: a smaller heading and less air around the gallery and its captions */
 html.narrow .results { padding: 44px 0 24px; }
 html.narrow .results-head { margin-bottom: 14px; }
@@ -846,9 +910,11 @@ html.portrait [data-panes^="stages"] .g-pane { left: calc(var(--k) * 50%); top: 
            transition: opacity .45s, visibility 0s .45s; }
 .g-glyph svg { width: 100%; height: 100%; fill: currentColor; }
 .card-media { container-type: size; }
-.card-media.show-glyph .g-glyph, .card-media.paused .g-glyph { opacity: 1; visibility: inherit; transition: none; }
-.card-media.show-glyph .g-glyph { animation: ctl-pop .3s var(--ease); }
-.card-media.paused:not(.show-glyph) .g-glyph { transition: opacity .45s; }
+:is(.card-media, .cinema-screen).show-glyph .g-glyph, :is(.card-media, .cinema-screen).paused .g-glyph { opacity: 1; visibility: inherit; transition: none; }
+:is(.card-media, .cinema-screen).show-glyph .g-glyph { animation: ctl-pop .3s var(--ease); }
+:is(.card-media, .cinema-screen).paused:not(.show-glyph) .g-glyph { transition: opacity .45s; }
+.cinema-screen { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.cinema-screen .g-glyph { z-index: 2; }   /* (over the clip's labels and toast) */
 
 /* captions that say where the plan is: beside the execution, or above it in the stacked videos */
 .tall-only { display: none; }
@@ -862,7 +928,9 @@ html.portrait .wide-only { display: none; }
 html.narrow .cinema-figure { max-width: none; margin-inline: calc(12px - var(--gutter)); }
 html.short .cinema-figure { max-width: none; margin-inline: calc(max(12px, env(safe-area-inset-left, 0px)) - var(--gutter))
                                                             calc(max(12px, env(safe-area-inset-right, 0px)) - var(--gutter)); }
-html.narrow .cinema-screen, html.short .cinema-screen { --sv-room: 16px; }
+html.narrow .cinema-screen { --sv-room: 16px; }
+/* (a short window, now a laptop at 200% zoom or 1600x500, keeps the strip under the video on the screen with it: the
+   wide layout's room, 140px) */
 html.narrow .cinema-caption, html.short .cinema-caption { margin-left: 2px; }
 html.narrow .segmented { margin: 32px auto 24px; }
 html.narrow .segmented button { padding: 7px 22px 8px; line-height: 1.15; }
@@ -876,6 +944,8 @@ html.narrow .seg-sub { display: block; font-size: 12px; font-weight: 500; opacit
    a row of segments above it. The sides keep clear of the notch (safe-area insets). */
 html.short .localnav { transition: transform .35s var(--ease), background .4s, border-color .4s, color .4s; }
 html.short.stage-on .localnav { transform: translateY(calc(-100% - 2px)); }
+/* the nav spans the window, not the frame held narrow by the height: at 990x352 its links pushed Paper off the edge */
+html.short .localnav-inner { width: calc(100% - 2 * max(var(--gutter), env(safe-area-inset-left, 0px))); }
 html.short .chapter:not(.chapter-split) .stage { inset: 0; justify-content: flex-start; padding: var(--card-top, 0px)
   env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
 html.short .stage-caption { position: relative; display: flex; flex-direction: column; justify-content: flex-end;
@@ -897,6 +967,22 @@ html.short #replanning .split-stage { --fig-w: min(calc((100svh - 60px) * 1.914)
 html.short .chapter-lava .split-stage { --fig-w: min(calc((100svh - 96px) * 1.018), calc(100vw - 300px));
                                        grid-template-columns: minmax(0, 420px) var(--fig-w); justify-content: center; gap: 40px; }
 html.short .chapter-split .eyebrow { font-size: 14px; margin-bottom: 4px; }
+/* a window under 340 px tall, a laptop at 300% zoom: the headline was taller than the room under the nav (at 780x260 the
+   eyebrow sat under the nav and "Watch all 44 evaluation episodes" below the bottom edge). Smaller type, and wider lines
+   so the lede takes three */
+@media (max-height: 340px) {
+  html.short .chapter-head { padding-bottom: 8px; }
+  html.short .chapter-head .eyebrow { font-size: 14px; margin-bottom: 4px; }
+  html.short .chapter-head h2 { max-width: 24em; font-size: 30px; }
+  html.short .chapter-head .lede { max-width: 48em; margin-top: 10px; font-size: 15px; line-height: 1.35; }
+  html.short .chapter-head .chapter-more { margin-top: 8px; }
+}
+@media (max-height: 240px) {   /* (610x210: no room for the eyebrow) */
+  html.short .chapter-head .eyebrow { display: none; }
+  html.short .chapter-head h2 { font-size: 24px; }
+  html.short .chapter-head .lede { margin-top: 6px; font-size: 13.5px; }
+  html.short .chapter-head .chapter-more { margin-top: 4px; }
+}
 html.short .chapter-split h3 { font-size: 21px; line-height: 1.12; margin-bottom: 12px; }
 html.short .chapter-split .steps { display: grid; grid-template-columns: repeat(var(--n, 6), minmax(0, 1fr)); column-gap: 5px; }
 html.short .chapter-lava .steps { --n: 5; }
@@ -1058,3 +1144,18 @@ html.narrow .sv-marks button { width: 14px; height: 14px; margin: -7px 0 0 -7px;
 @media (prefers-reduced-motion: reduce) {
   .ctl.show-glyph .ctl-glyph { animation: none; }
 }
+
+/* a phone held sideways (js/turn.js sets html.turn): the page is covered by a note asking to turn it upright. The
+   page under it holds still; nothing of it shows or takes a tap. */
+.turn-note { display: none; }
+html.turn .turn-note { position: fixed; inset: 0; z-index: 2147483000; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px; padding: 24px max(24px, env(safe-area-inset-right)) 24px max(24px, env(safe-area-inset-left));
+  background: var(--bg); color: var(--ink); text-align: center; touch-action: none; overscroll-behavior: contain; }
+.turn-icon { width: 72px; height: 72px; margin-bottom: 12px; fill: none; stroke: currentColor; stroke-width: 2.4;
+             stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.turn-phone { transform-box: view-box; transform-origin: 36px 36px; animation: turn-phone 2.6s var(--ease) infinite; }
+.turn-arrow { stroke: var(--gold-2); }
+@keyframes turn-phone { 0%, 22% { transform: rotate(-90deg); } 52%, 100% { transform: rotate(0deg); } }
+.turn-title { margin: 0; font: 600 clamp(19px, 5.4vh, 24px)/1.2 var(--sans); letter-spacing: -.015em; }
+.turn-sub { margin: 0; max-width: 34em; font: 400 clamp(14px, 4.2vh, 17px)/1.4 var(--sans); color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .turn-phone { animation: none; } }

@@ -10,9 +10,10 @@
 // A phone held sideways (html.short) has its own compact layout (site.js fitShort), so this leaves it alone.
 (() => {
   "use strict";
-  const STACK_W = 1000, STACK_H = 600;   // below this width (on a screen at least this tall) the chapters stack
+  const STACK_W = 1000, STACK_H = 640;   // below this width (on a screen at least this tall) the chapters stack (800x600 sits beside)
   const BOTTOM = 12;                     // stacked: room kept under the current step
   const MIN_FIG = .5;                    // stacked: a figure is drawn no smaller than this share of its full size
+  const FIG_GIVE = .7, COPY_MIN = .78;   // stacked: ... and shrinks to FIG_GIVE before the copy's type does, to COPY_MIN
   const LIST_FIG = .9;                   // stacked: ... and no smaller than this to keep the whole step list
   const root = document.documentElement, $ = (s, e = document) => e.querySelector(s), $$ = (s, e = document) => [...e.querySelectorAll(s)];
   const chapters = $$(".chapter-split").map(el => ({
@@ -49,6 +50,7 @@
     el.classList.toggle("split-stack", stack);
     el.classList.remove("split-solo");
     el.style.removeProperty("--split-fig");
+    c.copy.style.zoom = "";
     steps.style.minHeight = "";
     if (c.lava) lavaText();
     if (short) return;
@@ -68,8 +70,17 @@
       solo = c.lava || figH - (1 - LIST_FIG) * sh + m.list > avail;
       const need = figH + (solo ? m.solo : m.list) - avail;
       if (need > 0) {
-        const w = art.getBoundingClientRect().width;
-        const f = Math.max(MIN_FIG, (sh - need) / sh);
+        // the figure gives way first, to FIG_GIVE of its size; then the copy's type, to COPY_MIN; then the figure again,
+        // to MIN_FIG (on a small or zoomed phone the copy ran off the screen, and the figure alone at half size was
+        // too small to read)
+        const w = art.getBoundingClientRect().width, copyH = m.head + (solo ? m.solo : m.list);
+        let f = Math.max(FIG_GIVE, (sh - need) / sh), rest = need - sh * (1 - f);
+        if (rest > 0) {
+          const k = Math.max(COPY_MIN, 1 - rest / copyH);
+          c.copy.style.zoom = k.toFixed(3);
+          rest -= copyH * (1 - k);
+        }
+        if (rest > 0) f = Math.max(MIN_FIG, f - rest / sh);
         el.style.setProperty("--split-fig", Math.floor(w * f) + "px");
         if (c.lava) lavaText();
       }

@@ -1,4 +1,6 @@
 "use strict";
+// (a malformed % in the address, "#%", threw "URI malformed" and broke the page; it reads as no address)
+const safeDecode = (s) => { try { return decodeURIComponent(s); } catch { return ""; } };
 // The Diamond Challenge evaluation episodes, to browse the results by eye, in the look of the page's survival section
 // (../css/watch.css): a grid of every episode of a setting, furthest first, each still marked with the furthest item
 // it reached; an episode plays in the survival player (../js/watch-player.js). Every value from the data files is set
@@ -221,7 +223,7 @@ EMBED.listen({
 
 // #offline, or #offline/8@600: a setting, an episode (from 1) and a time in seconds; no setting: Online
 function route(hash) {
-  const [where, at] = decodeURIComponent(hash.replace(/^#/, "")).split("@");
+  const [where, at] = safeDecode(hash.replace(/^#/, "")).split("@");
   const [tab, number] = where.split("/");
   closeEpisode();
   showTab(tab in TAB ? tab : "online");   // (the leftmost tab, the user 10-16: Offline sits at the right)

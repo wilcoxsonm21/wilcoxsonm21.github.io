@@ -7,7 +7,11 @@
 :root { color-scheme: dark; --w-pad: max(20px, min(4vw, 56px)); }
 html, body { background: var(--dark); }
 html.ev-embed .localnav, html.ev-embed .footer { display: none; }
-.localnav { background: rgba(15, 14, 13, .72); }
+/* (on its own page the nav is dark, as the page's own nav is over the survival section: html.is-dark in css/site.css) */
+.localnav { background: rgba(15, 14, 13, .72); border-color: rgba(255, 255, 255, .1); color: var(--on-dark); }
+.localnav-links a { color: color-mix(in srgb, var(--on-dark) 60%, transparent); }
+@media (hover: hover) { .localnav-links a:hover { color: var(--on-dark); } .localnav-cta:hover { background: #fff; } }
+.localnav-cta { background: var(--on-dark); color: var(--dark); }
 .w [hidden] { display: none !important; }
 .w.cinema { padding: 0 var(--w-pad) 72px; text-align: center; }
 html:not(.ev-embed) .w.cinema { padding-top: var(--nav-h); }
@@ -80,10 +84,41 @@ html.w-ready .w-list:not([hidden]) { animation: w-fade .35s var(--ease) both; }
 .w-episode .segmented button { padding: 7px 18px; font-size: 14px; }
 
 /* the player: the survival screen, with two videos in it (js/watch-player.js) */
-.w-figure { margin: 26px auto 0; max-width: none; }
-.w-figure .cinema-screen { --sv-room: 330px; cursor: pointer; -webkit-tap-highlight-color: transparent;
-                           width: min(100%, calc((100vh - var(--sv-room)) * (var(--ar)))); }
-html:not(.ev-embed) .w-figure .cinema-screen { --sv-room: 380px; }
+/* The whole player is as wide as its screen: where the height holds the screen narrower than the sheet, the scrub
+   line, the milestones, the goal row and the caption under it line up with the video rather than running past it
+   (the user, 10-16). --ar, the screen's shape, is set on the figure (js/watch-player.js) */
+/* (never under 420 px, or the full width when less: in a short window, a laptop at 200% zoom or 1600x500, the height
+   left the video 25 px wide; there the page scrolls instead) */
+.w-figure { --sv-room: 330px; --w-floor: min(100%, 420px); margin: 26px auto 0; max-width: none;
+            width: min(100%, max(var(--w-floor), calc((100vh - var(--sv-room)) * (var(--ar, 16 / 9)))));
+            transition: width .5s var(--ease); }
+html:not(.ev-embed) .w-figure { --sv-room: 380px; }
+.w-figure { container: wplayer / inline-size; --sv-row: 38px; }
+.w-figure:not(:has(.sv-milestones li)) { --sv-row: 0px; }   /* (BASALT's strip has no milestones' row to stack) */
+/* ... and where it stacks, its height budget takes the milestones' row too, so the player still fits the screen: the
+   same test as the stacking (below), on the width it would have with one row. (sign() where supported; .w-episode is
+   the container 100cqw reads) */
+.w-episode { container-type: inline-size; }
+@supports (width: calc(sign(1px) * 1px)) {
+  .w-figure { --w1: calc((100vh - var(--sv-room)) * (var(--ar, 16 / 9)));
+              --stack: max(0, sign(860px - min(100cqw, var(--w1))));
+              width: min(100%, max(var(--w-floor), calc(var(--w1) - var(--stack) * var(--sv-row) * (var(--ar, 16 / 9))))); }
+}
+/* a player held narrow by the height (a tablet held sideways, a short window) lays its strip out as a phone does: the
+   goal and the plan button on one row, the milestones on the row under them, so neither the goal nor the button is
+   cut off at the video's edge */
+@container wplayer (width < 860px) {
+  .w-figure .sv-strip { flex-wrap: wrap; }
+  .w-figure .sv-goal { flex: 1 1 0; min-width: 0; order: 1; white-space: normal; line-height: 1.35; }
+  .w-figure .sv-goal b + .sv-clock { margin-left: .5em; }
+  .w-figure .sv-goal .sv-clock { white-space: nowrap; display: inline-block; }
+  .w-figure .w-extra { order: 2; flex: none; }
+  .w-figure .w-extra:empty { display: none; }
+  .w-figure .sv-milestones { order: 3; flex-basis: 100%; justify-content: space-between; }
+  .w-figure .sv-milestones li { width: auto; flex: 0 1 28px; }
+  .w-figure .sv-toggle { order: 2; flex: none; }
+}
+.w-figure .cinema-screen { cursor: pointer; -webkit-tap-highlight-color: transparent; width: 100%; }
 .w-figure .sv-film { --film: 32 / 9; }
 .w-video { position: absolute; top: 0; height: 100%; width: 50%; object-fit: fill; background: #000; }
 .w-exec { left: 50%; }
@@ -160,7 +195,8 @@ html:not(.ev-embed) .w-figure .cinema-screen { --sv-room: 380px; }
   .w-cap b { font-size: 14px; }
   .w-cap span { font-size: 12.5px; }
   .w-topbar { height: 56px; padding-right: 48px; }
-  .w-figure { margin: 18px calc(-1 * var(--w-pad)) 0; }
+  html.ev-embed .w-topbar { padding-right: 66px; }   /* (in the modal: › sat 16 px from the close ×, so a missed › closed it) */
+  .w-figure { margin: 18px calc(-1 * var(--w-pad)) 0; width: auto; }
   .w-figure .cinema-screen { width: 100%; border-radius: 0; }
   .w-figure .sv-film { --film: 16 / 18; top: auto; right: auto; bottom: 0; left: 0; width: 100%; height: auto; }
   .w-figure.no-plan .sv-film { --film: 16 / 9; }
