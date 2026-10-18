@@ -18,7 +18,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: none; text-size-adjust: none; }   /* (none: iPad's autosizing undoes the copy's zoom, js/split.js; see scenes/scene-fonts.css) */
 body {
   margin: 0;
   background: var(--bg);

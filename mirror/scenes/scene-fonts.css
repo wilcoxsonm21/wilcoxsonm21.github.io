@@ -11,9 +11,10 @@
 @font-face { font-family: "Source Sans 3"; src: url("../fonts/sourcesans3-greek.woff2") format("woff2"); font-weight: 200 900; font-style: normal; font-display: block; unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF; }
 @font-face { font-family: "Source Sans 3"; src: url("../fonts/sourcesans3-greek-italic.woff2") format("woff2"); font-weight: 200 900; font-style: italic; font-display: block; unicode-range: U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF; }
 
-/* iPad Safari's text autosizing scales up wrapped text (the BASALT task's quote) in a page it thinks is zoomed out, past
-   the box drawn for it: the scenes are laid out at their own size, so it stays off */
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* iPad Safari autosizes text in a mode that resets any text whose size differs from its font-size back to it, so the
+   CSS zoom that fits a scene to its box left every word ~1.5x too big for the boxes drawn for it (the BASALT quote ran
+   out of its box). Only "none" opts out of that mode; "100%" does not */
+html { -webkit-text-size-adjust: none; text-size-adjust: none; }
 
 /* driven by the website (?scroll): no cursor games, no step HUD; on narrow screens the titles move out of the stage */
 html.scene-scroll body { cursor: default !important; }
