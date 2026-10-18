@@ -15,6 +15,7 @@
 //                          also starts the next clip of its queue (pump)
 //   SCENE.waiting()        an image the frame on screen shows is still loading
 //   SCENE.starved()        drawing its clips (Low Power Mode): a clip on show is behind the time the timeline wants
+//   SCENE.drawn()          drawing its clips: how many frames it has drawn (while starved, whether it is catching up)
 //   SCENE.park(), resume() the clips on their way give way to other downloads, and go on (parked(): how many)
 //   SCENE.busy()           something is on its way
 //   SCENE.unlock()         within the reader's tap: lets clips Low Power Mode refused play (true if it did)
@@ -413,7 +414,10 @@
     if (c.width !== d.width || c.height !== d.height) { c.width = d.width; c.height = d.height; }
     c.getContext("2d").drawImage(f, 0, 0, c.width, c.height);
     c.ts = f.timestamp;
+    drawnCount++;
   }
+  let drawnCount = 0;
+  const drawn = () => drawnCount;
   // A clip drawn on show that has fallen more than LAG seconds of its own time behind the timeline (its file's ranges or
   // the decoder can't keep up: BASALT's waterfall episode plays at about 6x, ~7 Mbit/s for its two clips) holds the
   // page's clock (js/site.js, starved) until it is back, as a playing clip with no data does. Without it the overlays and
@@ -635,7 +639,7 @@
   };
   window.SCENE = {
     ready: readyP,
-    render, pause, caption, captions, more, pending, waiting, starved, park, resume, parked, busy, unlock, retime,
+    render, pause, caption, captions, more, pending, waiting, starved, drawn, park, resume, parked, busy, unlock, retime,
     overlaps: () => !!P.clock,   // (only a page whose beats keep their own clocks can carry one on under the next click)
     setNarrow: b => document.documentElement.classList.toggle("narrow", !!b),
     get total() { return TOTAL; },

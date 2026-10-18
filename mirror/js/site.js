@@ -976,6 +976,10 @@
       else s = !!(this.api && this.api.starved && this.api.starved());   // (a figure drawn in the page: its clip, js/lava.js)
       // (only a video that hasn't even its size yet: iOS Safari decodes no frame of a paused video until it plays, so
       // waiting for one held the click for good on a phone, while the clip had long downloaded)
+      // (a scene drawing its clips that still draws new frames is catching up: its 8 s count from the last one. Counted
+      // from the first, a slow connection's earlier waits used them up, and the waterfall episode ran on without its clip)
+      const n = this.api && this.api.drawn ? this.api.drawn() : 0;
+      if (n !== this.drawnN) { this.drawnN = n; this.stall = 0; }
       this.stall = s ? (this.stall || 0) + dt : 0;
       return s && this.stall < 8;
     }

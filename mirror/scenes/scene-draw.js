@@ -102,14 +102,17 @@
 
   // ------------------------------------------------------------------ a file, read by ranges as it is needed
   // The start of the file first (the clips are faststart: their moov is there), then each WIN-sized window a sample needs,
-  // with the next AHEAD_WINS asked for ahead (one at a time, each wait a round trip, fell behind a clip played fast).
-  // Windows far behind the one in use go, so a long clip holds a few MB at most.
+  // with the next AHEAD_WINS asked for ahead (one at a time, each wait a round trip, fell behind a clip played fast), but
+  // no more than MAX_ASKED on their way at once, and those the clip has passed called off: over HTTP/2 every request
+  // shares the line, and a jump's leftovers and far windows held back the one the frame on show needs (on a phone
+  // connection BASALT's waterfall clip sat on one frame while they came in). Windows far behind the one in use go, so a
+  // long clip holds a few MB at most.
   const WIN = 1 << 19;   // 512 KB
-  const AHEAD_WINS = 3;
+  const AHEAD_WINS = 3, MAX_ASKED = 2;
   class Source {
-    constructor(url) { this.url = url; this.wins = new Map(); this.asked = new Set(); this.size = Infinity; this.whole = null; }
-    async get(a, b) {   // bytes [a, b], as an ArrayBuffer (the server may send the whole file: then that)
-      const r = await fetch(this.url, { headers: { Range: `bytes=${a}-${b}` } });
+    constructor(url) { this.url = url; this.wins = new Map(); this.asked = new Map(); this.size = Infinity; this.whole = null; }
+    async get(a, b, signal) {   // bytes [a, b], as an ArrayBuffer (the server may send the whole file: then that)
+      const r = await fetch(this.url, { headers: { Range: `bytes=${a}-${b}` }, signal });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const buf = await r.arrayBuffer();
       if (r.status === 200) { this.whole = buf; this.size = buf.byteLength; return null; }
@@ -136,6 +139,7 @@
     bytes(off, len) {   // the bytes, if in; else null, and their windows are asked for
       if (this.whole) return new Uint8Array(this.whole, off, len);
       const w0 = Math.floor(off / WIN), w1 = Math.floor((off + len - 1) / WIN);
+      for (const [k, ac] of this.asked) if (k < w0) { ac.abort(); this.asked.delete(k); }   // (passed: called off)
       let ok = true;
       for (let w = w0; w <= w1; w++) if (!this.wins.has(w)) { this.want(w); ok = false; }
       for (let k = 1; k <= AHEAD_WINS; k++) this.want(w1 + k);   // (the next ones, ahead)
@@ -150,14 +154,15 @@
       return out;
     }
     want(w) {
-      if (this.whole || this.wins.has(w) || this.asked.has(w) || w * WIN >= this.size) return;
-      this.asked.add(w);
-      this.get(w * WIN, Math.min(this.size, (w + 1) * WIN) - 1).then(buf => {
-        this.asked.delete(w);
+      if (this.whole || this.wins.has(w) || this.asked.has(w) || w * WIN >= this.size || this.asked.size >= MAX_ASKED) return;
+      const ac = new AbortController(), mine = () => this.asked.get(w) === ac;
+      this.asked.set(w, ac);
+      this.get(w * WIN, Math.min(this.size, (w + 1) * WIN) - 1, ac.signal).then(buf => {
+        if (mine()) this.asked.delete(w);
         if (!buf) return;
         this.wins.set(w, new Uint8Array(buf));
         for (const k of this.wins.keys()) if (k > 0 && (k < w - 3 || k > w + 8)) this.wins.delete(k);   // (far behind or ahead)
-      }, () => { this.asked.delete(w); });
+      }, () => { if (mine()) this.asked.delete(w); });
     }
   }
 
