@@ -12,12 +12,13 @@ window.PORTRAIT = !window.SCENE_PORTRAIT ? null : (() => {
     W: 1080, H: Math.round(M + 2 * block(S) + GAP + FOOT),
     // how much of the stage each click fills, following the cards: the random map alone; then the small random map
     // over the guided one (with the "plan" move), and both at full size only once "compare" grows the first back
-    // One entry per click as the page plays them: the adapter splits the deck's second click into its beats
-    // (scene-adapter.js, "stops"), and "compare" opens the last one (its cards move from about .2 s to 1.05 s in)
+    // One entry per click as the page plays them: one per beat (scene-adapter.js, "stops"): task, random, stuck, plan,
+    // early, learn, compare. The frame grows when "plan" brings the guided map in below (its cards move from .1 s), not
+    // before: it grew at "random", and the box stood half empty under the random map for two clicks
     FILL: (() => {
       const one = Math.round(M + block(S) + FOOT), plan = Math.round(M + block(.5) + GAP + block(S) + FOOT);
       const both = Math.round(M + 2 * block(S) + GAP + FOOT);
-      return [one, [{ h: plan, at: .1 / SP, dur: 1.15 / SP }], plan, plan, plan, plan,
+      return [one, one, one, [{ h: plan, at: .1 / SP, dur: 1.15 / SP }], plan, plan,
               [{ h: both, at: .2, dur: 1.2 / SP }]];
     })(),
     // each card's centre, zoom and opacity per camera layout (the scene's LAYOUT; null keeps the opacity)
