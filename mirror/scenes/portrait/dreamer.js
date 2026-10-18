@@ -87,9 +87,13 @@ window.PORTRAIT = !window.SCENE_PORTRAIT ? null : (() => {
       if (r === 1 && p === 5) {
         const l = box(lbls[11]), { ax, ay, dy } = place[11], kl = LABEL * sx;
         const top = Y + (ay - y0) * sy + (l.y + dy - ay) * kl, base = Y + PH;
-        // on a phone it is drawn larger than the value and bar need, nudged right into the free space past the panel's
-        // edge, so it stays clear of the neighbouring bar's "0"
-        ring = { cx: X + (ax - x0) * sx + (l.x + l.width / 2 - ax) * kl + 16, cy: (top + base) / 2, r: (base - top) / 2 + 24 };
+        // an upright oval centred on the value, its stroke in the gap between the value and the neighbouring bar's
+        // "0", and tall enough that the value's corners fall inside it
+        const n = box(lbls[10]), nx = place[10].ax;
+        const left = X + (ax - x0) * sx + (l.x - ax) * kl, right = X + (nx - x0) * sx + (n.x + n.width - nx) * kl;
+        const hw = l.width * kl / 2, cx = left + hw, gap = left - right, w = Math.min(5, gap * .6);
+        const a = hw + gap / 2, half = (base - top) / 2 + 4;
+        ring = { cx, cy: (top + base) / 2, a, b: half / Math.sqrt(Math.max(.2, 1 - (hw / a) ** 2)) + w, w };
       }
     }
     // one "Success rate (%)" for each deck row (three grid rows), left of them and centred on their plots
@@ -115,9 +119,9 @@ window.PORTRAIT = !window.SCENE_PORTRAIT ? null : (() => {
 
     // the ring is drawn in the last beat, when the chart has its full height
     const c = $("ring");
-    c.setAttribute("cx", ring.cx); c.setAttribute("cy", ring.cy); c.setAttribute("rx", ring.r); c.setAttribute("ry", Math.max(ring.r * .52, 30));
+    c.setAttribute("cx", ring.cx); c.setAttribute("cy", ring.cy); c.setAttribute("rx", ring.b); c.setAttribute("ry", ring.a);
     c.setAttribute("transform", `rotate(-90 ${ring.cx} ${ring.cy})`);
-    c.style.strokeWidth = 6;
+    c.style.strokeWidth = ring.w;
   }
 
   // every frame: the footnote stays under the last legend block shown, moving down as each block's heading fades in,

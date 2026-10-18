@@ -21,7 +21,7 @@ window.SCENE_PORTRAIT = /[?&]portrait\b/.test(location.search);
 window.PORTRAIT = null;
 if (window.SCENE_PORTRAIT) document.documentElement.classList.add("portrait");
 </script>
-<script src="portrait/dreamer.js"></script>
+<script src="portrait/dreamer.js?v=20261017f"></script>
 <script>
 if (window.PORTRAIT) document.head.insertAdjacentHTML("beforeend", "<style>#stage{width:" + PORTRAIT.W + "px!important;" +
   "height:" + PORTRAIT.H + "px!important}html.portrait .title,html.portrait #ptitle,html.portrait .callout" +
@@ -6457,9 +6457,9 @@ z
   <div class="callout" id="c1" style="color:#0e8a7a"><div>Beats every offline baseline, including Dreamer V4,<br>without using rewards</div></div>
   <div class="callout" id="c2" style="color:#7c3aed"><div>Far outperforms Dreamer V3, without rewards:<br>5× iron ingot success rate,<br>9× iron pickaxe success rate</div></div>
   <!-- oracle callout: a ring drawn around the diamond result (Mirror + Oracle VP, bottom-right panel); an upright oval
-       (rx is its height, as it is turned -90), so it clears the neighbouring bar's "0" -->
+       (rx is its height, as it is turned -90), centred on the value, so it clears the neighbouring bar's "0" -->
   <svg id="ringsvg" style="position:absolute;left:0;top:0;width:1920px;height:1080px;pointer-events:none;overflow:visible" viewBox="0 0 1920 1080">
-    <ellipse id="ring" cx="1765" cy="753" rx="24" ry="12" transform="rotate(-90 1765 753)" pathLength="1"
+    <ellipse id="ring" cx="1763.7" cy="753" rx="24" ry="12" transform="rotate(-90 1763.7 753)" pathLength="1"
              style="fill:none;stroke:#5f5180;stroke-width:3.5;stroke-linecap:round;stroke-dasharray:1 1;stroke-dashoffset:1;visibility:hidden"/>
   </svg>
   <div class="callout" id="c3" style="color:#5f5180"><div>With an oracle video planner, Mirror finds diamonds,<br>unlike all online baselines</div></div>
