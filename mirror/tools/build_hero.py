@@ -12,6 +12,8 @@ animation. Nothing from the video plans or human demos.
 
 usage:
   python3 mirror/tools/build_hero.py                 # writes media/hero.mp4 and media/hero_poster.jpg
+  (then media/hero_small.mp4, for small screens and slow connections: $FFMPEG -i media/hero.mp4 -vf
+   scale=960:288:flags=lanczos -c:v libx264 -preset veryslow -crf 27 -tune film -pix_fmt yuv420p -movflags +faststart -an)
   python3 mirror/tools/build_hero.py --sheet out.jpg  # contact sheet of the montage, no encode
   python3 mirror/tools/build_hero.py --sheet out.jpg --mask clip.png --only lava   # one shot, as the
       page shows it; clip.png is a screenshot of .hero-video-clip with the video hidden and the clip painted red
@@ -117,9 +119,13 @@ def crosshair(x, y):
 
 
 WATERFALL = Source(SCENE_MEDIA / "basalt_ep5_pov.mp4", (0, 0, 640, 300), hud=crosshair(319, 166))
-FINDCAVE = Source(VIDEOS / "basalt" / "basalt_findcave_comparison_resync.webm", (1280, 566, 640, 290),   # 30 min
-                  hud=crosshair(319, 141))
-LAVA = Source(VIDEOS / "lava_escape" / "icl_escape.mp4", (640, 50, 640, 300), hud=crosshair(319, 179))
+# FindCave and lava come from the episodes' own recordings (640x360, above the hotbar): the cave was a panel of the
+# comparison grid (a 320 px pane upscaled into a 2.7 Mbps VP9 grid), and zoomed 1.2x on top, so it was the one blurry
+# shot; lava was a panel of a two-up composite. FindCave is the self-improving arm's episode 00, as the BASALT episodes
+# viewer streams it (hwryu/mirror_diamond_eval, basalt_findcave_self_improving/raw/00.mp4), copied to the talk folder.
+FINDCAVE = Source(TALK / "source_videos" / "hero" / "basalt_findcave_self_improving_00.mp4", (0, 0, 640, 312),
+                  hud=crosshair(319, 179))
+LAVA = Source(TALK / "source_videos" / "gallery" / "lava_pov.mp4", (0, 0, 640, 300), hud=crosshair(319, 179))
 SURVIVAL = Source(TALK / "source_videos" / "diamonds_oracle_student.mp4", (0, 0, 640, 316),   # above the hotbar
                   hud=crosshair(319, 179))
 ROBOT = Source(TALK / "intro_anim" / "data" / "clips" / "trained.mp4", (0, 0, 1024, 1024))
@@ -219,7 +225,7 @@ SHOTS = [
         Layer(ANTMAZE, 18.0, box=ROW3[2], speed=1.5, zoom=(1.0, 1.04)),        # the ant fills the o
     ], SEAMS3),
     Shot("lava", 2.2, [Layer(LAVA, 15.0, focus=(.5, .55), zoom=(1.0, 1.07), grade=MC)]),
-    Shot("cave", 2.4, [Layer(FINDCAVE, 16.4, focus=(.41, .5), zoom=(1.2, 1.28), grade=MC)]),   # left of the hand
+    Shot("cave", 2.4, [Layer(FINDCAVE, 109.0, focus=(.5, .5), zoom=(1.0, 1.06), grade=MC)]),   # down into the cave
     Shot("manipulation", 2.3, [
         Layer(CUBES, 0.9, box=ROW2[0], speed=0.72, focus=(.5, .68), zoom=(1.13, 1.17)),   # table edges above
         Layer(ROBOT, 1.0, box=ROW2[1], speed=0.76, focus=(.5, .56), zoom=(1.0, 1.05)),    # the letters
@@ -321,7 +327,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, default=SITE / "media" / "hero.mp4")
     ap.add_argument("--poster", type=Path, default=SITE / "media" / "hero_poster.jpg")
-    ap.add_argument("--crf", type=int, default=20)
+    ap.add_argument("--crf", type=int, default=23)   # (23: about 4.4 MB, the size it was at 20 with the blurry cave)
     ap.add_argument("--sheet", type=Path, help="write a contact sheet instead of encoding")
     ap.add_argument("--mask", help="letter mask (red openings) to view the sheet through")
     ap.add_argument("--step", type=float, default=0.8)
