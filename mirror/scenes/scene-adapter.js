@@ -592,6 +592,8 @@
   // GAP seconds of scene time, the last one seen stays, at its own (faint) opacity, so the page's caption never blanks
   // for a frame, whichever way T is moving (a jump further than GAP still finds no caption where there is none).
   const GAP = .35;
+  // a note the scene draws in its own stage at this size (css --in-stage: 1, the text-conditioning chart's tall layout) stays out of the caption
+  const notInStage = el => getComputedStyle(el).getPropertyValue("--in-stage").trim() !== "1";
   let seenT = null, seenC = null;
   function caption() {
     if (!TITLES) {
@@ -599,7 +601,7 @@
       CALLOUTS = [...document.querySelectorAll(".callout")];   // the Dreamer chart's notes beside its title
     }
     const T = lastT ?? 0;
-    let t = mostVisible(TITLES), c = mostVisible(CALLOUTS);
+    let t = mostVisible(TITLES), c = mostVisible(CALLOUTS.filter(notInStage));
     if (t) seenT = { el: t, T }; else if (seenT && Math.abs(T - seenT.T) < GAP) t = seenT.el;
     if (c) seenC = { el: c, T }; else if (seenC && Math.abs(T - seenC.T) < GAP) c = seenC.el;
     if (!t) return null;
@@ -610,7 +612,7 @@
   // every title the scene can show, and every note beside one: the page sizes its caption block for the longest
   function captions() {
     caption();
-    return { titles: TITLES.map(inner), subs: CALLOUTS.map(el => inner(el).replace(/<br\s*\/?>/g, " ")) };
+    return { titles: TITLES.map(inner), subs: CALLOUTS.filter(notInStage).map(el => inner(el).replace(/<br\s*\/?>/g, " ")) };
   }
 
   window.SceneAdapter = {

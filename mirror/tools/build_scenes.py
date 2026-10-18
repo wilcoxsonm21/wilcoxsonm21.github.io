@@ -69,6 +69,40 @@ PATCHES = {
          'fade("g_wf1", 1, .28, .5), move("g_wf1", "pul", .94, .27, .01, "lin"), move("g_wf1", "pul", 1, .28, .6, "out")'),
         ('fade("lab_wf", 1, 1.15, .4)', 'fade("lab_wf", 1, .85, .4)'),
     ],
+    # callouts, as in the Dreamer chart: each result gets a line saying what it shows, in the colour of its bar, right
+    # above the chart (the random-walk line in a lighter blue, as its bar). They cross-fade from click to click; scene-adapter.js's caption() picks them up as the note under the
+    # title on narrow screens and in portrait, so they are hidden in the stage there.
+    "textcond": [
+        ('#lab_spawn { display: none !important; }   /* "spawn point / unseen world" label removed */',
+         '#lab_spawn { display: none !important; }   /* "spawn point / unseen world" label removed */\n'
+         "/* website: a line above the chart saying what each result shows, as the Dreamer chart's callouts */\n"
+         "/* one line each, starting at the chart's left edge (as its note below), just above the group headers */\n"
+         ".callout { position: absolute; left: 992px; top: 54px; white-space: nowrap; font-size: 30px; font-weight: 600;\n"
+         "           line-height: 1.3; letter-spacing: .015em; visibility: hidden; }\n"
+         "html.scene-scroll.narrow .callout { visibility: hidden !important; }\n"
+         "/* the tall layout (phones, iPads held upright, narrow desktop windows): the line stays in the stage, between the\n"
+         "   shrunken figure and the group headers, as large as the longest still fits on one line (the size of the group\n"
+         "   headers); --in-stage keeps it out of the page's caption (scene-adapter.js) */\n"
+         "html.portrait #stage .callout { display: block !important; left: 84px; top: 589px; font-size: 36px; --in-stage: 1; }\n"
+         "html.scene-scroll.narrow.portrait #stage .callout { visibility: inherit !important; }"),
+        ('    <div class="label" id="note" style="font-size:24px">Average success across 10 tasks in two unseen worlds</div>\n'
+         '  </div>',
+         '    <div class="label" id="note" style="font-size:24px">Average success across 10 tasks in two unseen worlds</div>\n'
+         '  </div>\n'
+         '  <div class="callout" id="c0" style="color:#6b6862"><div>Baselines struggle to complete the task</div></div>\n'
+         '  <div class="callout" id="c1" style="color:rgb(98, 134, 212)"><div>With random exploration, Mirror already reaches 42%</div></div>\n'
+         '  <div class="callout" id="c2" style="color:#7a3fe0"><div>Self-improvement beats random exploration by over 50%</div></div>\n'
+         '  <div class="callout" id="c3" style="color:#0e8a7a"><div>Expert actions only increase success by 7%</div></div>'),
+        ('set("bar_bc", "o", 1, 1.4), move("bar_bc", "v", 3, 1.4, .8, "out")',
+         'set("bar_bc", "o", 1, 1.4), move("bar_bc", "v", 3, 1.4, .8, "out"), fade("c0", 1, 1.2, .5)'),
+        ('fade("lab_rand", 1, 0, .4), set("bar_rand", "o", 1, .1),',
+         'fade("c0", 0, 0, .3), fade("c1", 1, .25, .5), fade("lab_rand", 1, 0, .4), set("bar_rand", "o", 1, .1),'),
+        ('fade("gain", 1, 1.7, .4)', 'fade("gain", 1, 1.7, .4), fade("c1", 0, .7, .3), fade("c2", 1, .95, .5)'),
+        ('fade("lab_sup", 1, 0, .4), set("bar_sup", "o", 1, .1),',
+         'fade("c2", 0, 0, .3), fade("c3", 1, .25, .5), fade("lab_sup", 1, 0, .4), set("bar_sup", "o", 1, .1),'),
+        ('for (const id of ["axis", "divider", "grp_a", "grp_b", "note"]) vis($(id), st[id].o);',
+         'for (const id of ["axis", "divider", "grp_a", "grp_b", "note", "c0", "c1", "c2", "c3"]) vis($(id), st[id].o);'),
+    ],
 }
 
 # Where a scene's own script reads its portrait layout (scenes/portrait/<name>.js, PORTRAIT_HEAD above): exact text,

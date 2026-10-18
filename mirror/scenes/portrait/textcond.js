@@ -22,8 +22,9 @@ window.PORTRAIT = !window.SCENE_PORTRAIT ? null : (() => {
     BARS: { viper: { x: 140, v: 2 }, rand: { x: 330, v: 42 }, si: { x: 520, v: 64 }, bc: { x: 760, v: 3 },
             sup: { x: 950, v: 71 } },
     AXIS: [64, 1180, 962, 2], GROUP_Y: 650,
-    // the figure's centre (ox, oy) moves to (cx, cy) at scale gs while the chart comes in
-    FIG_SIDE: { gs: .46, cx: 540, cy: 334, ox: 540, oy: 718 },
+    // the figure's centre (ox, oy) moves to (cx, cy) at scale gs while the chart comes in, leaving room above the group
+    // headers for the result's line (the scene's .callout)
+    FIG_SIDE: { gs: .42, cx: 540, cy: 300, ox: 540, oy: 718 },
   };
   // this style comes before the scene's own, so a :root prefix lets it win over the scene's rules at their specificity
   document.head.insertAdjacentHTML("beforeend", `<style>

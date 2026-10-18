@@ -67,6 +67,16 @@ svg path.line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
        pointer-events: none; }
 body.cursor #hud { opacity: 1; }
 #lab_spawn { display: none !important; }   /* "spawn point / unseen world" label removed */
+/* website: a line above the chart saying what each result shows, as the Dreamer chart's callouts */
+/* one line each, starting at the chart's left edge (as its note below), just above the group headers */
+.callout { position: absolute; left: 992px; top: 54px; white-space: nowrap; font-size: 30px; font-weight: 600;
+           line-height: 1.3; letter-spacing: .015em; visibility: hidden; }
+html.scene-scroll.narrow .callout { visibility: hidden !important; }
+/* the tall layout (phones, iPads held upright, narrow desktop windows): the line stays in the stage, between the
+   shrunken figure and the group headers, as large as the longest still fits on one line (the size of the group
+   headers); --in-stage keeps it out of the page's caption (scene-adapter.js) */
+html.portrait #stage .callout { display: block !important; left: 84px; top: 589px; font-size: 36px; --in-stage: 1; }
+html.scene-scroll.narrow.portrait #stage .callout { visibility: inherit !important; }
 </style>
 <!-- mirror theme (tools/theme.py) -->
 <style>
@@ -113,6 +123,10 @@ body.cursor #hud { opacity: 1; }
     <div class="mlab" id="lab_sup" style="color:var(--supT)"><b>Mirror</b><br>(supervised)</div>
     <div class="label" id="note" style="font-size:24px">Average success across 10 tasks in two unseen worlds</div>
   </div>
+  <div class="callout" id="c0" style="color:#6e6b67"><div>Baselines struggle to complete the task</div></div>
+  <div class="callout" id="c1" style="color:rgb(98, 134, 212)"><div>With random exploration, Mirror already reaches 42%</div></div>
+  <div class="callout" id="c2" style="color:#3361c4"><div>Self-improvement beats random exploration by over 50%</div></div>
+  <div class="callout" id="c3" style="color:#2a7db8"><div>Expert actions only increase success by 7%</div></div>
 </div>
 <div id="hud"></div>
 
@@ -252,16 +266,16 @@ const STEPS = [
          fade("note", 1, .9, .5), fade("lab_viper", 1, .9, .5), fade("lab_bc", 1, .9, .5),
          fade("lab_rand", .3, .9, .5), fade("lab_si", .3, .9, .5), fade("lab_sup", .3, .9, .5),
          set("bar_viper", "o", 1, 1.3), move("bar_viper", "v", 2, 1.3, .8, "out"),
-         set("bar_bc", "o", 1, 1.4), move("bar_bc", "v", 3, 1.4, .8, "out")] },
+         set("bar_bc", "o", 1, 1.4), move("bar_bc", "v", 3, 1.4, .8, "out"), fade("c0", 1, 1.2, .5)] },
   { name: "random", hold: 2.2,
-    tw: [fade("lab_rand", 1, 0, .4), set("bar_rand", "o", 1, .1), move("bar_rand", "v", 42, .1, 1.0, "out")] },
+    tw: [fade("c0", 0, 0, .3), fade("c1", 1, .25, .5), fade("lab_rand", 1, 0, .4), set("bar_rand", "o", 1, .1), move("bar_rand", "v", 42, .1, 1.0, "out")] },
   // a copy of the random-walk V2A model's bar slides over and self-improves
   { name: "self", hold: 3.4,
     tw: [set("bar_si", "dx", BARS.rand.x - BARS.si.x), set("bar_si", "v", 42), set("bar_si", "o", 1),
          set("bar_si", "lab", 0), move("bar_si", "dx", 0, .1, .8), fade("lab_si", 1, .5, .5),
-         move("bar_si", "lab", 1, .75, .3), move("bar_si", "v", 64, 1.0, 1.1, "out"), fade("gain", 1, 1.7, .4)] },
+         move("bar_si", "lab", 1, .75, .3), move("bar_si", "v", 64, 1.0, 1.1, "out"), fade("gain", 1, 1.7, .4), fade("c1", 0, .7, .3), fade("c2", 1, .95, .5)] },
   { name: "supervised", hold: 2.6,
-    tw: [fade("lab_sup", 1, 0, .4), set("bar_sup", "o", 1, .1), move("bar_sup", "v", 71, .1, 1.1, "out")] },
+    tw: [fade("c2", 0, 0, .3), fade("c3", 1, .25, .5), fade("lab_sup", 1, 0, .4), set("bar_sup", "o", 1, .1), move("bar_sup", "v", 71, .1, 1.1, "out")] },
 ];
 
 // Fused clicks: a chained beat hands over to the next one halfway through and keeps playing underneath it.
@@ -332,7 +346,7 @@ function apply(st) {
     tile.style.transform = `scale(${ts.s})`;
   }
   // the chart
-  for (const id of ["axis", "divider", "grp_a", "grp_b", "note"]) vis($(id), st[id].o);
+  for (const id of ["axis", "divider", "grp_a", "grp_b", "note", "c0", "c1", "c2", "c3"]) vis($(id), st[id].o);
   vis($("grp_a_rule"), st.grp_a.o); vis($("grp_b_rule"), st.grp_b.o);
   for (const id in BARS) {
     const b = BARS[id], s = st["bar_" + id];

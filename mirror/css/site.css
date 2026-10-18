@@ -832,8 +832,9 @@ html.narrow .stage-caption::before { content: ""; position: absolute; inset: 0; 
                                      border-radius: 18px 18px 0 0; transform: translateY(var(--cap-top, 100%));
                                      transition: transform var(--cap-dur, .45s) var(--ease); }
 html.narrow .stage-caption b { font-weight: 700; }
-html.narrow .stage-caption .sub { display: block; margin-top: 8px; font-family: var(--sans); font-size: 14.5px; font-weight: 500;
-                                   letter-spacing: 0; line-height: 1.45; color: var(--muted); }
+/* (the note grows with the title: 14.5 px on phones, 18 px on an iPad held upright, where the title is 30 px) */
+html.narrow .stage-caption .sub { display: block; margin-top: 8px; font-family: var(--sans); font-size: clamp(14.5px, 2.6vw, 18px); font-weight: 500;
+                                   letter-spacing: 0; line-height: 1.45; color: var(--muted); text-wrap: balance; }
 html.narrow .stage-frame { width: var(--card-w, calc(100vw - 24px)); aspect-ratio: 1920 / 880; border-radius: 0 0 18px 18px; }
 /* the box hangs from --card-top (site.js), so a click that fills less of a tall stage leaves its room at the bottom */
 html.narrow .chapter:not(.chapter-split) .stage { justify-content: flex-start; padding-top: var(--card-top, 0px); }

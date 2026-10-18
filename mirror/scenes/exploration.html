@@ -175,6 +175,12 @@ const R = buildCard("r", $("rsvg"), GEOM.random);
 el("circle", { id: "rcirc", cx: GEOM.circle.cx, cy: GEOM.circle.cy, r: GEOM.circle.r, fill: "rgba(28,27,26,.045)",
                stroke: "#979695", "stroke-width": 2.5, "stroke-dasharray": "11 9" }, R.under);
 badge("xbad", "x", R.over);
+// the states the first rollout reaches: a soft band drawn along under it, while the first title is read
+const rblur = el("filter", { id: "rblur", x: "-20%", y: "-20%", width: "140%", height: "140%" }, R.defs);
+el("feGaussianBlur", { stdDeviation: 9 }, rblur);
+el("path", { id: "reach", d: GEOM.random[0].d, fill: "none", stroke: "#4e7bdb", "stroke-opacity": .2, "stroke-width": 46,
+             "stroke-linecap": "round", "stroke-linejoin": "round", pathLength: 1000, "stroke-dasharray": "1000 1000",
+             filter: "url(#rblur)" }, R.under);
 // guided card: the video plan, a soft band with a dashed centre line, revealed from Start to Goal
 const Gc = buildCard("g", $("gsvg"), GEOM.guided);
 const blur = el("filter", { id: "gblur", x: "-20%", y: "-40%", width: "140%", height: "180%" }, Gc.defs);
@@ -237,20 +243,24 @@ function rollouts(ids, bar, at, { base = .42, rate = 1500, overlap = .62 } = {})
   return { tw, end };
 }
 const ids = list => list.map(t => t.id);
-const RAND = rollouts(ids(GEOM.random), "rbar", .55, { base: .38, rate: 1700, overlap: .55 });
+// the first rollout draws on its own, slowly, under the first title; the rest follow under the second
+const FIRST = GEOM.random[0].id, FIRST_AT = .2, FIRST_DUR = 1.5;
+const RAND = rollouts(ids(GEOM.random.slice(1)), "rbar", .55, { base: .38, rate: 1700, overlap: .55 });
 const EARLY = rollouts(ids(GEOM.guided.slice(0, 2)), "gbar", .5);
 const LEARN = rollouts(ids(GEOM.guided.slice(2)), "gbar", .5, { overlap: .7 });
 
 const INIT = { t0: { o: 1 }, rcard: { o: 1 }, gcard: { o: 0 }, rhead: { o: 0 }, ghead: { o: 0 }, rcirc: { s: .9 },
-               xbad: { s: .4 }, cbad: { s: .4 }, gbar: { o: 1 } };
+               xbad: { s: .4 }, cbad: { s: .4 }, gbar: { o: 1 }, reach: { o: 1 } };
 for (const id in LAYOUT.focus) { const [cx, cy, sc] = LAYOUT.focus[id]; Object.assign(INIT[id], { cx, cy, sc }); }
 
 const STEPS = [
   // the task: a Start and a far-away Goal
-  { name: "task", hold: 3.2, tw: [] },
+  { name: "task", hold: 3.2,
+    tw: [fade(FIRST, 1, FIRST_AT, .01, "lin"), move(FIRST, "draw", 1, FIRST_AT, FIRST_DUR, "sio"),
+         move("reach", "draw", 1, FIRST_AT, FIRST_DUR, "sio"), fade(FIRST + "_dot", 1, FIRST_AT + FIRST_DUR - .02, .18, "lin")] },
   // random exploration: rollouts wander around the start; the region they cover appears at the end
   { name: "random", hold: RAND.end + 1.3,
-    tw: [...swap("t0", "t1"), fade("rhead", 1, .2, .5), fade("rbar", 1, .2, .5), ...RAND.tw, fade("rcirc", 1, RAND.end + .1, .6),
+    tw: [...swap("t0", "t1"), fade("reach", 0, .1, .6), fade("rhead", 1, .2, .5), fade("rbar", 1, .2, .5), ...RAND.tw, fade("rcirc", 1, RAND.end + .1, .6),
          move("rcirc", "s", 1, RAND.end + .1, .8, "out")] },
   // it never gets to the goal
   { name: "stuck", hold: 2.6, tw: [...swap("t1", "t2"), ...pop("xbad", .45)] },
@@ -329,6 +339,9 @@ function apply(st) {
       vis(n, p.o);
       putA(b.rect, "width", f2(b.bw * p.fill));
       putA(b.mark, "x", f2(b.bx + b.bw * p.fill - 1.5));
+    } else if (id === "reach") {
+      put(n, "strokeDashoffset", f2(1000 * (1 - p.draw)));
+      vis(n, p.draw > 0 ? p.o : 0);
     } else if (id === "band" || id === "planreveal") {
       put(n, "strokeDashoffset", f2(1000 * (1 - p.draw)));
       put(n, "visibility", p.draw > 0 ? "visible" : "hidden");
