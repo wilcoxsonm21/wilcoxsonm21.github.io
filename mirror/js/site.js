@@ -162,7 +162,28 @@
   let glide = null, ownAt = null;            // the page's own scrolling: a glide under way; the last position it set
   const scrolling = now => touching || now < holdUntil;
   function takeOver(s) { glide = null; snapArmed = true; holdUntil = Math.max(holdUntil, performance.now() + s * 1e3); }
-  addEventListener("wheel", () => takeOver(MOVE_HOLD), { passive: true });
+  // A trackpad's swipe coasts on after the fingers lift, and Safari goes on coasting after the page jumps (a nav link):
+  // it landed on its section and then drifted on past it. So for a moment after a jump (holdJump), wheel events that
+  // carry on the stream under way before it, the same way and no faster, are that coast: they are cancelled, and the
+  // page is held where it landed. A pause, a turn or a faster event is a new swipe, the reader's again.
+  const COAST_GAP = 150, COAST_MAX = 2500;   // ms: between a coast's events, at most; the hold, at most
+  let wheelAt = -1e9, wheelDy = 0, hold = null;   // the last wheel event; the jump being held: { place, until }
+  const coasting = new WeakSet();
+  const cancelCoast = e => { if (coasting.has(e) && e.cancelable) e.preventDefault(); };
+  function holdJump(place) {
+    if (!hold) addEventListener("wheel", cancelCoast, { capture: true, passive: false });
+    hold = { place, until: performance.now() + COAST_MAX };
+  }
+  function letJumpGo() { if (hold) { hold = null; removeEventListener("wheel", cancelCoast, { capture: true }); } }
+  addEventListener("wheel", e => {
+    const now = performance.now(), dy = e.deltaY;
+    if (hold && now < hold.until && now - wheelAt < COAST_GAP && dy && Math.sign(dy) === Math.sign(wheelDy)
+        && Math.abs(dy) <= Math.abs(wheelDy) * 1.25 + 2) coasting.add(e);
+    else letJumpGo();
+    wheelAt = now;
+    wheelDy = dy;
+    if (!coasting.has(e)) takeOver(MOVE_HOLD);
+  }, { capture: true, passive: true });
   addEventListener("keydown", e => { if (SCROLL_KEYS.has(e.key)) takeOver(MOVE_HOLD); });
   // a finger landing stops a glide where it is, even if it doesn't move
   let touchAt = 0;
@@ -1905,12 +1926,33 @@
   }
   // a jump to an #anchor within the page (the nav's links) is held there too for a moment, while the sections it
   // passed load and take their size (the survival clip's screen takes its shape)
-  addEventListener("hashchange", e => {
-    if (window.MIRROR_MODAL?.owns(e.oldURL) || window.MIRROR_MODAL?.owns(e.newURL)) return;   // a modal opening or closing
+  function landJump() {
     const a = comeBack = anchorPlace();
     noSnapUntil = performance.now() + 2500;   // the nav's jump lands where it was sent
     setTimeout(() => { if (comeBack === a) comeBack = null; }, 1500);
+    return a;
+  }
+  addEventListener("hashchange", e => {
+    if (window.MIRROR_MODAL?.owns(e.oldURL) || window.MIRROR_MODAL?.owns(e.newURL)) return;   // a modal opening or closing
+    landJump();
   });
+  // The nav's links make their jump here rather than leaving it to the browser, and hold it (holdJump): in Safari a
+  // trackpad's coast carried the page on past the section, or back short of one above
+  $$(".localnav a[href^='#']").forEach(a => a.addEventListener("click", e => {
+    if (!a.hash || !document.getElementById(safeDecode(a.hash.slice(1)))) return;   // (the Paper pill's bare "#")
+    if (e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (location.hash !== a.hash) history.pushState(null, "", a.hash);
+    const p = landJump();
+    if (p) { restorePlace(p); holdJump(p); }
+  }));
+  // (each scroll while it is held, a coast that couldn't be cancelled or a section above taking its size, goes back)
+  addEventListener("scroll", () => {
+    if (!hold) return;
+    if (performance.now() > hold.until) { letJumpGo(); return; }
+    const y = Math.max(0, Math.round(docTop(hold.place.el) + hold.place.dy));
+    if (Math.abs(scrollY - y) > 1) scrollSelf(y);
+  }, { passive: true });
   addEventListener("pagehide", () => {
     sy = scrollY;
     notePlace();
@@ -1920,7 +1962,12 @@
     } catch (e) {}
   });
   const settleBack = () => { if (comeBack) restorePlace(comeBack); };
-  const letGo = () => { comeBack = null; };
+  // (a coast's wheel events are not the reader's; a key, a touch or a click is, and lets a held jump go too)
+  const letGo = e => {
+    if (coasting.has(e)) return;
+    comeBack = null;
+    if (e && e.type !== "wheel") letJumpGo();
+  };
   for (const ev of ["wheel", "touchstart", "keydown", "pointerdown"]) addEventListener(ev, letGo, { capture: true, passive: true });
   document.fonts.ready.then(settleBack);
   addEventListener("load", () => { settleBack(); setTimeout(() => { settleBack(); letGo(); }, 1500); });
