@@ -24,6 +24,12 @@
     return;
   }
   const SEG_TAIL = 0.5;               // seconds of settled frame at the end of each segment
+  // ?beats (the page's ?timing panel, or a chapter's data-beats): each beat of a chained click is a click of its own, which
+  // plays its beat out and holds, so the page can time every change by hand. A beat the next one overlapped now plays out
+  // first, so later times move: REMAP pairs where each beat starts on the chained timeline and on this one, for the page's
+  // data-speed and data-lead.
+  const SPLIT = /[?&]beats(&|$)/.test(location.search), SPLIT_MIN = .2, SPLIT_TAIL = .1;
+  let REMAP = null;
   const PENDING_MAX = 6;              // seconds a clip or image counts as pending, at most (pending)
   const lim = (x, a, b) => Math.min(b, Math.max(a, x));
 
@@ -259,25 +265,68 @@
     }
     return e;
   }
-  function buildSegments() {
+  function segments(stops, chained) {
     const segs = [];
     let G = 0;
-    for (const b of P.stops()) {
+    for (const b of stops) {
       const beats = [];
       let k = b, start = 0;
       for (;;) {
         beats.push([k, start]);
-        if (!P.chained(k) || k + 1 >= STEPS.length) break;
+        if (!chained(k) || k + 1 >= STEPS.length) break;
         start += P.handover(k) / SPEED;
         k++;
       }
       const end = Math.max(...beats.map(([kk, st]) => st + beatEnd(kk) / SPEED));
-      segs.push({ beats, first: beats[0][0], start: G, dur: end + SEG_TAIL, names: beats.map(([kk]) => STEPS[kk].name) });
-      G += end + SEG_TAIL;
+      // (a beat split off a chain, ?beats, holds on its settled frame for less: the page holds it as long as it likes)
+      const tail = P.chained(k) && k + 1 < STEPS.length ? SPLIT_TAIL : SEG_TAIL;
+      segs.push({ beats, first: beats[0][0], start: G, dur: end + tail, tail, names: beats.map(([kk]) => STEPS[kk].name) });
+      G += end + tail;
     }
+    return { segs, total: G };
+  }
+  // where each beat starts in the timeline of segs
+  const beatStarts = segs => { const at = []; for (const g of segs) for (const [k, st] of g.beats) at[k] = g.start + st; return at; };
+  let BASE = null, FUSED = null;   // the clicks before any cuts (retime), and where each beat starts on the chained timeline
+  function buildSegments() {
+    let L = segments(P.stops(), P.chained);
+    FUSED = beatStarts(L.segs);
+    if (SPLIT) {
+      // every beat of a chain starts a click of its own, but one too short to hold on (under SPLIT_MIN) stays with the next
+      const chained = k => P.chained(k) && beatEnd(k) / SPEED < SPLIT_MIN;
+      const stops = STEPS.map((_, k) => k).filter(k => P.stops().includes(k) || k > 0 && P.chained(k - 1) && !chained(k - 1));
+      L = segments(stops, chained);
+    }
+    BASE = L.segs;
+    retime([]);
+  }
+  // SCENE.retime(cuts): cuts[s], timeline seconds into click s, starts click s+1 there, while click s's beats play on under
+  // it (the page's data-dwell shorter than the click, or a tap in the ?timing panel's Record while it plays). A carried beat
+  // joins the next click's beats at a negative start, so render gives it its own clock (BT), as a chained beat's.
+  function retime(cuts) {
+    if (!P.clock) cuts = [];
+    const segs = [], at = [];
+    let G = 0;
+    BASE.forEach((b, s) => {
+      const own = b.beats.map(([k, st]) => [k, st]);
+      for (const [k, st] of own) at[k] = G + st;
+      const carry = [];
+      for (let k = 0; k < own[0][0]; k++) if (at[k] != null && at[k] + beatEnd(k) / SPEED > G + 1e-3) carry.push([k, at[k] - G]);
+      const all = [...carry, ...own];
+      const full = Math.max(...all.map(([k, st]) => st + beatEnd(k) / SPEED)) + b.tail;
+      const dur = cuts[s] != null && cuts[s] < full && s < BASE.length - 1 ? Math.max(.05, cuts[s]) : full;
+      segs.push({ beats: all, first: own[0][0], start: G, dur, names: b.names });
+      G += dur;
+    });
     SEGS = segs;
     TOTAL = G;
+    REMAP = FUSED.map((f, k) => [f, at[k]]).filter(r => r[0] != null && r[1] != null).sort((a, b) => a[0] - b[0]);
+    lastT = null;
+    return info();
   }
+  // (beats: when each of the click's beats starts, seconds into it; a beat carried from the click before starts before 0)
+  const info = () => ({ segs: SEGS.map(s => ({ start: s.start, dur: s.dur, names: s.names, beats: s.beats.map(b => b[1]) })),
+                        total: TOTAL, remap: REMAP });
 
   // ---------------------------------------------------------------- videos, synced to the timeline
   // Playing forward at a sane rate, a clip plays natively (with drift correction); otherwise it is paused and seeked
@@ -562,8 +611,7 @@
           const PT = window.PORTRAIT;
           // beats: when each of the click's beats starts (seconds into it). The deck chains some beats into one click; the
           // page lets a tap step through them one at a time, as the animation's original clicks.
-          resolveReady({ name, segs: SEGS.map(s => ({ start: s.start, dur: s.dur, names: s.names, beats: s.beats.map(b => b[1]) })),
-                         total: TOTAL,
+          resolveReady({ name, ...info(),
                          w: PT ? PT.W : 1920, h: PT ? PT.H : 1080, fill: PT && PT.FILL || null });
         })
         .catch(e => { console.error(e); resolveReady(null); });
@@ -571,7 +619,8 @@
   };
   window.SCENE = {
     ready: readyP,
-    render, pause, caption, captions, more, pending, waiting, park, resume, parked, busy, unlock,
+    render, pause, caption, captions, more, pending, waiting, park, resume, parked, busy, unlock, retime,
+    overlaps: () => !!P.clock,   // (only a page whose beats keep their own clocks can carry one on under the next click)
     setNarrow: b => document.documentElement.classList.toggle("narrow", !!b),
     get total() { return TOTAL; },
   };

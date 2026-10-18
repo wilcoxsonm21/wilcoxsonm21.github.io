@@ -104,6 +104,21 @@ beats as its own click (the deck fuses them into two; `scenes/scene-adapter.js`)
 The timing constants are next to the chapter constants in `js/site.js` (`HEAD`, `REST`, `DWELL` set the scroll
 lengths).
 
+**Timing by hand.** Each chapter's `data-dwell` gives each click's dwell, in the reader's seconds from the click's
+start to the next click, exactly (no reading time on top; an empty entry keeps the reading rule). A dwell shorter than
+its click starts the next click that far in, and the click's own videos and moves play on under it (`Chapter.retime` in
+`js/site.js`, `SCENE.retime` in `scenes/scene-adapter.js`, which carries the click's running beats into the next one with
+their own clocks); only scenes whose beats keep their own clocks can (intro, BASALT, text conditioning, benchmarks).
+`data-beats` makes each beat a scene plays straight through within one click a click of its own (`?beats` for the scene;
+`data-speed` and `data-lead` follow the moved times, `REMAP`). The values were set by hand on 2026-10-17 and then
+stretched where a title got under 3.5 words a second. Re-time them with `?timing` (`mirror/?timing`, `js/timing.js`):
+in Record each click plays, then holds until you tap the animation, press → or the panel's Next, and a tap while it plays
+starts the next click over its end. Test plays your times, Site the page's; the table shows both. The times are kept in
+localStorage and posted to `tools/serve.py`'s log (`/tmp/mirror_phone_log.jsonl`, `"type": "timing"`), and Copy gives
+each chapter's `data-dwell` (with `data-beats` and its `data-segs` where split). Dwells are in the reader's seconds:
+re-time a chapter after changing its `data-speed`. (Record also holds the opening until you tap; that wait is recorded
+but not played back, and the page has no `data-wait`.)
+
 `data-segs` lists each click's duration in seconds. The scene reports its own durations when it loads and the page
 re-lays itself out if they differ, so these values only spare the page a jump.
 

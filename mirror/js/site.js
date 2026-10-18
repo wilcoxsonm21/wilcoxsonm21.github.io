@@ -254,6 +254,9 @@
   // data-read values were set at 3.8 words/s: READ_PACE rescales the part of each that goes past the click's own
   // length to READ_WPS
   const READ_PACE = 3.8 / READ_WPS;
+  // ?timing: a panel for setting each click's dwell by hand and trying it out (js/timing.js sets window.MIRROR_TIMING)
+  const TIMING = () => window.MIRROR_TIMING;
+  const STILL = .25;   // seconds without scrolling before an opening's wait (data-wait) starts counting
   // A chapter's data-read="s0,s1,…" sets each click's dwell outright (seconds from the click's start before the next
   // click plays, at least the click's own length), and the word count still applies: a title that shows late in a long
   // click gets its full reading time.
@@ -306,12 +309,21 @@
       this.setSegs(el.dataset.segs.split(",").map(Number));
       if (this.dots.length) this.dots[0].classList.add("on");   // (the opening's step shows before its figure is drawn)
       this.read = (el.dataset.read || "").split(",").map(x => x.trim() === "" ? null : Number(x));
+      // data-dwell="s0,s1,…": each click's dwell set by hand, in the reader's seconds from the click's start to the next
+      // click, exactly (no reading time on top; js/timing.js, ?timing, records them); an empty entry keeps the reading rule
+      this.dwell = (el.dataset.dwell || "").split(",").map(x => x.trim() === "" ? null : Number(x));
+      // data-wait: seconds the opening holds, in focus, before the first click plays (js/timing.js records it too)
+      this.wait = el.dataset.wait ? Number(el.dataset.wait) : null;
+      this.opening = false;   // at the opening, before the first click has started playing (fromLead)
+      this.waited = 0;        // ... and how long it has held there
       // seconds of still opening to skip (data-lead): the animation starts where something first moves
       this.lead = Number(el.dataset.lead) || 0;
       // how much faster than the talk the animation plays (data-speed), videos included: one number, then any changes
       // from a scene time on as "T:speed" (e.g. "1.25, 25.3:.5, 27.6:1.25")
       this.speeds = (el.dataset.speed || "1").split(",").map(s => s.split(":").map(Number))
         .map(p => p.length > 1 ? { at: p[0], v: p[1] || 1 } : { at: 0, v: p[0] || 1 }).sort((a, b) => a.at - b.at);
+      this.speeds0 = this.speeds;
+      this.lead0 = this.lead;
       this.T = 0;
       this.k = 0;             // the click being played (or held on, once it has played out)
       this.clock = 0;         // seconds this chapter has been playing: pauses and time out of focus don't count
@@ -555,6 +567,7 @@
     // a step picked from the list, or stepped to, plays from its start (with reduced motion it shows its last frame);
     // a stage still coming forward is brought forward
     goto(i) {
+      this.opening = false;
       this.usedAt = performance.now();   // (settle: the stage is what they want now)
       this.k = i;
       this.T = this.segs[i].start + (REDUCED && this.held ? this.segs[i].dur : 0);
@@ -567,6 +580,8 @@
     }
     // the animation's start, past its still opening (data-lead), which can reach into a later click
     fromLead() {
+      this.opening = !REDUCED;
+      this.waited = 0;
       this.T = Math.min(this.lead, this.total);
       this.k = 0;
       this.segs.forEach((g, i) => { if (this.T >= g.start - 1e-6 && g.dur > 0) this.k = i; });
@@ -577,6 +592,7 @@
     step(dir) {
       this.usedAt = performance.now();
       if (!this.api) return;
+      if (dir > 0 && this.timingNext()) return;
       this.select();
       const last = this.segs.length - 1;
       if (dir > 0 && (this.k >= last || this.ended)) {
@@ -589,11 +605,12 @@
       this.flash(dir > 0 ? "next" : "prev");
     }
     // A tap pauses or plays (one that has ended plays from the start); the first one on a box also shows what the
-    // gestures do
-    tap() {
+    // gestures do (?timing, recording: a tap on the box asks for the next click instead; pauseOnly, the transport's button)
+    tap(pauseOnly) {
       this.usedAt = performance.now();
       // (the tap that lifted Low Power Mode's refusal, unlockVideos, plays: the animation hadn't started to be paused)
       if (performance.now() - (this.thawedAt ?? -1e9) < 400) { this.thawedAt = null; this.select(); this.held = false; this.flash("toggle"); return; }
+      if (!pauseOnly && !REDUCED && this.timingNext()) return;
       const first = !this.selected;
       this.select();
       if (!REDUCED) {
@@ -601,6 +618,16 @@
         else this.held = !this.held;
       }
       this.flash(first || REDUCED ? "select" : "toggle");
+    }
+    // ?timing, recording: a tap or → asks for the next click (js/timing.js), or starts it now over this one ("cut")
+    timingNext() {
+      const n = TIMING()?.next(this);
+      if (!n) return false;
+      if (n === "cut") this.cutHere();
+      this.select();
+      this.held = false;
+      this.flash("next");
+      return true;
     }
     select() {
       if (this.selected) return;
@@ -694,7 +721,7 @@
       if (!this.swap) { this.swap = { at: null, n: 0, first: true }; this.shown = 0; }
       // on a phone held upright the scene loads its portrait layout, and the frame starts out tall (3:4 until the
       // scene says its size). gen drops a load that was overtaken by a change of layout.
-      const gen = ++this.gen, src = this.iframe.dataset.src + (portrait ? "&portrait" : "");
+      const gen = ++this.gen, src = this.iframe.dataset.src + (portrait ? "&portrait" : "") + ((this.split = this.beats()) ? "&beats" : "");
       this.mode = portrait;
       if (portrait && !this.el.classList.contains("tall")) this.frameShape(3, 4);
       const want = new URL(src, location.href).href;
@@ -714,6 +741,53 @@
       const fw = frameAt(this.iframe);   // (null after a failed load: its error page is another origin's, so set src)
       if (fw && fw.href !== "about:blank") fw.w.location.replace(want);
       else this.iframe.src = src;
+    }
+    // data-beats: each beat of the scene's chained clicks is a click of its own (scene-adapter.js ?beats), to give each its
+    // own dwell (data-dwell); the ?timing panel can switch it per chapter
+    beats() { const T = TIMING(); return T ? T.beats(this) : this.el.hasAttribute("data-beats"); }
+    // the scene's clicks; split into beats (data-beats) or cut (retime), data-speed and data-lead move with the times they
+    // were set at (info.remap)
+    layoutFrom(info) {
+      this.setSegs(info.segs.map(s => s.dur));
+      const R = info.remap, at = T => { let p = R[0]; for (const r of R) if (r[0] <= T + 1e-6) p = r; return p[1] + T - p[0]; };
+      this.speeds = R && R.length ? this.speeds0.map(s => ({ at: s.at ? at(s.at) : 0, v: s.v })) : this.speeds0;
+      this.lead = R && R.length ? at(this.lead0) : this.lead0;
+    }
+    // A dwell shorter than its click (data-dwell, or the ?timing panel's) starts the next click that far in, over the end
+    // of this one: its beats play on under the next click's (SCENE.retime). Each cut moves the clicks after it, so they
+    // are found one at a time.
+    retime() {
+      const S = this.api;
+      if (!S || !S.retime || !S.overlaps()) return;
+      const cuts = [];
+      this.layoutFrom(S.retime(cuts));
+      for (let k = 0; k < this.segs.length - 1; k++) {
+        const d = this.cutDwell(k), g = this.segs[k];
+        const a = k === 0 ? Math.min(Math.max(g.start, this.lead), g.start + g.dur) : g.start;
+        if (d == null || d >= this.playLen(a, g.start + g.dur) - .02) continue;
+        cuts[k] = this.sceneAfter(a, d) - g.start;
+        this.layoutFrom(S.retime(cuts));
+      }
+    }
+    cutDwell(k) { const T = TIMING(); return T ? T.cut(this, k) : this.dwell[k] ?? null; }
+    // the scene time d seconds of playing after scene time a (data-speed)
+    sceneAfter(a, d) {
+      let T = a;
+      for (let i = 0; i < 100 && d > 1e-6; i++) {
+        const v = this.speedAt(T), next = this.speeds.find(s => s.at > T + 1e-6), room = next ? (next.at - T) / v : Infinity;
+        if (d <= room) return T + d * v;
+        d -= room;
+        T = next.at;
+      }
+      return T;
+    }
+    // ?timing, recording: a tap while the click plays starts the next one now, over the end of this one
+    cutHere() {
+      const k = this.k;
+      TIMING()?.advanced(this, k, this.clock - this.curAt, this.siteUntil() - this.curAt);
+      this.k = k + 1;
+      this.doneAt = null;
+      this.retime();
     }
     // the frame's shape: the deck's 16:9 (w = 0), or a scene's tall portrait stage
     frameShape(w, h) {
@@ -745,12 +819,13 @@
           this.fill = info.fill || null;
           this.stageW = info.w;
           this.fitCard();
-          // the scene's own timing wins over the one written into the page
-          const durs = info.segs.map(s => s.dur);
-          // (exactly, so its beats line up with the clicks; the page lays itself out again only if it was off)
-          const off = durs.length !== this.segs.length || durs.some((d, i) => Math.abs(d - this.segs[i].dur) > .02);
-          this.setSegs(durs);
-          if (off) relayout();
+          // the scene's own timing wins over the one written into the page (exactly, so its beats line up with the clicks;
+          // the page lays itself out again only if it was off), with any cuts (retime)
+          const was = this.segs.map(g => g.dur);
+          this.layoutFrom(info);
+          this.retime();
+          const durs = this.segs.map(g => g.dur);
+          if (durs.length !== was.length || durs.some((d, i) => Math.abs(d - was[i]) > .02)) relayout();
           // reduced motion: the first click's last frame
           if (REDUCED && this.T === 0) this.T = this.segs[0].dur;
           else if (this.T === 0) this.fromLead();
@@ -926,6 +1001,14 @@
     // rate), then holds its last frame until its text has had time to be read, and the next click follows. The last
     // click holds, and the chapter has ended.
     play(dt) {
+      // the opening holds for its wait first (data-wait, or the ?timing panel's), its clock and bar with it
+      if (this.opening) {
+        const w = this.openWait();
+        // (counted only once the stage has come fully forward and the page has stopped: not while it glides in)
+        if (w != null && this.waited < w) { if (this.still()) this.waited += dt; this.rate = 0; return; }
+        if (w != null) TIMING()?.started(this, this.waited);
+        this.opening = false;
+      }
       const g = this.segs[this.k], end = g.start + g.dur;
       if (this.T < g.start) this.T = g.start;
       // a slow connection: a video on show with no frame yet (or fetching the one it was sent to) holds the click, its
@@ -945,13 +1028,31 @@
       this.T = end;
       if (this.k === this.segs.length - 1) { this.ended = true; this.deselect(); return; }
       if (this.doneAt === null) this.doneAt = this.clock;
-      if (this.clock - this.doneAt >= HOLD && this.clock >= this.readUntil()) { this.k++; this.doneAt = null; }
+      if ((this.dwellAt(this.cur) != null || this.clock - this.doneAt >= HOLD) && this.clock >= this.readUntil()) {
+        TIMING()?.advanced(this, this.cur, this.clock - this.curAt, this.siteUntil() - this.curAt);
+        this.k++;
+        this.doneAt = null;
+      }
     }
+    // a click's dwell set by hand (seconds from its start, exactly): the ?timing panel's, or data-dwell (own: data-dwell only)
+    // the stage is fully forward (a figure: pinned) and the page isn't moving
+    still() {
+      const y = sy - topOf(this.el), now = performance.now();
+      if (sy !== this.stillY) { this.stillY = sy; this.stillAt = now; }   // (and hasn't scrolled for STILL seconds)
+      return !glide && !scrolling(now) && now - this.stillAt > STILL * 1e3
+        && (this.noHead ? y > -2 && y < this.pinLen + 2 : this.stageO > .98);
+    }
+    openWait() { const T = TIMING(); return T ? T.wait(this) : this.wait; }
+    dwellAt(c, own) { const T = TIMING(); return !own && T ? T.dwell(this, c) : this.dwell[c] ?? null; }
+    // when the page's own timing (without the ?timing panel) moves on from the click on screen, once it has played
+    siteUntil() { return Math.max(this.dwellAt(this.cur, true) != null ? 0 : (this.doneAt ?? this.clock) + HOLD, this.readUntil(true)); }
     // when the click on screen has been read (clock), the later of: its data-read value, counted from the click's start (for the first
     // click, from where it plays from, past its still opening); the word count, from when the text (the step in the
     // list, or the scene's title as it is now) first showed, which can be late in a long click
-    readUntil() {
+    readUntil(own) {
       const c = this.cur, d = this.segs[c] ? this.segs[c].dur : 0;
+      const w = this.dwellAt(c, own);
+      if (w != null) return this.curAt + w;
       let t = this.curAt + .4;
       if (this.read[c] != null) {
         const a = this.segs[c].start, from = c === 0 ? Math.min(Math.max(a, this.lead), a + d) : a;
@@ -1045,6 +1146,8 @@
       this.segs.forEach((s, i) => { if (this.T >= s.start + .05) cur = Math.max(cur, i); });
       // a click's clock starts as it starts playing (click 0 waits through the headline, with the stage still faint)
       if (cur !== this.cur || (cur === 0 && this.T < this.segs[0].start + .05)) {
+        // (recording, ?timing: the cuts before the click on screen stand, and those from it on go until tapped again)
+        if (cur !== this.cur && TIMING()?.recording()) this.retime();
         this.cur = cur;
         this.curAt = this.clock;
         this.played = 0;
@@ -1182,7 +1285,7 @@
     const [tpPrev, , tpNext] = tp.querySelectorAll("button");
     tp.addEventListener("click", e => {
       const b = e.target.closest("button");
-      if (b) { if (b.dataset.dir) c.step(+b.dataset.dir); else c.tap(); }
+      if (b) { if (b.dataset.dir) c.step(+b.dataset.dir); else c.tap(true); }
     });
     // shown for s seconds (wide screens, css), with the button a key stands for lit for a moment
     let tpT = 0, hitT = 0;
@@ -2103,5 +2206,10 @@
   }
   relayout();
   wake();
-  window.MIRROR = { chapters };   // for poking at from the console
+  window.MIRROR = { chapters };   // for poking at from the console (and js/timing.js)
+  if (/[?&]timing(&|=|$)/.test(location.search)) {
+    const s = document.createElement("script");
+    s.src = "js/timing.js?t=" + Date.now();
+    document.head.append(s);
+  }
 })();
