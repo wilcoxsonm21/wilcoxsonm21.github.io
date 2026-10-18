@@ -4,8 +4,8 @@
 // (plan above execution on a phone held upright), each with the survival tags, the speed in the execution's tag and a
 // note as each milestone is first reached. Under the screen: a scrub line, the goal and the game clock, the twelve
 // milestones lighting up as they are reached (each a jump) and Hide plan; then a caption. On the screen, beside the
-// round play button, a speed pill that each tap moves on: 1x (to start), 2x, 4x, 8x, 16x, then Auto (fast-forward
-// between milestones: 16x between, 1x around each), and round again. Nothing is built from data as HTML: every value
+// round play button, a speed pill that each tap moves on: Auto (to start, where the episode has milestones: fast-forward
+// between them, 32x between, 1x around each), then 1x, 2x, 4x, 8x, 16x, and round again. Nothing is built from data as HTML: every value
 // is set with textContent or an attribute.
 //
 // One video plays at a time (tools/mirror_fast/). With the plan shown it is a video holding both, the plan (cut from
@@ -224,10 +224,10 @@ const FragStream = (() => {
   return { supported, attach, head };
 })();
 
-function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at each" } = {}) {
+function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at each" } = {}) {
   const NS = "http://www.w3.org/2000/svg";
   const SPEEDS = [1, 2, 4, 8, 16];
-  const FAST = 16;            // (browsers play at most 16x; the survival clips go to 32x)
+  const FAST = 32;            // fast-forward, as the survival clips (the 16x copy at 2x: browsers play at most 16x)
   const TOAST = 2200;         // ms a note stays
   const R = 15.5, C = 2 * Math.PI * R;   // the site's round button (js/controls.js)
   const el = (tag, props = {}, ...children) => {
@@ -282,7 +282,8 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     el("div", { class: "sv-strip" }, goalEl, list, extra, toggle), caption);
 
   // the plan starts hidden (the user, 10-16: "Show plan" brings it in, and it stays for the next episodes)
-  const state = { duration: 1, hasPlan: false, planOff: true, pending: null, speed: 1, auto: false, windows: [], milestones: [], ticks: [],
+  // (choice: the reader's last pick, Auto or a speed; an episode without milestones plays at the speed meanwhile)
+  const state = { duration: 1, hasPlan: false, planOff: true, pending: null, speed: 1, auto: false, choice: "auto", windows: [], milestones: [], ticks: [],
     toasts: [], goal: () => null, dragging: false, lastT: 0, toastTimer: 0, shown: {},
     intent: false, rate: 1, view: "exec", k: 1, srcs: { exec: {} }, frag: {} };
 
@@ -355,7 +356,7 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   // Only for fragmented files, where waiting costs a piece or two.
   function parked() {
     if (!FragStream.supported || state.auto || !video) return null;
-    const modes = [...SPEEDS, ...(state.windows.length ? ["auto"] : [])], next = modes[(modes.indexOf(state.speed) + 1) % modes.length];
+    const modes = [...(state.windows.length ? ["auto"] : []), ...SPEEDS], next = modes[(modes.indexOf(state.speed) + 1) % modes.length];
     const k = copyFor(state.view, next === "auto" ? rateAt(now()) : next);
     return k === state.k || !state.frag[state.view]?.[k] ? null : element(state.view, k);
   }
@@ -530,10 +531,11 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   }
   function setAuto(on) {
     state.auto = on && state.windows.length > 0;
+    state.choice = on ? "auto" : state.speed;
     applyRate(state.auto ? rateAt(now()) : state.speed);
     renderRate();
   }
-  function setSpeed(s) { state.speed = s; state.auto = false; applyRate(s); renderRate(); }
+  function setSpeed(s) { state.speed = s; state.auto = false; state.choice = s; applyRate(s); renderRate(); }
   // the pill shows the mode it is in; a tap moves to the next: fast-forward (where there are milestones), 1x … 16x
   function renderRate() {
     speedBtn.replaceChildren(...(state.auto ? [ff(), "Auto"] : [`${state.speed}×`]));
@@ -543,8 +545,8 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
   }
   speedBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    // 1x first, so the pill reads as a speed you can raise (the user, 10-16); fast-forward between milestones comes last
-    const modes = [...SPEEDS, ...(state.windows.length ? ["auto"] : [])];
+    // Auto first, then 1x and faster (the user, 10-17, reversing 10-16's 1x start)
+    const modes = [...(state.windows.length ? ["auto"] : []), ...SPEEDS];
     const next = modes[(modes.indexOf(state.auto ? "auto" : state.speed) + 1) % modes.length];
     if (next === "auto") setAuto(true); else setSpeed(next);
   });
@@ -715,8 +717,7 @@ function createWatchPlayer(root, { autoNote = "16× between milestones, 1× at e
     state.goal = goal ?? (() => null);
     state.shown = {};
     state.lastT = startAt;
-    if (auto !== undefined) state.auto = auto && windows.length > 0;
-    else if (!windows.length) state.auto = false;
+    state.auto = (auto ?? state.choice === "auto") && windows.length > 0;
     shape();
     list.replaceChildren(...milestones.map((m) => el("li", {}, el("button", {
       type: "button", title: m.t != null ? m.title : `${m.name}: not reached`, "aria-label": m.t != null ? `Jump to ${m.title}` : `${m.name}: not reached`,

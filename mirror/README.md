@@ -343,8 +343,10 @@ upright; hidden until "Show plan", which then stays for the next episodes), the 
 each milestone is first reached or the agent dies, a scrub line with each milestone as a tiny item icon (icons too close
 for one each share one place, showing the furthest), the goal and the game clock, the twelve milestones (each jumps
 there; `[` and `]` step), and a caption: the outcome and the deaths, then the setting's line. A pill on the video starts
-at 1× and each tap makes it faster: 2×, 4×, 8×, 16×, then Auto (16× between subgoal changes, 1× around each), and 1×
-again. The headline is "Episode 101 got as far as the wooden pickaxe" where it fits on one line; on a phone the
+on Auto, paced as the survival clips are (1× around the first time the agent gets, crafts or places each thing, around
+each death, and around its last milestone; 32× between, the 16× copy at 2×; `SKIM` in `eval/watch.js`), and each tap
+moves it on: 1×, 2×, 4×, 8×, 16×, and Auto again; later episodes keep the reader's pick.
+(The BASALT viewer has no milestone windows: it starts at 1×.) The headline is "Episode 101 got as far as the wooden pickaxe" where it fits on one line; on a phone the
 episode's number moves to the eyebrow over "Got a wooden pickaxe" (both are in the page; css shows one). The
 plan is cut from the episode's `plan_idm` video, its right half below the label row (`plan_box` in
 `tools/build_survival.py`); the survival clips' green re-sync flashes are not drawn, as their timing is unverified for

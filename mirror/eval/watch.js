@@ -37,7 +37,12 @@ const PAPER = ["log", "planks", "stick", "crafting_table", "wooden_pickaxe", "co
 // a subgoal names an action where its milestone names a state
 const GOAL = { place_crafting_table: "place crafting table", pick_up_crafting_table: "pick up crafting table",
   place_furnace: "place furnace", load_furnace: "load furnace" };
-const SKIM = { before: 3.5, after: 1 };   // fast-forward: 1x from 3.5 s before each subgoal change to 1 s after, 16x between
+// fast-forward's 1x stretches, as the page's survival clips (tools/build_survival.py): from 3 s before to 1 s after the
+// first time the agent gets, crafts or places each thing, 2.5 s before to 1.5 s after each death up to the last of those,
+// 6 s before to 4 s after the last, and the first 1.5 s; 32x between them and after the last (js/watch-player.js)
+const SKIM = { before: 3, after: 1, death: [2.5, 1.5], last: [6, 4], open: 1.5 };
+// the first completions of these subgoals count too, from the stages (a placed crafting table picked up, a furnace loaded)
+const FIRSTS = ["pick_up_crafting_table", "load_furnace"];
 
 const $ = (id) => document.getElementById(id);
 const state = { index: null, tab: "online", order: [], number: null, episode: null, cache: new Map(), loading: 0, listScroll: 0 };
@@ -120,22 +125,28 @@ async function episodeData(tab, n) {
   return state.cache.get(key);
 }
 
-// the 1x stretches of fast-forward: around each subgoal change (or, without subgoals, each milestone) and the diamond
+// the 1x stretches of fast-forward (SKIM), merged where they overlap
 function windows(episode) {
-  const times = episode.stages.length
-    ? episode.stages.slice(1).map(([t]) => t)
-    : PAPER.filter((m) => m in episode.milestones && m !== "diamond").map((m) => episode.milestones[m]);
-  if ("diamond" in episode.milestones) times.push(episode.milestones.diamond);
+  const ms = episode.milestones, st = episode.stages;
+  const firsts = Object.entries(ms).filter(([m, t]) => !(m === "load_furnace" && t > (ms.iron_ingot ?? Infinity)))   // (a later reload)
+    .map(([, t]) => t);
+  const last = firsts.length ? Math.max(...firsts) : Infinity;
+  for (const key of FIRSTS) {
+    const i = st.findIndex(([, goal], j) => goal === key && j < st.length - 1);
+    if (i >= 0 && st[i + 1][0] <= last) firsts.push(st[i + 1][0]);
+  }
+  const spans = [[0, SKIM.open],
+    ...firsts.filter((t) => t < last).map((t) => [t - SKIM.before, t + SKIM.after]),
+    ...episode.deaths.filter((d) => d.t <= last).map((d) => [d.t - SKIM.death[0], d.t + SKIM.death[1]]),
+    ...(isFinite(last) ? [[last - SKIM.last[0], last + SKIM.last[1]]] : [])];
   const out = [];
-  for (const t of times.sort((a, b) => a - b)) {
-    const start = Math.max(0, t - SKIM.before), end = t + SKIM.after;
-    if (out.length && start <= out[out.length - 1][1]) out[out.length - 1][1] = end;
-    else out.push([start, end]);
+  for (const [a, b] of spans.map(([a, b]) => [Math.max(0, a), b]).sort((x, y) => x[0] - y[0])) {
+    if (out.length && a <= out[out.length - 1][1]) out[out.length - 1][1] = Math.max(out[out.length - 1][1], b);
+    else out.push([a, b]);
   }
   return out;
 }
 
-let firstOpen = true;
 async function openEpisode(n, { startAt = 0 } = {}) {
   const tab = state.tab, ticket = ++state.loading;
   let episode;
@@ -186,8 +197,7 @@ async function openEpisode(n, { startAt = 0 } = {}) {
     toasts: [...reached.map((m) => ({ t: episode.milestones[m], icon: icon(m), text: m === "diamond" ? "Diamond!" : cap(NAME[m]) })),
       ...episode.deaths.map((d) => ({ t: d.t, death: true, text: `Died${d.message ? ` · ${d.message.replace(/^was /, "")}` : ""}` }))],
     windows: windows(episode),
-    // 1x to start (the user, 10-16: the pill reads "1×" and a tap makes it faster); later episodes keep the reader's choice
-    auto: firstOpen ? false : undefined,
+    // Auto to start (the user, 10-17); later episodes keep the reader's choice (js/watch-player.js, state.choice)
     goal: (t) => (episode.stages.length ? (() => { const g = episode.stages[Math.max(0, lastAtOrBefore(episode.stages, t))][1]; return GOAL[g] ?? NAME[g] ?? g; })() : null),
     // the outcome, then what the setting was trained on
     caption: [
@@ -195,7 +205,6 @@ async function openEpisode(n, { startAt = 0 } = {}) {
       TAB[tab].note,
     ],
   });
-  firstOpen = false;
 }
 
 function closeEpisode() {
