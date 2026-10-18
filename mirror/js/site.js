@@ -239,6 +239,10 @@
   // a box can ask for a wider reach (data-snap-near, viewport heights, capped at a quarter of the screen): the survival
   // video, a short strip on a desktop, is easy to stop well short of
   const SNAP_WAIT = .15;   // seconds after the reader's scrolling ends
+  // a tablet's touch screen (an iPad) reaches further, most of all held upright (narrow): a stop by finger is rougher
+  // there and the screen taller, and 64 px fell short of most stops
+  const TABLET = matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) >= 700;
+  const snapReach = () => !TABLET ? Math.min(64, SNAP_NEAR * vh) : narrow ? Math.min(120, .1 * vh) : Math.min(90, .08 * vh);
   let snapArmed = false, noSnapUntil = 0;
   const snapEls = $$(SNAP_SEL).filter(el => !el.closest("[class*='-sticky']"));
   const snapPinned = $$(".statement-text, .closing-text");
@@ -249,7 +253,7 @@
     // (a reader at the very bottom, with End or a long scroll, stays there: centring the BibTeX pulled the page up)
     if (scrollY >= root.scrollHeight - innerHeight - 2) return;
     const navH = $(".localnav").offsetHeight, mid = (navH + vh) / 2, room = vh - navH;
-    const near0 = Math.min(64, SNAP_NEAR * vh);
+    const near0 = snapReach();
     let best = null, near = near0;
     const offer = (d, n = near0) => { if (Math.abs(d) <= n && (best == null || Math.abs(d) < Math.abs(best))) { best = d; near = n; } };
     for (const el of snapEls) {
@@ -1354,13 +1358,19 @@
     // a finger: a tap, or a sideways swipe. Touch events rather than pointer events, since only a cancelled touchmove
     // stops the page from scrolling (with touch-action: pan-y a slightly diagonal swipe still scrolls, and the browser
     // then cancels the pointer).
+    // The same swipe works anywhere on the chapter while its stage fills the screen, not only on the box: on an iPad
+    // held upright (or a narrow desktop window) the box is the top half of the screen, and a swipe below it scrolled
+    // the page. (Taps stay the box's.)
+    let gestureAt = -1e9;   // the last tap or swipe the touch or pointer handlers took (click, below)
+    const offBox = t => !t.closest(".ctl-box, .ctl-bar, a, button, input, .steps") && inView(c) > .5;
+    const fingers = (el, own) => {
     let f = null;
-    box.addEventListener("touchstart", e => {
+    el.addEventListener("touchstart", e => {
       const t = e.touches[0];
-      f = e.touches.length > 1 || e.target.closest(".ctl-bar") ? null : { x: t.clientX, y: t.clientY, t: e.timeStamp, dir: null, moved: false,
+      f = e.touches.length > 1 || e.target.closest(".ctl-bar") || !own && !offBox(e.target) ? null : { x: t.clientX, y: t.clientY, t: e.timeStamp, dir: null, moved: false,
         stop: !!glide || performance.now() < holdUntil };   // (the page was still moving: a finger landing to stop it)
     }, { passive: true });
-    box.addEventListener("touchmove", e => {
+    el.addEventListener("touchmove", e => {
       if (!f) return;
       if (e.touches.length > 1) { f = null; return; }
       const t = e.touches[0], dx = t.clientX - f.x, dy = t.clientY - f.y;
@@ -1375,8 +1385,7 @@
       if ((f.dir === "x" || side) && e.cancelable) e.preventDefault();   // the box's: no scrolling
       f.dx = dx; f.dy = dy;
     }, { passive: false });
-    let gestureAt = -1e9;   // the last tap or swipe the touch or pointer handlers took (click, below)
-    box.addEventListener("touchend", e => {
+    el.addEventListener("touchend", e => {
       if (!f) return;
       const s = f;
       f = null;
@@ -1386,9 +1395,12 @@
       const sideways = Math.abs(s.dx) > SWIPE_LATE * FLICK && Math.abs(s.dx) > SWIPE_RATIO * Math.abs(s.dy || 0);
       if ((s.dir === "x" && Math.abs(s.dx) > FLICK) || sideways) c.step(s.dx < 0 ? 1 : -1);
       // (a finger that lands to stop the page gliding or coasting on isn't a tap)
-      else if (!s.moved && !s.stop && e.timeStamp - s.t < 800) { e.preventDefault(); c.tap(); }   // (and no click after it)
+      else if (own && !s.moved && !s.stop && e.timeStamp - s.t < 800) { e.preventDefault(); c.tap(); }   // (and no click after it)
     }, { passive: false });
-    box.addEventListener("touchcancel", () => { f = null; });
+    el.addEventListener("touchcancel", () => { f = null; });
+    };
+    fingers(box, true);
+    fingers(c.el, false);
     // the mouse or a pen: a click, or a sideways drag
     let g = null;
     box.addEventListener("pointerdown", e => {
@@ -1437,6 +1449,7 @@
       if (!w.done && Math.abs(w.sum) > 50) { w.done = true; c.step(w.sum > 0 ? 1 : -1); }
     };
     box.addEventListener("wheel", wheel, { passive: false });
+    c.el.addEventListener("wheel", e => { if (offBox(e.target)) wheel(e); }, { passive: false });   // (as the finger's, above)
     if (!c.inline) tp.addEventListener("wheel", wheel, { passive: false });   // (a scene's transport is outside its box)
   }
   // keys: Enter or Space on a focused box; the arrows on the box in view (the focused or selected one if it still is,
