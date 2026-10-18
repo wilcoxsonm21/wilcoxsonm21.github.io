@@ -1236,8 +1236,11 @@
   const SWIPE = 40;       // px the mouse moves sideways, and 1.5 times as far as up or down, to step
   const FLICK = 30;       // px a finger moves sideways, once the gesture is the box's, to step
   const LOCK = 8;         // px a finger moves before the gesture's direction is decided
-  const LOCK_RATIO = 1.5; // how much more sideways than up or down a move must be to count as a swipe
-  const SWIPE_LATE = 1.5, SWIPE_RATIO = 1.2;   // a swipe the page began scrolling: FLICKs sideways, and how much more than up or down
+  // how much more sideways than up or down a move must be to count as a swipe. A tablet takes any move more sideways
+  // than not: a swipe across an iPad's screen, by a finger rather than a thumb, sets off on a slant and was scrolled
+  // instead, and a scroll there starts close to straight up or down
+  const LOCK_RATIO = TABLET ? 1 : 1.5;
+  const SWIPE_LATE = 1.5, SWIPE_RATIO = TABLET ? 1 : 1.2;   // a swipe the page began scrolling: FLICKs sideways, and how much more than up or down
   const ICON_PAUSE = '<svg viewBox="0 0 36 36"><rect x="11.5" y="10" width="4.6" height="16" rx="1.4"/><rect x="19.9" y="10" width="4.6" height="16" rx="1.4"/></svg>';
   const ICON_PLAY = '<svg viewBox="0 0 36 36"><path d="M13.2 10.4v15.2c0 .9 1 1.4 1.7.9l12-7.6c.7-.4.7-1.4 0-1.8l-12-7.6c-.7-.5-1.7 0-1.7.9z"/></svg>';
   const CHEVRON = '<svg viewBox="0 0 24 24"><path d="M9.5 5.5L16 12l-6.5 6.5"/></svg>';
