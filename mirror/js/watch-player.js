@@ -18,6 +18,12 @@
 // milestone is seamless. Whether it plays is the reader's choice (state.intent), which a check every quarter second
 // holds the video to, so no switch or seek can leave it stopped.
 //
+// Auto plays a ready-made clip where the episode has one (copy "a", tools/mirror_fast/worker_auto.py): the episode
+// fast-forwarded as the page's survival clips are, 1x around each first-time milestone and each death, up to 32x
+// between, eased in and out. Its time map (load's autoMap: [clip frame, episode frame] knots, linear between) turns
+// clip time into episode time and back, so the scrub line, the milestones, the notes and Hide plan work as for the
+// k-times copies; the speed badge reads the clip's own speed. Without a clip (or its map), Auto switches copies live.
+//
 //   const player = createWatchPlayer(figure);
 //   player.load({ exec: { 1: url, 4: url, 16: url } (or just a url), both: { side: copies, stack: copies } or null,
 //                 frag: { exec: copies, side: copies, stack: copies } (the same videos fragmented, played where possible),
@@ -227,6 +233,7 @@ const FragStream = (() => {
 function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at each" } = {}) {
   const NS = "http://www.w3.org/2000/svg";
   const SPEEDS = [1, 2, 4, 8, 16];
+  const MAP_WAIT = 2500;      // ms Auto waits for its clip's time map before it starts on the copies
   const FAST = 32;            // fast-forward, as the survival clips (the 16x copy at 2x: browsers play at most 16x)
   const TOAST = 2200;         // ms a note stays
   const R = 15.5, C = 2 * Math.PI * R;   // the site's round button (js/controls.js)
@@ -283,7 +290,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
 
   // the plan starts hidden (the user, 10-16: "Show plan" brings it in, and it stays for the next episodes)
   // (choice: the reader's last pick, Auto or a speed; an episode without milestones plays at the speed meanwhile)
-  const state = { duration: 1, hasPlan: false, planOff: true, pending: null, speed: 1, auto: false, choice: "auto", windows: [], milestones: [], ticks: [],
+  const state = { duration: 1, hasPlan: false, planOff: true, pending: null, speed: 1, auto: false, choice: "auto", map: null, windows: [], milestones: [], ticks: [],
     toasts: [], goal: () => null, dragging: false, lastT: 0, toastTimer: 0, shown: {},
     intent: false, rate: 1, view: "exec", k: 1, srcs: { exec: {} }, frag: {} };
 
@@ -321,7 +328,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     if (url && v.dataset.url !== url) {
       release(v);
       v.dataset.url = url;
-      if (frag) { v.frag = FragStream.attach(v, frag, { ahead: 0, at: at / k }); v.frag.onerror = () => lost(v); }
+      if (frag) { v.frag = FragStream.attach(v, frag, { ahead: 0, at: toCopy(k, at) }); v.frag.onerror = () => lost(v); }
       else v.src = url;
     }
     return v;
@@ -333,19 +340,35 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     else if (v.dataset.url) { v.removeAttribute("src"); v.load(); }
     v.dataset.url = "";
   }
-  const kOf = (v) => Number(v.dataset.k);
-  // the episode's time: the copy's time times its speed-up
-  const now = () => state.pending ?? (video ? video.currentTime * state.k : 0);
+  const kOf = (v) => (v.dataset.k === "a" ? "a" : Number(v.dataset.k));
+  // a copy's time and the episode's: a k-times copy's time times k; the Auto clip's through its map (state.map)
+  const interp = (x, xs, ys) => {
+    let lo = 0, hi = xs.length - 1;
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[hi]) return ys[hi];
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (xs[m] <= x) lo = m; else hi = m; }
+    return ys[lo] + (ys[hi] - ys[lo]) * (x - xs[lo]) / (xs[hi] - xs[lo]);
+  };
+  const toEp = (k, t) => (k === "a" ? interp(t * state.map.fps, state.map.clip, state.map.src) / state.map.srcFps : t * k);
+  const toCopy = (k, t) => (k === "a" ? interp(t * state.map.srcFps, state.map.src, state.map.clip) / state.map.fps : t / k);
+  // the Auto clip's own speed at its time t (the badge), and the rate a copy plays at (the clip: as it is)
+  const clipSpeed = (t) => { const s = state.map.speed; let i = 0; while (i + 1 < s.length && s[i + 1][0] <= t) i++; return s[i][1]; };
+  const rateOf = (k) => (k === "a" ? 1 : state.rate / k);
+  const hasClip = (view) => !!state.map && !!state.srcs[view]?.a;
+  // the episode's time
+  const now = () => state.pending ?? (video ? toEp(state.k, video.currentTime) : 0);
   const viewWanted = () => (planOn() ? (tall.matches ? "stack" : "side") : "exec");
-  // the copy for a speed: the fastest no faster than it
+  // the copy for a speed: the fastest no faster than it ("a", the Auto clip, isn't one)
   const copyFor = (view, rate) => Math.max(1, ...Object.keys(state.srcs[view] ?? {}).map(Number).filter((k) => k <= rate));
+  // the copy to play now: the Auto clip in Auto where there is one, else the copy for the speed
+  const copyNow = (view) => (state.auto && hasClip(view) ? "a" : copyFor(view, state.rate));
 
   // the video in front is the one playing, once it has a frame to show (until then the last one's frame stays); the
   // rest let go of their files, so nothing off screen takes the connection from it, but for the copy fast-forward
   // switches to next
   function reveal() {
     if (!video || video.readyState < 2 || video.seeking) return;
-    const keep = new Set([video, parked(), ...(state.auto ? [1, FAST].map((r) => pool.get(`${state.view}:${copyFor(state.view, r)}`)) : [])]);
+    const keep = new Set([video, parked(), ...(state.auto && state.k !== "a" ? [1, FAST].map((r) => pool.get(`${state.view}:${copyFor(state.view, r)}`)) : [])]);
     for (const v of pool.values()) {
       v.style.visibility = v === video ? "" : "hidden";
       if (!keep.has(v) && v.dataset.url) release(v);
@@ -357,13 +380,13 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
   function parked() {
     if (!FragStream.supported || state.auto || !video) return null;
     const modes = [...(state.windows.length ? ["auto"] : []), ...SPEEDS], next = modes[(modes.indexOf(state.speed) + 1) % modes.length];
-    const k = copyFor(state.view, next === "auto" ? rateAt(now()) : next);
+    const k = next === "auto" ? (hasClip(state.view) ? "a" : copyFor(state.view, rateAt(now()))) : copyFor(state.view, next);
     return k === state.k || !state.frag[state.view]?.[k] ? null : element(state.view, k);
   }
   function park() {
     const v = parked();
     if (!v || state.pending != null || v.readyState < 1 || v.seeking || performance.now() - (v.parkedAt || 0) < 1000) return;
-    const k = kOf(v), t = now() / k;
+    const k = kOf(v), t = toCopy(k, now());
     if (!v.frag?.buffered(t)) { v.currentTime = t; v.parkedAt = performance.now(); }
   }
   // play view at copy k from episode time t (a video made ready for this, within a second of t, plays on from there)
@@ -378,10 +401,10 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     if (before?.frag) before.frag.ahead = 0;
     if (video.frag) video.frag.ahead = 30;
     if (video.readyState >= 1) {
-      if (Math.abs(video.currentTime * k - t) > 1.5) video.currentTime = t / k;
+      if (Math.abs(toEp(k, video.currentTime) - t) > 1.5) video.currentTime = toCopy(k, t);
       state.pending = null;
     } else state.pending = t;
-    video.playbackRate = state.rate / k;
+    video.playbackRate = rateOf(k);
     hold();
     reveal();
   }
@@ -393,10 +416,10 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
   function hold() {
     if (!video) return;
     if (state.pending != null && video.readyState >= 1) {
-      video.currentTime = Math.min(state.pending, state.duration) / state.k;
+      video.currentTime = toCopy(state.k, Math.min(state.pending, state.duration));
       state.pending = null;
     }
-    if (video.readyState >= 1 && video.playbackRate !== state.rate / state.k) video.playbackRate = state.rate / state.k;
+    if (video.readyState >= 1 && video.playbackRate !== rateOf(state.k)) video.playbackRate = rateOf(state.k);
     const play = state.intent && !state.dragging && !(video.ended && now() >= state.duration - 0.5) && !turnedAway();
     if (play && video.paused) video.play().catch(() => {});
     else if (!play && !video.paused) video.pause();
@@ -424,6 +447,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     const t = v === video ? now() : state.lastT;
     release(v);
     if (wasFrag) delete state.frag[view]?.[k];
+    else if (k === "a") delete state.srcs[view].a;   // (the Auto clip: Auto switches copies live instead)
     else {
       if (!state.srcs[view]?.[k]) return;
       delete state.srcs[view][k];
@@ -431,7 +455,8 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     }
     if (v === video) {
       video = null;
-      show(viewWanted(), copyFor(viewWanted(), state.rate), t);
+      if (k === "a") state.rate = rateAt(t);
+      show(viewWanted(), copyNow(viewWanted()), t);
       if (!video?.dataset.url) failed(t);
     }
   }
@@ -455,7 +480,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     clear();
     shape();
     state.intent = true;
-    show(viewWanted(), copyFor(viewWanted(), state.rate), t);
+    show(viewWanted(), copyNow(viewWanted()), t);
     paint(t);
   }
   retryBtn.addEventListener("click", (e) => { e.stopPropagation(); retry(); });
@@ -474,7 +499,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
   }
   function reshape() {
     shape();
-    if (video) show(viewWanted(), copyFor(viewWanted(), state.rate));
+    if (video) show(viewWanted(), copyNow(viewWanted()));
   }
   tall.addEventListener("change", reshape);
   // The screen grows around the button (a phone's stacked 16:18, over the width's .5 s transition), which pushed the
@@ -500,7 +525,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
 
   function seek(t) {
     const target = Math.max(0, Math.min(t, state.duration));
-    if (video?.readyState >= 1) { video.currentTime = target / state.k; state.pending = null; } else state.pending = target;
+    if (video?.readyState >= 1) { video.currentTime = toCopy(state.k, target); state.pending = null; } else state.pending = target;
     state.lastT = target;   // (a jump is not playing past the notes in between)
     hold();
     paint(target);
@@ -517,7 +542,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
   };
   function applyRate(rate) {
     state.rate = rate;
-    const k = copyFor(state.view, rate);
+    const k = copyNow(state.view);
     if (k !== state.k) show(state.view, k); else hold();
   }
   // fast-forward: the video for the next switch (into the next milestone's 1x stretch, or out of this one) waits there
@@ -527,7 +552,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     const [at, rate] = t < w[0] - FAST * 0.05 ? [w[0] - FAST * 0.05, 1] : [w[1], FAST], k = copyFor(state.view, rate);
     if (k === state.k) return;
     const v = element(state.view, k);
-    if (v.readyState >= 1 && !v.seeking && Math.abs(v.currentTime * k - at) > 0.25) v.currentTime = at / k;
+    if (v.readyState >= 1 && !v.seeking && Math.abs(toEp(k, v.currentTime) - at) > 0.25) v.currentTime = toCopy(k, at);
   }
   function setAuto(on) {
     state.auto = on && state.windows.length > 0;
@@ -569,7 +594,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     ring.setAttribute("stroke-dashoffset", (C * (1 - t / state.duration)).toFixed(2));
     const playing = state.intent;
     set("playing", playing, (p) => { icon.replaceChildren(...(p ? PAUSE() : [PLAY()])); vbtn.setAttribute("aria-label", p ? "Pause" : "Play"); });
-    const rate = playing ? state.rate : 1;
+    const rate = !playing ? 1 : state.k === "a" && video ? clipSpeed(video.currentTime) : state.rate;
     set("rate", rate, (r) => { speedEl.replaceChildren(...(r > 1 ? [ff(), `${r}×`] : ["1×"])); speedEl.classList.toggle("fast", r > 1); });
     const goal = state.goal(t);
     set("goal", `${goal}|${clock(t)}`, () => goalEl.replaceChildren(...(goal ? ["Goal: ", el("b", { text: goal })] : []),
@@ -590,7 +615,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
   let raf = 0;
   const loop = () => {
     raf = 0;
-    if (state.auto && video && !video.paused && !video.seeking && state.pending == null) {
+    if (state.auto && state.k !== "a" && video && !video.paused && !video.seeking && state.pending == null) {
       const r = rateAt(now());
       if (state.rate !== r) applyRate(r);
       prewarm();
@@ -699,7 +724,7 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
   });
 
   // ---------------------------------------------------------------- an episode
-  function load({ exec: execSrc, both, frag = {}, duration, startAt = 0, milestones = [], ticks = [], toasts = [], windows = [], auto, goal, caption: cap = [] }) {
+  function load({ exec: execSrc, both, frag = {}, duration, startAt = 0, milestones = [], ticks = [], toasts = [], windows = [], auto, autoMap, goal, caption: cap = [] }) {
     clear();
     const copies = (src) => (typeof src === "string" ? { 1: src } : { ...src });
     state.srcs = { exec: copies(execSrc), ...(both ? { side: copies(both.side), stack: copies(both.stack) } : {}) };
@@ -731,7 +756,23 @@ function createWatchPlayer(root, { autoNote = "32× between milestones, 1× at e
     scrub.setAttribute("aria-valuemax", String(Math.round(state.duration)));
     state.intent = true;
     state.rate = state.auto ? rateAt(startAt) : state.speed;
-    show(viewWanted(), copyFor(viewWanted(), state.rate), startAt);
+    // the Auto clip's time map (a few KB): Auto waits for it (MAP_WAIT at most) rather than start on a copy and switch;
+    // one that comes later, or a tap on Auto, switches to the clip from where the episode is
+    state.map = null;
+    const token = (state.token = {}), start = () => { if (state.token === token && !video) show(viewWanted(), copyNow(viewWanted()), startAt); };
+    if (autoMap) {
+      fetch(autoMap).then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))).then((m) => {
+        if (state.token !== token) return;
+        state.map = { fps: m.fps, srcFps: m.src_fps, clip: m.map.map((p) => p[0]), src: m.map.map((p) => p[1]), speed: m.speed };
+        if (!video) start();
+        else if (state.auto && state.k !== "a" && hasClip(state.view)) show(state.view, "a", now());
+      }).catch(() => start());
+    }
+    if (autoMap && state.auto && Object.values(state.srcs).some((s) => s.a)) {
+      state.pending = startAt;
+      screen.classList.add("w-waiting");
+      setTimeout(start, MAP_WAIT);
+    } else start();
     paint(startAt);
   }
   // every video of the last episode stops and lets go of its file

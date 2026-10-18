@@ -343,10 +343,13 @@ upright; hidden until "Show plan", which then stays for the next episodes), the 
 each milestone is first reached or the agent dies, a scrub line with each milestone as a tiny item icon (icons too close
 for one each share one place, showing the furthest), the goal and the game clock, the twelve milestones (each jumps
 there; `[` and `]` step), and a caption: the outcome and the deaths, then the setting's line. A pill on the video starts
-on Auto, paced as the survival clips are (1× around the first time the agent gets, crafts or places each thing, around
-each death, and around its last milestone; 32× between, the 16× copy at 2×; `SKIM` in `eval/watch.js`), and each tap
-moves it on: 1×, 2×, 4×, 8×, 16×, and Auto again; later episodes keep the reader's pick.
-(The BASALT viewer has no milestone windows: it starts at 1×.) The headline is "Episode 101 got as far as the wooden pickaxe" where it fits on one line; on a phone the
+on Auto, and each tap moves it on: 1×, 2×, 4×, 8×, 16×, and Auto again; later episodes keep the reader's pick (the
+BASALT viewer has no milestones: it starts at 1×). Auto plays a ready-made clip of the episode, paced as the survival
+clips are (1× around the first time the agent gets, crafts or places each thing, around each death, and around its last
+milestone; up to 32× between, eased in and out), from `{folder}/{raw,side,stack}_auto/` on the website's video dataset,
+built by `tools/mirror_fast/worker_auto.py` on the cluster; its time map (`{folder}/auto/NN.json`) keeps the scrub line,
+the milestones, the notes and Hide plan on episode time. Without a clip Auto switches between the 1×/16× copies live
+(`SKIM` in `eval/watch.js`, the same windows, hard switches). The headline is "Episode 101 got as far as the wooden pickaxe" where it fits on one line; on a phone the
 episode's number moves to the eyebrow over "Got a wooden pickaxe" (both are in the page; css shows one). The
 plan is cut from the episode's `plan_idm` video, its right half below the label row (`plan_box` in
 `tools/build_survival.py`); the survival clips' green re-sync flashes are not drawn, as their timing is unverified for

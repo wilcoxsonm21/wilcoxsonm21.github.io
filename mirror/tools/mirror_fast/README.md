@@ -28,7 +28,16 @@ execution copies and medium for the combined videos) with a
 keyframe every 2 seconds, `+faststart`, and no audio. They were built from source revision
 `efacff62f69be8367c448b1c13ee21869f56ece2`.
 
-The `frag` folder holds the same videos (every `raw`, `raw_4x`, `raw_16x`, `side*` and `stack*` file the site plays,
+The `raw_auto`, `side_auto` and `stack_auto` folders hold each Diamond episode fast-forwarded for the viewer's Auto
+speed, paced as the website's survival clips are: 1x from 3 s before to 1 s after the first time the agent gets, crafts
+or places each thing, around each death (2.5 s before, 1.5 s after) up to the last of those, from 6 s before to 4 s
+after the last, and over the first 1.5 s; 32x otherwise, the speed eased in and out in log space over 60 source frames
+outside the 1x stretches. They run at 40 fps (1x shows each frame twice) to the end of the episode. `auto/07.json` is
+the time map of `raw_auto/07.mp4` and its `side_auto` and `stack_auto` siblings: `map` holds [clip frame, episode
+frame] knots (linear between them, within half a frame of the true map), `speed` the speed label from each clip time
+on. Oracle episodes have no plan, so only `raw_auto`. They are built by `worker_auto.py`.
+
+The `frag` folder holds the same videos (every `raw`, `raw_4x`, `raw_16x`, `side*` and `stack*` file the site plays, the `_auto` clips too,
 including the 1x executions from the source dataset) as fragmented MP4s, so the site can stream them piece by piece.
 `frag/active_idm/raw_4x/07.mp4` is `active_idm/raw_4x/07.mp4` remuxed without re-encoding into one fragment per
 keyframe, with an empty `moov` and a global `sidx` index right after it (ffmpeg
