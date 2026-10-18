@@ -170,9 +170,9 @@
   let wheelAt = -1e9, wheelDy = 0, hold = null;   // the last wheel event; the jump being held: { place, until }
   const coasting = new WeakSet();
   const cancelCoast = e => { if (coasting.has(e) && e.cancelable) e.preventDefault(); };
-  function holdJump(place) {
+  function holdJump(place, ms = COAST_MAX) {
     if (!hold) addEventListener("wheel", cancelCoast, { capture: true, passive: false });
-    hold = { place, until: performance.now() + COAST_MAX };
+    hold = { place, until: performance.now() + ms };
   }
   function letJumpGo() { if (hold) { hold = null; removeEventListener("wheel", cancelCoast, { capture: true }); } }
   addEventListener("wheel", e => {
@@ -1900,7 +1900,9 @@
   const placeEls = $$("main > section, body > footer");
   let place = null, placeHeld = false;   // placeHeld: a relayout is due, so the layout is stale and place stays as it was
   function notePlace() {
-    if (placeHeld) return;
+    // (nor while the screen has turned and the page isn't laid out for it yet: iPad Safari lays the page out and moves
+    // it for the new width before its resize event, and the place noted then sent the page somewhere else)
+    if (placeHeld || innerWidth !== vw) return;
     const mid = sy + vh / 2;
     for (const el of placeEls) {
       const top = topOf(el), h = heightOf(el);
@@ -2046,6 +2048,9 @@
     root.classList.toggle("ctl-below", !short && (narrow || !!fr && (vh - navH - fr.offsetHeight) / 2 >= CTL_ROOM + CTL_FOOT));
     layoutHero();
     restorePlace();
+    // after the screen turned, the place is held for a moment: iPad Safari goes on moving the page itself as its turn
+    // ends, after the page has put it back (a touch lets it go)
+    if (placeHeld && place) holdJump({ el: place.el, dy: scrollY - docTop(place.el) }, TURN_HOLD);
     placeHeld = false;
     lastSy = -1;
     glide = null;   // its target moved
@@ -2061,6 +2066,7 @@
     }, 400);
   }
   let rT = null, rcT = null, lastW = vw, lastH = vh;
+  const TURN_HOLD = 1500;   // ms
   // (a touch screen's browser resizes the viewport as its toolbars slide. A desktop window dragged taller does too, in
   // small steps, and each counts: ignored, the page kept the old height's layout and lost the reader's place)
   const toolbars = matchMedia("(pointer: coarse)").matches;
