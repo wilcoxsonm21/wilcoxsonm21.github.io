@@ -319,10 +319,11 @@
       // seconds of still opening to skip (data-lead): the animation starts where something first moves
       this.lead = Number(el.dataset.lead) || 0;
       // how much faster than the talk the animation plays (data-speed), videos included: one number, then any changes
-      // from a scene time on as "T:speed" (e.g. "1.25, 25.3:.5, 27.6:1.25")
-      this.speeds = (el.dataset.speed || "1").split(",").map(s => s.split(":").map(Number))
-        .map(p => p.length > 1 ? { at: p[0], v: p[1] || 1 } : { at: 0, v: p[0] || 1 }).sort((a, b) => a.at - b.at);
-      this.speeds0 = this.speeds;
+      // from a scene time on as "T:speed" (e.g. "1.25, 25.3:.5, 27.6:1.25"), or from a click's start as "#k:speed"
+      this.speeds0 = (el.dataset.speed || "1").split(",").map(s => s.trim().split(":"))
+        .map(p => p.length < 2 ? { at: 0, v: Number(p[0]) || 1 }
+          : p[0][0] === "#" ? { click: Number(p[0].slice(1)), v: Number(p[1]) || 1 } : { at: Number(p[0]), v: Number(p[1]) || 1 });
+      this.speeds = this.atClicks(this.speeds0);
       this.lead0 = this.lead;
       this.T = 0;
       this.k = 0;             // the click being played (or held on, once it has played out)
@@ -750,7 +751,7 @@
     layoutFrom(info) {
       this.setSegs(info.segs.map(s => s.dur));
       const R = info.remap, at = T => { let p = R[0]; for (const r of R) if (r[0] <= T + 1e-6) p = r; return p[1] + T - p[0]; };
-      this.speeds = R && R.length ? this.speeds0.map(s => ({ at: s.at ? at(s.at) : 0, v: s.v })) : this.speeds0;
+      this.speeds = this.atClicks(R && R.length ? this.speeds0.map(s => s.click != null ? s : { at: s.at ? at(s.at) : 0, v: s.v }) : this.speeds0);
       this.lead = R && R.length ? at(this.lead0) : this.lead0;
     }
     // A dwell shorter than its click (data-dwell, or the ?timing panel's) starts the next click that far in, over the end
@@ -770,6 +771,11 @@
       }
     }
     cutDwell(k) { const T = TIMING(); return T ? T.cut(this, k) : this.dwell[k] ?? null; }
+    // the speed changes in scene time: "#k" changes at click k's start
+    atClicks(list) {
+      return list.map(s => s.click == null ? s : { at: this.segs[Math.min(s.click, this.segs.length - 1)].start, v: s.v })
+        .sort((a, b) => a.at - b.at);
+    }
     // the scene time d seconds of playing after scene time a (data-speed)
     sceneAfter(a, d) {
       let T = a;
