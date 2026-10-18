@@ -416,6 +416,9 @@ html.hero-wait .hero-mark { filter: opacity(0); }
 .lava-shot { position: absolute; inset: 0 0 34px; display: flex; align-items: center; justify-content: center; pointer-events: none;
              transform-origin: 50% 50%; }
 .lava-shot img { width: 100%; height: auto; border-radius: 16px; box-shadow: 0 30px 60px -30px color-mix(in srgb, var(--ink) 45%, transparent); }
+/* the escape itself, played over the screenshot once it has a frame; js/lava.js lays it over the picture (left, top, size) */
+.lava-shot .lava-clip { position: absolute; left: 0; top: 0; object-fit: cover; border-radius: 16px; opacity: 0; transition: opacity .3s; }
+.lava-shot .lava-clip.on { opacity: 1; }
 .lava-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: .3cqw 1.45cqw; margin-top: .55cqw; font-size: max(11.5px, .94cqw);
                font-weight: 500; color: var(--muted); }
 .lava-legend span { display: inline-flex; align-items: center; gap: 6px; }

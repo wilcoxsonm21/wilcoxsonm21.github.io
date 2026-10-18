@@ -971,7 +971,9 @@
     starved(dt) {
       let s = false;
       if (!this.inline) try { s = [...this.iframe.contentDocument.querySelectorAll("video")].some(v => v.style.visibility === "visible"
-        && v.currentSrc && !v.error && v.readyState < 1 && v.networkState === 2); } catch (e) {}
+        && v.currentSrc && !v.error && v.readyState < 1 && v.networkState === 2)
+        || !!(this.api && this.api.starved && this.api.starved()); } catch (e) {}   // (a scene drawing its clips: scene-adapter.js)
+      else s = !!(this.api && this.api.starved && this.api.starved());   // (a figure drawn in the page: its clip, js/lava.js)
       // (only a video that hasn't even its size yet: iOS Safari decodes no frame of a paused video until it plays, so
       // waiting for one held the click for good on a phone, while the clip had long downloaded)
       this.stall = s ? (this.stall || 0) + dt : 0;

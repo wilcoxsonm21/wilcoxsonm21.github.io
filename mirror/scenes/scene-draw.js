@@ -102,8 +102,10 @@
 
   // ------------------------------------------------------------------ a file, read by ranges as it is needed
   // The start of the file first (the clips are faststart: their moov is there), then each WIN-sized window a sample needs,
-  // with the next one asked for ahead. Windows far behind the one in use go, so a long clip holds a few MB at most.
+  // with the next AHEAD_WINS asked for ahead (one at a time, each wait a round trip, fell behind a clip played fast).
+  // Windows far behind the one in use go, so a long clip holds a few MB at most.
   const WIN = 1 << 19;   // 512 KB
+  const AHEAD_WINS = 3;
   class Source {
     constructor(url) { this.url = url; this.wins = new Map(); this.asked = new Set(); this.size = Infinity; this.whole = null; }
     async get(a, b) {   // bytes [a, b], as an ArrayBuffer (the server may send the whole file: then that)
@@ -136,7 +138,7 @@
       const w0 = Math.floor(off / WIN), w1 = Math.floor((off + len - 1) / WIN);
       let ok = true;
       for (let w = w0; w <= w1; w++) if (!this.wins.has(w)) { this.want(w); ok = false; }
-      this.want(w1 + 1);   // (the next one, ahead)
+      for (let k = 1; k <= AHEAD_WINS; k++) this.want(w1 + k);   // (the next ones, ahead)
       if (!ok) return null;
       if (w0 === w1) { const b = this.wins.get(w0), a = off - w0 * WIN; return b.subarray(a, a + len); }
       const out = new Uint8Array(len);
@@ -172,6 +174,7 @@
       this.errors = 0;
       this.src = new Source(url);
       this.ready = this.src.head().then(buf => this.init(buf))
+        .then(() => { for (let k = 1; k <= AHEAD_WINS; k++) this.src.want(k); })   // (its opening seconds, before they are drawn)
         .catch(e => { this.state = "failed"; console.warn("scene-draw:", url, e); });
     }
     async init(buf) {

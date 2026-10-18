@@ -182,6 +182,22 @@
     ours: ratePanel("ours", true), vpt: ratePanel("vpt", false),
   };
   const shot = fig.querySelector(".lava-shot");
+  // the escape (tools/build_lava_clip.py: the six lives, fast-forwarded 3x, the last one escapes) plays over the
+  // screenshot in the first step, on the figure's clock: it pauses, seeks and changes speed with the chapter
+  const pic = shot.querySelector("img"), clip = shot.querySelector(".lava-clip");
+  const CLIP_DUR = 7.4, CLIP_HOLD = .8;      // seconds of the clip, and of its last frame (out of the lava) held after it
+  let played = false;
+  if (clip) {
+    clip.src = clip.dataset.src;
+    clip.addEventListener("playing", () => { played = true; clip.classList.add("on"); });
+    const place = () => {
+      clip.style.left = pic.offsetLeft + "px"; clip.style.top = pic.offsetTop + "px";
+      clip.style.width = pic.offsetWidth + "px"; clip.style.height = pic.offsetHeight + "px";
+    };
+    place();
+    pic.addEventListener("load", place);
+    if (window.ResizeObserver) new ResizeObserver(place).observe(pic);
+  }
 
   // ---------------------------------------------------------------- timeline
   // 1. the challenge; 2. shared history; 3. independent lives; 4. escape rates, ours; 5. VPT BC.
@@ -190,7 +206,7 @@
   let t = 0;
   const seg = (names, dur) => { segs.push({ start: t, dur, names }); t += dur; };
   const tm = {};
-  tm.shot = [0, 1.2]; seg(["challenge"], 1.5);
+  seg(["challenge"], clip ? CLIP_DUR + CLIP_HOLD : 1.5);
   const burstPlan = P => {
     const maxL = Math.max(...P.lives.map(l => l.len));
     return P.lives.map(l => BURST * Math.pow(l.len / maxL, .55));
@@ -246,16 +262,34 @@
     for (const c of P.curves) put(c.tag, "opacity", f2(clamp((local - plan.sweep - .1) / .45)));
   }
 
+  // the clip at the figure's time: playing at the chapter's rate while it plays and the clip is on show, else held at
+  // that frame (a seek only when it is off by more than a few frames, so playing isn't interrupted)
+  function syncClip(time, ctx) {
+    if (!clip || clip.error) return;
+    const want = Math.min(time, CLIP_DUR - .02), on = time < segs[1].start && ctx.visible;
+    const run = on && ctx.rate > 0 && time < CLIP_DUR;
+    if (run) {
+      if (clip.playbackRate !== ctx.rate) clip.playbackRate = ctx.rate;
+      if (clip.paused) clip.play().catch(() => {});
+    } else if (!clip.paused) clip.pause();
+    if (clip.readyState >= 1 && !clip.seeking && Math.abs(clip.currentTime - want) > (run ? .3 : .08)) clip.currentTime = want;
+    // (back at the opening, the screenshot until it plays again)
+    if (time < .05 && !run && played) { played = false; clip.classList.remove("on"); }
+  }
+  // a clip on show with nothing of it in yet holds the chapter's clock (site.js, starved), as a scene's videos do
+  const starved = () => !!clip && lastT !== null && lastT < CLIP_DUR && !clip.error && clip.readyState < 1 && clip.networkState === 2;
+
   let lastT = null, current = -1;
-  function render(time) {
+  function render(time, ctx = { rate: 0, visible: true }) {
     time = clamp(time, 0, TOTAL);
+    syncClip(time, ctx);
     if (time === lastT) return;
     lastT = time;
     // the screenshot gives way to the plots as the first trajectories come in
     const so = 1 - clamp((time - segs[1].start - .05) / .45);
     shot.style.opacity = so.toFixed(3);
     shot.style.visibility = so < .002 ? "hidden" : "visible";
-    shot.style.transform = `scale(${(1.0 + .035 * clamp(time / 1.6) - .04 * (1 - so)).toFixed(4)})`;
+    shot.style.transform = `scale(${(1.0 + (clip ? 0 : .035 * clamp(time / 1.6)) - .04 * (1 - so)).toFixed(4)})`;
     renderBurst(panels.shared, tm.shared, time);
     renderBurst(panels.independent, tm.independent, time);
     renderSweep(panels.ours, tm.ours, time);
@@ -288,8 +322,9 @@
   window.INLINE_SCENES = window.INLINE_SCENES || {};
   window.INLINE_SCENES.lava = {
     ready: Promise.resolve(info),
-    render: T => render(T),
-    pause() {},
+    render: (T, ctx) => render(T, ctx),
+    pause() { if (clip && !clip.paused) clip.pause(); },
+    starved,
     caption: () => null,
     setNarrow() {},
     fitText,

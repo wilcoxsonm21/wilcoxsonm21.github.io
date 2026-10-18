@@ -14,6 +14,7 @@
 //   SCENE.pending()        how many clips and images its frame needs and hasn't got (not what it fetches ahead); it
 //                          also starts the next clip of its queue (pump)
 //   SCENE.waiting()        an image the frame on screen shows is still loading
+//   SCENE.starved()        drawing its clips (Low Power Mode): a clip on show is behind the time the timeline wants
 //   SCENE.park(), resume() the clips on their way give way to other downloads, and go on (parked(): how many)
 //   SCENE.busy()           something is on its way
 //   SCENE.unlock()         within the reader's tap: lets clips Low Power Mode refused play (true if it did)
@@ -406,11 +407,26 @@
       c.ts = null;
       c.getContext("2d").clearRect(0, 0, c.width, c.height);
     }
+    c.want = t;
     const f = d.frame(t);
     if (!f || f.timestamp === c.ts) return;
     if (c.width !== d.width || c.height !== d.height) { c.width = d.width; c.height = d.height; }
     c.getContext("2d").drawImage(f, 0, 0, c.width, c.height);
     c.ts = f.timestamp;
+  }
+  // A clip drawn on show that has fallen more than LAG seconds of its own time behind the timeline (its file's ranges or
+  // the decoder can't keep up: BASALT's waterfall episode plays at about 6x, ~7 Mbit/s for its two clips) holds the
+  // page's clock (js/site.js, starved) until it is back, as a playing clip with no data does. Without it the overlays and
+  // action bars ran on to the end over a frozen frame, and the decoder, always chasing a frame whose bytes weren't in,
+  // never caught up.
+  const LAG = .4;
+  function starved() {
+    if (!drawing) return false;
+    return Object.values(drawing.canvases).some(c => {
+      if (c.style.visibility !== "visible" || !c.clip || c.want == null) return false;
+      const d = drawing.clips.get(c.clip);
+      return !!d && d.state !== "failed" && (c.ts == null || c.want - c.ts / 1e6 > LAG);
+    });
   }
   // (a clip not drawn for a while lets go of its decoder and frames; its file stays)
   function idle(now) {
@@ -619,7 +635,7 @@
   };
   window.SCENE = {
     ready: readyP,
-    render, pause, caption, captions, more, pending, waiting, park, resume, parked, busy, unlock, retime,
+    render, pause, caption, captions, more, pending, waiting, starved, park, resume, parked, busy, unlock, retime,
     overlaps: () => !!P.clock,   // (only a page whose beats keep their own clocks can carry one on under the next click)
     setNarrow: b => document.documentElement.classList.toggle("narrow", !!b),
     get total() { return TOTAL; },
