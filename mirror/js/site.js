@@ -199,7 +199,25 @@
     }, { passive: true });
   document.addEventListener("visibilitychange", () => takeOver(MOVE_HOLD));   // back on the tab: a moment first
 
-  function scrollSelf(y) { ownAt = y; scrollTo({ top: y, behavior: "instant" }); }
+  // the positions the page set in the last OWN_LAG ms: iPad Safari reports the page's scroll position a few frames
+  // behind the one it set (its scrolling runs outside the page), and at a snap's speed that read as the reader taking
+  // over, so the snap stopped, armed again and snapped again: a run of small jerks wherever the page snapped
+  const OWN_LAG = 250, owned = [];
+  function scrollSelf(y) {
+    const t = performance.now();
+    owned.push([t, y]);
+    while (owned.length > 1 && t - owned[0][0] > OWN_LAG) owned.shift();
+    ownAt = y;
+    scrollTo({ top: y, behavior: "instant" });
+  }
+  // a position on the path the page scrolled lately (or where it last left the page)
+  function ownMove(y) {
+    if (ownAt === null) return false;
+    const t = performance.now();
+    let lo = ownAt, hi = ownAt;
+    for (const [at, v] of owned) if (t - at <= OWN_LAG) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+    return y >= lo - 3 && y <= hi + 3;
+  }
   // a glide eases the page to a scroll position: a chapter's stage, or its headline
   function glideTo(y, ms) {
     if (REDUCED) { scrollSelf(y); return; }
@@ -251,7 +269,7 @@
   function autoplayWords(b, now, dt) {
     const n = b.words.length, span = REVEAL * vh, p = (sy - b.p0) / span, pEnd = (n + 1.2) / (n + 2);
     if (REDUCED || glide || scrolling(now) || p < 2 / (n + 2) || p >= pEnd) { b.autoY = null; return; }
-    if (b.autoY == null || Math.abs(b.autoY - sy) > 3) b.autoY = sy;
+    if (b.autoY == null || (Math.abs(b.autoY - sy) > 3 && !ownMove(sy))) b.autoY = sy;
     b.autoY = Math.min(b.p0 + pEnd * span, b.autoY + WPS * span / (n + 2) * dt);
     scrollSelf(b.autoY);
   }
@@ -2240,7 +2258,7 @@
     const moved = sy !== lastSy;
     if (moved) {
       // a move the page didn't make itself is the reader's
-      if (lastSy >= 0 && (ownAt === null || Math.abs(sy - ownAt) > 3)) { takeOver(MOVE_HOLD); readerDir = Math.sign(sy - lastSy); }
+      if (lastSy >= 0 && !ownMove(sy)) { takeOver(MOVE_HOLD); readerDir = Math.sign(sy - lastSy); }
       lastSy = sy;
       notePlace();
       updateCinema();   // first: it reads the screen's box, before this frame's style writes
