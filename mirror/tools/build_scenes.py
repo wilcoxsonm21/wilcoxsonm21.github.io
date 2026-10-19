@@ -92,7 +92,7 @@ PATCHES = {
          '  <div class="callout" id="c0" style="color:#6b6862"><div>Baselines struggle to complete the task</div></div>\n'
          '  <div class="callout" id="c1" style="color:rgb(98, 134, 212)"><div>With random exploration, Mirror already reaches 42%</div></div>\n'
          '  <div class="callout" id="c2" style="color:#7a3fe0"><div>Self-improvement beats random exploration by over 50%</div></div>\n'
-         '  <div class="callout" id="c3" style="color:#0e8a7a"><div>Expert actions only increase success by 7%</div></div>'),
+         '  <div class="callout" id="c3" style="color:#0e8a7a"><div>Expert actions only increase success by 7 points</div></div>'),
         ('set("bar_bc", "o", 1, 1.4), move("bar_bc", "v", 3, 1.4, .8, "out")',
          'set("bar_bc", "o", 1, 1.4), move("bar_bc", "v", 3, 1.4, .8, "out"), fade("c0", 1, 1.2, .5)'),
         ('fade("lab_rand", 1, 0, .4), set("bar_rand", "o", 1, .1),',
